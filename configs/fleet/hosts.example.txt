@@ -1,0 +1,6 @@
+# Copy to .local/fleet-hosts and replace with private host aliases.
+# One worker per line, prefixed by worker type.
+mac:mac-worker
+wsl:wsl-gpu-worker-a
+wsl:wsl-gpu-worker-b
+wsl:wsl-gpu-worker-c

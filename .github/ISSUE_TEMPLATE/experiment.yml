@@ -1,0 +1,27 @@
+name: Experiment
+description: Track a baby-model experiment.
+title: "experiment: "
+labels: ["experiment"]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      description: What claim is this experiment testing?
+    validations:
+      required: true
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Protocol
+      description: Commands, configs, seeds, and machine assignment.
+    validations:
+      required: true
+  - type: textarea
+    id: success
+    attributes:
+      label: Success Criteria
+      description: Metrics that would support or falsify the hypothesis.
+    validations:
+      required: true
+
