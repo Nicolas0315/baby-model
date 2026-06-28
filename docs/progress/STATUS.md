@@ -38,7 +38,8 @@ Updated: 2026-06-28 JST
   - Fleet worker protocol: `https://github.com/Nicolas0315/baby-model/issues/1`
   - MiniGrid/BabyAI migration: `https://github.com/Nicolas0315/baby-model/issues/2`
   - CI billing/spending-limit blocker: `https://github.com/Nicolas0315/baby-model/issues/3`
-  - v0.1 prediction-improvement reward: `https://github.com/Nicolas0315/baby-model/issues/4`
+  - v0.1 prediction-improvement reward: `https://github.com/Nicolas0315/baby-model/issues/4` closed
+  - v0.2 progress-reward tuning/richer task: `https://github.com/Nicolas0315/baby-model/issues/5`
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
