@@ -25,6 +25,9 @@ Updated: 2026-06-28 JST
   - `runs/local-loop/20260628T024023Z/summary.md`
 - v0.1 result: `D_baby_progress` improved over `C_baby_surprise`, but
   `B_encoder_first` still won all three seeds by last-window success.
+- Fleet verify run completed for all four configured worker classes using
+  `git archive | ssh | tmux`; each worker returned `verify ok` and `exit=0`.
+  Exact host-level evidence is kept outside this repository in local docs.
 - Fleet read-only check from the current Mac confirmed one macOS worker and
   three Windows/WSL workers are reachable enough for future approved lanes.
   Exact hostnames and GPU inventory are kept outside this repository in local
