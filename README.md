@@ -17,8 +17,10 @@ to replace the toy environment with MiniGrid, BabyAI, Habitat, or robot data.
 
 - `A_end_to_end`: raw-observation Q-learning baseline.
 - `B_encoder_first`: coarse perceptual representation with a decoder delay.
-- `C_baby_curiosity`: coarse representation, decoder delay, and intrinsic
+- `C_baby_surprise`: coarse representation, decoder delay, and raw intrinsic
   surprise reward.
+- `D_baby_progress`: coarse representation, decoder delay, and prediction
+  improvement reward.
 
 The v0 environment is not a scientific claim. It is a harness to make the
 research pipeline testable before we spend GPU time.
@@ -50,4 +52,3 @@ host.
 - Experiment protocol: `docs/experiments/v0-protocol.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`
-

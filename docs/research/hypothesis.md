@@ -36,12 +36,14 @@ The v0 BabyGrid test compares:
 
 - `A_end_to_end`: raw-observation Q-learning.
 - `B_encoder_first`: coarse perceptual encoder plus delayed policy learning.
-- `C_baby_curiosity`: delayed policy learning plus latent transition surprise.
+- `C_baby_surprise`: delayed policy learning plus raw latent transition
+  surprise.
+- `D_baby_progress`: delayed policy learning plus transition prediction
+  improvement.
 
 Supportive evidence would be higher last-window success, fewer successful
 steps, or better transfer after a small number of episodes.
 
-Negative evidence is useful: if `C_baby_curiosity` does not improve over
+Negative evidence is useful: if intrinsic variants do not improve over
 baselines in toy environments, the design needs either better intrinsic reward,
 better representation learning, or a task with richer hidden structure.
-

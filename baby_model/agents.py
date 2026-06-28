@@ -65,14 +65,24 @@ class TransitionSurprise:
         self.context_counts: dict[tuple[Feature, int], int] = defaultdict(int)
 
     def surprise(self, feature: Feature, action: int, next_feature: Feature) -> float:
+        return 1.0 - self.probability(feature, action, next_feature)
+
+    def probability(self, feature: Feature, action: int, next_feature: Feature) -> float:
         context = (feature, action)
         total = self.context_counts[context]
         seen = self.counts[(feature, action, next_feature)]
         if total == 0:
-            return 1.0
-        return 1.0 - (seen / total)
+            return 0.0
+        return seen / total
+
+    def learning_progress(self, feature: Feature, action: int, next_feature: Feature) -> float:
+        before = self.probability(feature, action, next_feature)
+        context = (feature, action)
+        total = self.context_counts[context]
+        seen = self.counts[(feature, action, next_feature)]
+        after = (seen + 1) / (total + 1)
+        return max(0.0, after - before)
 
     def update(self, feature: Feature, action: int, next_feature: Feature) -> None:
         self.context_counts[(feature, action)] += 1
         self.counts[(feature, action, next_feature)] += 1
-

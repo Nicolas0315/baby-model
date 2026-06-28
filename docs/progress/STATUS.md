@@ -17,8 +17,14 @@ Updated: 2026-06-28 JST
   - `runs/local-loop/20260628T022603Z/summary.md`
   - `runs/local-loop/20260628T022609Z/summary.md`
 - Initial v0 result: `B_encoder_first` won all three local-loop seeds by
-  last-window success. `C_baby_curiosity` underperformed, likely because raw
+  last-window success. `C_baby_surprise` underperformed, likely because raw
   surprise reward encourages over-exploration in this small grid.
+- v0.1 local tmux loop completed in `baby-model-v01`:
+  - `runs/local-loop/20260628T024012Z/summary.md`
+  - `runs/local-loop/20260628T024018Z/summary.md`
+  - `runs/local-loop/20260628T024023Z/summary.md`
+- v0.1 result: `D_baby_progress` improved over `C_baby_surprise`, but
+  `B_encoder_first` still won all three seeds by last-window success.
 - Fleet read-only check from the current Mac confirmed one macOS worker and
   three Windows/WSL workers are reachable enough for future approved lanes.
   Exact hostnames and GPU inventory are kept outside this repository in local
@@ -41,8 +47,8 @@ Updated: 2026-06-28 JST
 
 - Create GitHub repository and push after local verification.
 - Open GitHub issues for MiniGrid/BabyAI migration and fleet worker lanes.
-- Add a v0.1 condition that uses prediction improvement instead of raw
-  transition surprise.
+- Tune `D_baby_progress` beta and test a richer sparse-reward task where
+  intrinsic reward has room to help.
 - Prepare remote worker checkouts after the GitHub repository is available.
 - Clear GitHub Actions billing/spending-limit blocker and rerun `verify`.
 

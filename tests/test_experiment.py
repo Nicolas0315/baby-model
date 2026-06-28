@@ -11,7 +11,10 @@ class ExperimentTest(unittest.TestCase):
     def test_run_suite_returns_all_conditions(self) -> None:
         report = run_suite(seed=3)
         names = [row["name"] for row in report["results"]]
-        self.assertEqual(names, ["A_end_to_end", "B_encoder_first", "C_baby_curiosity"])
+        self.assertEqual(
+            names,
+            ["A_end_to_end", "B_encoder_first", "C_baby_surprise", "D_baby_progress"],
+        )
         self.assertIn(report["winner_last_window"], names)
 
     def test_write_run_creates_metrics_summary_and_latest_link(self) -> None:
@@ -19,13 +22,14 @@ class ExperimentTest(unittest.TestCase):
             config={
                 "environment": {"size": 5, "max_steps": 20},
                 "conditions": [
-                    {
-                        "name": "tiny",
-                        "encoder_mode": "coarse",
-                        "episodes": 4,
-                        "decoder_delay_episodes": 1,
-                        "intrinsic_beta": 0.01,
-                    }
+                        {
+                            "name": "tiny",
+                            "encoder_mode": "coarse",
+                            "episodes": 4,
+                            "decoder_delay_episodes": 1,
+                            "intrinsic_beta": 0.01,
+                            "intrinsic_mode": "progress",
+                        }
                 ],
             },
             seed=1,
@@ -47,6 +51,24 @@ class ExperimentTest(unittest.TestCase):
                             "episodes": 3,
                             "decoder_delay_episodes": 4,
                             "intrinsic_beta": 0.0,
+                            "intrinsic_mode": "none",
+                        }
+                    ]
+                }
+            )
+
+    def test_validate_config_rejects_invalid_intrinsic_mode(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_config(
+                {
+                    "conditions": [
+                        {
+                            "name": "bad",
+                            "encoder_mode": "coarse",
+                            "episodes": 3,
+                            "decoder_delay_episodes": 0,
+                            "intrinsic_beta": 0.0,
+                            "intrinsic_mode": "noise",
                         }
                     ]
                 }

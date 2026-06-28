@@ -10,7 +10,9 @@ Build a verified research loop before using heavy libraries or GPUs.
   reward.
 - `B_encoder_first`: coarse perceptual representation, 20-episode random
   action phase, no intrinsic reward.
-- `C_baby_curiosity`: same delayed phase, plus latent transition surprise.
+- `C_baby_surprise`: same delayed phase, plus raw latent transition surprise.
+- `D_baby_progress`: same delayed phase, plus transition prediction
+  improvement.
 
 ## Metrics
 
@@ -20,6 +22,20 @@ Build a verified research loop before using heavy libraries or GPUs.
 - `mean_external_return_last_window`
 - `mean_intrinsic_return_last_window`
 - `mean_unique_features_last_window`
+
+## v0.1 Interpretation
+
+Raw surprise can over-reward novelty in tiny environments. Prediction
+improvement is intended to reward transitions whose model estimate actually
+changes, so the intrinsic signal should fade as the transition becomes familiar.
+
+Initial local tmux loop results from 2026-06-28:
+
+- `D_baby_progress` improved clearly over `C_baby_surprise`.
+- `B_encoder_first` still won all three local-loop seeds by last-window success.
+- Current interpretation: in BabyGrid, the coarse encoder and delayed decoder
+  dominate; the intrinsic reward needs either tuning or a richer environment to
+  show value.
 
 ## Commands
 
@@ -39,4 +55,3 @@ Move to MiniGrid/BabyAI only after:
   commands.
 - A GitHub issue exists for the next experiment with protocol and success
   criteria.
-

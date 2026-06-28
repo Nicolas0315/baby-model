@@ -18,14 +18,16 @@ class Condition:
     episodes: int
     decoder_delay_episodes: int
     intrinsic_beta: float
+    intrinsic_mode: str
     seed: int
 
 
 def default_conditions(seed: int = 7) -> list[Condition]:
     return [
-        Condition("A_end_to_end", "raw", 80, 0, 0.0, seed),
-        Condition("B_encoder_first", "coarse", 80, 20, 0.0, seed + 1),
-        Condition("C_baby_curiosity", "coarse", 80, 20, 0.05, seed + 2),
+        Condition("A_end_to_end", "raw", 80, 0, 0.0, "none", seed),
+        Condition("B_encoder_first", "coarse", 80, 20, 0.0, "none", seed + 1),
+        Condition("C_baby_surprise", "coarse", 80, 20, 0.05, "surprise", seed + 2),
+        Condition("D_baby_progress", "coarse", 80, 20, 0.2, "progress", seed + 3),
     ]
 
 
@@ -49,8 +51,8 @@ def run_condition(condition: Condition, size: int = 7, max_steps: int = 60) -> d
             action = agent.choose(feature, force_random=force_random)
             result = env.step(action)
             next_feature = encoder.encode(result.observation)
-            surprise = transition.surprise(feature, action, next_feature)
-            intrinsic = condition.intrinsic_beta * surprise
+            intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature, action, next_feature)
+            intrinsic = condition.intrinsic_beta * intrinsic_signal
             total_reward = result.reward + intrinsic
 
             if not force_random:
@@ -84,6 +86,7 @@ def run_condition(condition: Condition, size: int = 7, max_steps: int = 60) -> d
         "episodes": condition.episodes,
         "decoder_delay_episodes": condition.decoder_delay_episodes,
         "intrinsic_beta": condition.intrinsic_beta,
+        "intrinsic_mode": condition.intrinsic_mode,
         "seed": condition.seed,
         "success_rate_all": mean(1.0 if item.success else 0.0 for item in episodes),
         "success_rate_last_window": mean(1.0 if item.success else 0.0 for item in last_window),
@@ -100,7 +103,18 @@ def run_suite(config: dict[str, Any] | None = None, seed: int = 7) -> dict[str, 
     env_cfg = config.get("environment", {})
     condition_cfgs = config.get("conditions")
     if condition_cfgs:
-        conditions = [Condition(seed=seed + i, **item) for i, item in enumerate(condition_cfgs)]
+        conditions = [
+            Condition(
+                name=str(item["name"]),
+                encoder_mode=str(item["encoder_mode"]),
+                episodes=int(item["episodes"]),
+                decoder_delay_episodes=int(item["decoder_delay_episodes"]),
+                intrinsic_beta=float(item["intrinsic_beta"]),
+                intrinsic_mode=str(item.get("intrinsic_mode", "none")),
+                seed=seed + i,
+            )
+            for i, item in enumerate(condition_cfgs)
+        ]
     else:
         conditions = default_conditions(seed=seed)
     results = [
@@ -162,6 +176,9 @@ def validate_config(config: dict[str, Any]) -> None:
         names.add(name)
         if item.get("encoder_mode") not in {"raw", "coarse"}:
             raise ValueError(f"invalid encoder_mode for {name}")
+        intrinsic_mode = str(item.get("intrinsic_mode", "none"))
+        if intrinsic_mode not in {"none", "surprise", "progress"}:
+            raise ValueError(f"invalid intrinsic_mode for {name}")
         episodes = int(item.get("episodes", 0))
         delay = int(item.get("decoder_delay_episodes", 0))
         beta = float(item.get("intrinsic_beta", 0.0))
@@ -171,6 +188,22 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"decoder_delay_episodes out of range for {name}")
         if beta < 0:
             raise ValueError(f"intrinsic_beta must be non-negative for {name}")
+
+
+def _intrinsic_signal(
+    mode: str,
+    transition: TransitionSurprise,
+    feature: tuple[int, ...],
+    action: int,
+    next_feature: tuple[int, ...],
+) -> float:
+    if mode == "none":
+        return 0.0
+    if mode == "surprise":
+        return transition.surprise(feature, action, next_feature)
+    if mode == "progress":
+        return transition.learning_progress(feature, action, next_feature)
+    raise ValueError(f"unknown intrinsic mode: {mode}")
 
 
 def _summary_markdown(report: dict[str, Any]) -> str:
