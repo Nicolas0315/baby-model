@@ -5,6 +5,8 @@ Updated: 2026-06-28 JST
 ## Proven
 
 - Local repository initialized at `/Users/s30519/work/baby-model`.
+- GitHub repository created as private:
+  `https://github.com/Nicolas0315/baby-model`.
 - v0 research scaffold is designed around AD-first / DA-delayed learning.
 - `./scripts/verify.sh` passed on the current Mac.
 - Local tmux session `baby-model` exists with:
@@ -23,6 +25,17 @@ Updated: 2026-06-28 JST
   docs evidence.
 - `agmsg` is joined locally for turn-based progress delivery. Team details stay
   out of committed docs.
+- GitHub Actions workflow exists, but remote CI is currently blocked by GitHub
+  account billing/spending-limit state before runner startup. Local verifier is
+  the authoritative verification until that account-level blocker is cleared.
+- GitHub issues:
+  - Fleet worker protocol: `https://github.com/Nicolas0315/baby-model/issues/1`
+  - MiniGrid/BabyAI migration: `https://github.com/Nicolas0315/baby-model/issues/2`
+  - CI billing/spending-limit blocker: `https://github.com/Nicolas0315/baby-model/issues/3`
+  - v0.1 prediction-improvement reward: `https://github.com/Nicolas0315/baby-model/issues/4`
+- GitHub tracking:
+  - milestone: `v0.1 Baby AD/DA`
+  - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
 
 ## Next
 
@@ -31,10 +44,12 @@ Updated: 2026-06-28 JST
 - Add a v0.1 condition that uses prediction improvement instead of raw
   transition surprise.
 - Prepare remote worker checkouts after the GitHub repository is available.
+- Clear GitHub Actions billing/spending-limit blocker and rerun `verify`.
 
 ## Not Yet Proven
 
 - Remote checkout and remote tmux worker loops.
 - MiniGrid/BabyAI dependency install.
 - Any GPU training result.
+- GitHub-hosted CI execution.
 - Full objective completion.
