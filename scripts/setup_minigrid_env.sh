@@ -10,6 +10,7 @@ MINIGRID_VENV_DIR="${MINIGRID_VENV_DIR:-.venv-minigrid}"
 MINIGRID_TORCH_CONFIG="${MINIGRID_TORCH_CONFIG:-}"
 MINIGRID_TORCH_INDEX_URL="${MINIGRID_TORCH_INDEX_URL:-}"
 MINIGRID_TORCH_CPU_FALLBACK="${MINIGRID_TORCH_CPU_FALLBACK:-0}"
+MINIGRID_TORCH_INSTALLER="${MINIGRID_TORCH_INSTALLER:-auto}"
 MINIGRID_SETUP_DRY_RUN="${MINIGRID_SETUP_DRY_RUN:-0}"
 MINIGRID_ENV_CLEAR="${MINIGRID_ENV_CLEAR:-0}"
 
@@ -35,6 +36,11 @@ fi
 
 if [[ ! "$MINIGRID_TORCH_CPU_FALLBACK" =~ ^(0|1)$ ]]; then
   echo "invalid MINIGRID_TORCH_CPU_FALLBACK: $MINIGRID_TORCH_CPU_FALLBACK" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_TORCH_INSTALLER" =~ ^(auto|pip|uv)$ ]]; then
+  echo "invalid MINIGRID_TORCH_INSTALLER: $MINIGRID_TORCH_INSTALLER" >&2
   exit 2
 fi
 
@@ -84,11 +90,80 @@ choose_venv_python() {
   exit 2
 }
 
+select_torch_installer() {
+  local backend="$1"
+  if [[ "$MINIGRID_TORCH_INSTALLER" != "auto" ]]; then
+    printf '%s\n' "$MINIGRID_TORCH_INSTALLER"
+    return
+  fi
+  if [[ "$backend" == "uv" ]]; then
+    printf 'uv\n'
+  else
+    printf 'pip\n'
+  fi
+}
+
+validate_torch_install() {
+  python - <<'PY'
+import os
+import sys
+
+try:
+    import torch
+except Exception as exc:
+    print(f"torch_import_error={type(exc).__name__}: {exc}", file=sys.stderr)
+    raise
+
+print(f"torch_version={torch.__version__}")
+device = os.environ.get("MINIGRID_TORCH_DEVICE", "")
+if device.startswith("cuda"):
+    available = torch.cuda.is_available()
+    print(f"torch_cuda_available={available}")
+    print(f"torch_cuda_device_count={torch.cuda.device_count()}")
+    if not available:
+        raise SystemExit("torch_cuda_unavailable")
+PY
+}
+
+install_torch() {
+  local installer="$1"
+  echo "torch_installer=$installer"
+  case "$installer" in
+    pip)
+      python -m pip install --upgrade pip
+      if [[ -n "$MINIGRID_TORCH_INDEX_URL" ]]; then
+        python -m pip install torch --index-url "$MINIGRID_TORCH_INDEX_URL"
+      else
+        python -m pip install torch
+      fi
+      ;;
+    uv)
+      if ! command -v uv >/dev/null 2>&1; then
+        echo "uv_not_found" >&2
+        exit 2
+      fi
+      if [[ -n "$MINIGRID_TORCH_INDEX_URL" ]]; then
+        uv pip install torch --index-url "$MINIGRID_TORCH_INDEX_URL"
+      else
+        uv pip install torch
+      fi
+      ;;
+    *)
+      echo "invalid selected torch installer: $installer" >&2
+      exit 2
+      ;;
+  esac
+  validate_torch_install
+}
+
 install_with_venv() {
   local python_bin="$1"
   echo "minigrid_env_backend=venv"
   echo "python_bin=$python_bin"
   echo "venv_dir=$MINIGRID_VENV_DIR"
+  if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
+    echo "torch_installer=$(select_torch_installer venv)"
+  fi
   if [[ "$MINIGRID_SETUP_DRY_RUN" == "1" ]]; then
     echo "dry_run=1"
     return
@@ -102,11 +177,7 @@ install_with_venv() {
   python -m pip install --upgrade pip
   python -m pip install minigrid
   if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
-    if [[ -n "$MINIGRID_TORCH_INDEX_URL" ]]; then
-      python -m pip install --index-url "$MINIGRID_TORCH_INDEX_URL" torch
-    else
-      python -m pip install torch
-    fi
+    install_torch "$(select_torch_installer venv)"
   fi
 }
 
@@ -120,6 +191,9 @@ install_with_uv() {
   echo "python_request=$MINIGRID_PYTHON"
   echo "venv_dir=$MINIGRID_VENV_DIR"
   echo "venv_clear=$MINIGRID_ENV_CLEAR"
+  if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
+    echo "torch_installer=$(select_torch_installer uv)"
+  fi
   if [[ "$MINIGRID_SETUP_DRY_RUN" == "1" ]]; then
     echo "dry_run=1"
     return
@@ -133,11 +207,7 @@ install_with_uv() {
   . "$MINIGRID_VENV_DIR/bin/activate"
   uv pip install minigrid
   if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
-    if [[ -n "$MINIGRID_TORCH_INDEX_URL" ]]; then
-      uv pip install torch --index-url "$MINIGRID_TORCH_INDEX_URL"
-    else
-      uv pip install torch
-    fi
+    install_torch "$(select_torch_installer uv)"
   fi
 }
 

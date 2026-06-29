@@ -19,6 +19,7 @@ MINIGRID_PYTHON=python3 \
 MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
 MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu \
 MINIGRID_TORCH_CPU_FALLBACK=1 \
+MINIGRID_TORCH_INSTALLER=pip \
 MINIGRID_ENV_CLEAR=1 \
 ./scripts/setup_minigrid_env.sh >/dev/null
 VERIFY_RUN_DIR=".tmp/verify-run"

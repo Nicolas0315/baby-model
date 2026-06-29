@@ -59,6 +59,7 @@ MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
 MINIGRID_TORCH_SEED=601 \
 MINIGRID_TORCH_DEVICE=cuda \
 MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cu132 \
+MINIGRID_TORCH_INSTALLER=pip \
 MINIGRID_ENV_BACKEND=uv \
 MINIGRID_PYTHON=3.12 \
 MINIGRID_VENV_DIR=.venv-minigrid-gpu \
@@ -91,6 +92,9 @@ MINIGRID_TORCH_CPU_FALLBACK=1
   a different wheel install path before counting this worker as GPU-proven.
   The fleet launcher now prepends explicit `cd`/`pwd` logging so WSL execution
   paths are auditable before dependency installation.
+- Follow-up setup hardening adds `MINIGRID_TORCH_INSTALLER=pip` and validates
+  `import torch` plus CUDA availability before training, so partial Torch wheel
+  environments fail during setup instead of being mistaken for smoke evidence.
 
 ## Acceptance For Issue #13
 

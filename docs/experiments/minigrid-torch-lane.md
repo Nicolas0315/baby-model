@@ -79,8 +79,14 @@ Supported setup controls:
 - `MINIGRID_ENV_BACKEND=auto|venv|uv`; `auto` chooses `uv` when available.
 - `MINIGRID_PYTHON=3.12` requests a stable Python for PyTorch wheels on WSL.
 - `MINIGRID_TORCH_INDEX_URL` selects an official PyTorch wheel index.
+- `MINIGRID_TORCH_INSTALLER=auto|uv|pip`; `auto` keeps the backend default,
+  while `pip` gives a direct official PyTorch install path when `uv pip`
+  produces a partial wheel environment.
 - `MINIGRID_TORCH_CPU_FALLBACK=1` lets fleet runs retry the same smoke on CPU
   when an explicit CUDA device fails.
+- Torch setup now verifies `import torch` after install. When
+  `MINIGRID_TORCH_DEVICE=cuda`, setup also requires
+  `torch.cuda.is_available()` before running the training smoke.
 
 ## Config
 
