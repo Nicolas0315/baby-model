@@ -873,7 +873,8 @@ class ExperimentTest(unittest.TestCase):
     def test_minigrid_torch_action_prior_label_is_dependency_free(self) -> None:
         def observation_with_front(front_cell: list[int], mission: str = "unlock the door with the key") -> dict[str, object]:
             image = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
-            image[2][3] = front_cell
+            image[2][3] = [2, 0, 0]
+            image[3][5] = front_cell
             return {"direction": 0, "mission": mission, "image": image}
 
         self.assertEqual(action_prior_label(observation_with_front([5, 0, 0]), actions=7), 3)

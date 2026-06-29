@@ -32,6 +32,8 @@ OBJECT_DOOR = 4
 OBJECT_KEY = 5
 OBJECT_BALL = 6
 OBJECT_GOAL = 8
+VIEW_FORWARD_X = 3
+VIEW_FORWARD_Y = 5
 
 
 @dataclass(frozen=True)
@@ -997,7 +999,7 @@ def action_prior_label(observation: Any, actions: int) -> int:
     image = observation.get("image")
     if hasattr(image, "tolist"):
         image = image.tolist()
-    front = _image_cell(image, 2, 3)
+    front = _image_cell(image, VIEW_FORWARD_X, VIEW_FORWARD_Y)
     mission = str(observation.get("mission", "")).lower()
 
     if front is not None and len(front) >= 3:
@@ -1072,15 +1074,15 @@ def _flat_image_cells(image: Any) -> list[list[int]]:
     return cells
 
 
-def _image_cell(image: Any, y: int, x: int) -> list[int] | None:
+def _image_cell(image: Any, x: int, y: int) -> list[int] | None:
     if not isinstance(image, list):
         return None
-    if y < 0 or y >= len(image):
+    if x < 0 or x >= len(image):
         return None
-    row = image[y]
-    if not isinstance(row, list) or x < 0 or x >= len(row):
+    column = image[x]
+    if not isinstance(column, list) or y < 0 or y >= len(column):
         return None
-    cell = row[x]
+    cell = column[y]
     return cell if isinstance(cell, list) else None
 
 

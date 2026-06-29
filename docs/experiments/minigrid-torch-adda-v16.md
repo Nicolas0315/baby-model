@@ -68,30 +68,17 @@ A local CPU smoke passed in the existing optional PyTorch venv with
 
 Summary artifact:
 
-`.tmp/local-v16-torch/20260629T065204Z/summary.md`
+`.tmp/local-v16-torch-fixed/20260629T071609Z/summary.md`
 
 | condition | final_stage | prior | success_all | success_last | return_last | rep_loss | rep_updates | updates |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `A_torch_hard_only_long` | `unlock_eval` | 0.000 | 0.000 | 0.000 | 0.000 | 0.0000 | 0 | 5745 |
-| `R_torch_action_prior_delay` | `unlock_eval` | 0.000 | 0.021 | 0.050 | 0.046 | 0.0214 | 7168 | 6915 |
-| `S_torch_action_prior_policy_mix` | `unlock_eval` | 0.250 | 0.000 | 0.000 | 0.000 | 0.0219 | 7216 | 6967 |
+| `R_torch_action_prior_delay` | `unlock_eval` | 0.000 | 0.000 | 0.000 | 0.000 | 0.0313 | 7497 | 7244 |
+| `S_torch_action_prior_policy_mix` | `unlock_eval` | 0.250 | 0.021 | 0.000 | 0.000 | 0.0329 | 6972 | 6723 |
 
-Local conclusion: `R_torch_action_prior_delay` met the decision rule on CPU by
-beating the hard-only baseline on final-stage last-window success. Treat this
-as a positive smoke signal only; require bounded CUDA smoke before escalating to
-a multi-seed GPU sweep.
+Local conclusion: after correcting the MiniGrid view-coordinate used by the
+action-prior label, the action-prior family did not beat the hard-only baseline
+on CPU. `S_torch_action_prior_policy_mix` recovered one all-window success, but
+not in the final window and not enough to meet the decision rule.
 
-A bounded CUDA smoke completed on `gpu-worker-c` with `torch==2.12.1+cu132`,
-`torch_cuda_available=True`, and `device=cuda`.
-
-| condition | final_stage | prior | success_all | success_last | return_last | rep_loss | rep_updates | updates |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `A_torch_hard_only_long` | `unlock_eval` | 0.000 | 0.000 | 0.000 | 0.000 | 0.0000 | 0 | 5745 |
-| `R_torch_action_prior_delay` | `unlock_eval` | 0.000 | 0.000 | 0.000 | 0.000 | 0.0293 | 7242 | 6989 |
-| `S_torch_action_prior_policy_mix` | `unlock_eval` | 0.250 | 0.000 | 0.000 | 0.000 | 0.0219 | 7216 | 6967 |
-
-CUDA conclusion: the action-prior family was executable, but it did not beat the
-hard-only baseline. All conditions had `success_last=0.000` and
-`return_last=0.000`. Do not run a multi-seed GPU sweep for v1.6; use this as
-evidence that this heuristic action-prior signal is not strong enough by itself
-on the sparse unlock task.
+Bounded CUDA smoke for the corrected action-prior label is pending.
