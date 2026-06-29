@@ -84,11 +84,15 @@ Updated: 2026-06-29 JST
   `gymnasium==1.3.0`.
 - MiniGrid trained smoke on `MiniGrid-Empty-5x5-v0` completed; `A_end_to_end`
   won with `success_last=1.000`.
+- Fleet MiniGrid optional verification completed on all four configured worker
+  classes using `git archive | ssh | tmux`; all workers produced the same
+  trained smoke table. Exact host-level evidence is kept outside this
+  repository in local docs.
 
 ## Next
 
-- Replicate `MODE=minigrid ./scripts/fleet_archive_run.sh ...` on the fleet and
-  record host-level evidence outside the repo.
+- Add a harder MiniGrid/BabyAI trained config for issue #2, starting with
+  `MiniGrid-DoorKey-8x8-v0` or a BabyAI task.
 
 ## Not Yet Proven
 

@@ -73,6 +73,14 @@ Trained smoke result on `MiniGrid-Empty-5x5-v0`, 40 episodes:
 | `B_encoder_first` | 0.325 | 0.450 | 0.220 | 48.85 | 0.000 |
 | `E_progress_anneal` | 0.125 | 0.150 | 0.089 | 43.40 | 0.000 |
 
+## Fleet Verification
+
+The optional verifier and trained smoke were replicated on all four configured
+worker classes on 2026-06-29 via `git archive | ssh | tmux` at commit
+`d03c46ece84335023bb566ee691b281c24263dab`. Every worker produced the same
+trained smoke table as local verification. Exact host-level evidence is kept
+outside this repository in local docs.
+
 ## Metrics Schema
 
 Future trained runs should preserve this top-level shape:
@@ -99,5 +107,5 @@ Before GPU or long fleet jobs:
 - A MiniGrid config compares `A_end_to_end`, `B_encoder_first`, and at least one
   intrinsic variant on the same sparse-reward environment.
 - A local tmux run writes summaries under `runs/`.
-- Fleet execution uses `git archive | ssh | tmux` and keeps host-level evidence
-  outside the repo.
+- The next MiniGrid run uses a harder sparse-reward task, such as
+  `MiniGrid-DoorKey-8x8-v0` or a BabyAI task.
