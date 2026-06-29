@@ -51,3 +51,26 @@ Escalate to a three-seed CUDA sweep only if a task-signal predictive condition
 beats `A_torch_hard_only_long` on last-window success, or ties last-window
 success while improving all-window success or mean return. Otherwise, record
 the result as negative evidence and switch to a curriculum-backed design.
+
+## Current Result
+
+Source commit: `6105475cc025eead8669c8abb967bb79161bdf3a`
+
+A local CPU smoke passed in the existing optional PyTorch venv. A bounded CUDA
+smoke then completed on `gpu-worker-c` with `torch==2.12.1+cu132` and
+`device=cuda`.
+
+Summary artifact:
+
+`/home/ogosh/work/baby-model-fleet/v14-smoke-20260629T055500Z-6105475/.tmp/verify-minigrid/torch/20260629T060713Z/summary.md`
+
+| condition | success_all | success_last | return_last | rep_loss | rep_updates | updates |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only_long` | 0.021 | 0.050 | 0.046 | 0.0000 | 0 | 5679 |
+| `N_torch_task_signal_delay` | 0.000 | 0.000 | 0.000 | 0.0060 | 5760 | 5265 |
+| `O_torch_task_signal_aux_progress` | 0.000 | 0.000 | 0.000 | 0.0060 | 5760 | 5265 |
+
+Conclusion: the task-signal predictive head executed and trained, but it did
+not improve sparse unlock-task success. The hard-only long-window baseline was
+the only condition with last-window success. Do not escalate this condition
+family to a multi-seed GPU sweep; switch to a curriculum-backed design next.

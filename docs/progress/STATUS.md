@@ -258,12 +258,23 @@ Updated: 2026-06-29 JST
   `5760` representation updates, but all conditions had
   `success_last=0.000`. This is not promising enough to escalate v1.3 to a
   multi-seed GPU sweep.
+- Issue #18 v1.4 task-signal predictive objective is implemented:
+  - `configs/experiments/minigrid-torch-adda-v14.json`
+  - `docs/experiments/minigrid-torch-adda-v14.md`
+  - PyTorch DQN now supports a `next_task_signal` representation objective.
+- Local v1.4 CPU smoke passed in the existing optional PyTorch venv.
+- A bounded v1.4 CUDA smoke completed on `gpu-worker-c` at commit
+  `6105475cc025eead8669c8abb967bb79161bdf3a`. The run was executable on
+  `torch==2.12.1+cu132` and `device=cuda`; both task-signal predictive
+  conditions ran `5760` representation updates, but both stayed at
+  `success_last=0.000`. `A_torch_hard_only_long` won with
+  `success_last=0.050`, so v1.4 should not be escalated to a multi-seed GPU
+  sweep.
 
 ## Next
 
-- Execute issue #18 by revising the predictive target or pairing the
-  representation objective with a task curriculum, then run a bounded CUDA
-  smoke.
+- Close issue #18 after push and green CI, then open the next experiment issue
+  around a curriculum-backed PyTorch AD/DA design.
 
 ## Not Yet Proven
 
