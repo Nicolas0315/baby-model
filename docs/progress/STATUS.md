@@ -52,7 +52,8 @@ Updated: 2026-06-29 JST
   - v0.9 full-fleet GPU-ready PyTorch lane: `https://github.com/Nicolas0315/baby-model/issues/13`
   - v1.0 multi-seed GPU PyTorch sweep: `https://github.com/Nicolas0315/baby-model/issues/14` closed
   - v1.1 revise PyTorch AD/DA conditions: `https://github.com/Nicolas0315/baby-model/issues/15` closed
-  - v1.2 longer-window PyTorch AD/DA training design: `https://github.com/Nicolas0315/baby-model/issues/16` open
+  - v1.2 longer-window PyTorch AD/DA training design: `https://github.com/Nicolas0315/baby-model/issues/16` closed
+  - v1.3 predictive representation objective: `https://github.com/Nicolas0315/baby-model/issues/17` open
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -247,8 +248,8 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Close issue #16 after push and green CI, then open the next experiment issue
-  around a separate predictive representation objective.
+- Execute issue #17 by adding a separate predictive representation objective to
+  the PyTorch AD/DA runner, then run a bounded CUDA smoke.
 
 ## Not Yet Proven
 
