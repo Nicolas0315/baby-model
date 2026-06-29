@@ -83,6 +83,15 @@ class MiniGridTorchConfig:
     active_stages_by_condition: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
+@dataclass(frozen=True)
+class RepresentationUpdateResult:
+    loss: float
+    state_loss: float = 0.0
+    target_visibility_loss: float = 0.0
+    state_beta: float = 0.0
+    target_visibility_beta: float = 0.0
+
+
 class TorchDQNAgent:
     def __init__(
         self,
@@ -235,7 +244,9 @@ class TorchDQNAgent:
         features: SparseFeatures,
         action: int,
         target_vector: list[float] | int | dict[str, list[float]],
-    ) -> float | None:
+        representation_state_beta: float | None = None,
+        representation_target_visibility_beta: float | None = None,
+    ) -> RepresentationUpdateResult | None:
         if self.representation_objective == "none":
             return None
         if self.representation_objective not in {
@@ -273,12 +284,25 @@ class TorchDQNAgent:
             visibility_target = self.torch.tensor([visibility_target_vector], dtype=self.torch.float32, device=self.device)
             state_prediction = self.state_delta_predictor(predictor_input)
             visibility_prediction = self.target_visibility_predictor(predictor_input)
-            loss = self.loss_fn(state_prediction, state_target) * self.representation_state_beta
-            loss = loss + self.loss_fn(visibility_prediction, visibility_target) * self.representation_target_visibility_beta
+            state_beta = self.representation_state_beta if representation_state_beta is None else representation_state_beta
+            visibility_beta = (
+                self.representation_target_visibility_beta
+                if representation_target_visibility_beta is None
+                else representation_target_visibility_beta
+            )
+            state_loss = self.loss_fn(state_prediction, state_target)
+            visibility_loss = self.loss_fn(visibility_prediction, visibility_target)
+            loss = state_loss * state_beta + visibility_loss * visibility_beta
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            return float(loss.detach().cpu().item())
+            return RepresentationUpdateResult(
+                loss=float(loss.detach().cpu().item()),
+                state_loss=float(state_loss.detach().cpu().item()),
+                target_visibility_loss=float(visibility_loss.detach().cpu().item()),
+                state_beta=state_beta,
+                target_visibility_beta=visibility_beta,
+            )
         if self.representation_objective == "action_prior":
             if self.representation_predictor is None:
                 raise ValueError("action_prior predictor is not initialized")
@@ -299,7 +323,7 @@ class TorchDQNAgent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        return float(loss.detach().cpu().item())
+        return RepresentationUpdateResult(loss=float(loss.detach().cpu().item()))
 
     def parameter_count(self) -> int:
         parameters = list(self.model.parameters())
@@ -472,6 +496,40 @@ def _should_update_representation(condition: Condition, force_random: bool) -> b
     return not (condition.stop_representation_after_delay and not force_random)
 
 
+def effective_two_head_representation_betas(condition: Condition, episode_index: int) -> tuple[float, float]:
+    if condition.representation_objective != TWO_HEAD_STATE_TARGET_OBJECTIVE:
+        return condition.representation_state_beta, condition.representation_target_visibility_beta
+    state_end = (
+        condition.representation_state_beta
+        if condition.representation_state_beta_end is None
+        else condition.representation_state_beta_end
+    )
+    visibility_end = (
+        condition.representation_target_visibility_beta
+        if condition.representation_target_visibility_beta_end is None
+        else condition.representation_target_visibility_beta_end
+    )
+    if condition.representation_schedule == "constant":
+        return condition.representation_state_beta, condition.representation_target_visibility_beta
+    if condition.representation_schedule == "linear_anneal":
+        horizon = condition.representation_anneal_episodes
+        if horizon <= 0:
+            return state_end, visibility_end
+        progress = min(1.0, max(0.0, episode_index / float(horizon)))
+        state_beta = condition.representation_state_beta + (state_end - condition.representation_state_beta) * progress
+        visibility_beta = condition.representation_target_visibility_beta + (
+            visibility_end - condition.representation_target_visibility_beta
+        ) * progress
+        return state_beta, visibility_beta
+    raise ValueError(f"unknown representation_schedule: {condition.representation_schedule}")
+
+
+def _coerce_representation_update_result(result: RepresentationUpdateResult | float) -> RepresentationUpdateResult:
+    if isinstance(result, RepresentationUpdateResult):
+        return result
+    return RepresentationUpdateResult(loss=float(result))
+
+
 def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> MiniGridTorchConfig:
     env_cfg = config.get("environment", {})
     if not isinstance(env_cfg, dict):
@@ -562,6 +620,16 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         representation_beta = float(item.get("representation_beta", 0.0))
         representation_state_beta = float(item.get("representation_state_beta", 0.0))
         representation_target_visibility_beta = float(item.get("representation_target_visibility_beta", 0.0))
+        representation_state_beta_end = (
+            float(item["representation_state_beta_end"]) if "representation_state_beta_end" in item else None
+        )
+        representation_target_visibility_beta_end = (
+            float(item["representation_target_visibility_beta_end"])
+            if "representation_target_visibility_beta_end" in item
+            else None
+        )
+        representation_anneal_episodes = int(item.get("representation_anneal_episodes", 0))
+        representation_schedule = str(item.get("representation_schedule", "constant"))
         action_prior_weight = float(item.get("action_prior_weight", 0.0))
         freeze_encoder_after_delay = bool(item.get("freeze_encoder_after_delay", False))
         stop_representation_after_delay = bool(item.get("stop_representation_after_delay", False))
@@ -591,17 +659,34 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             raise ValueError(f"representation_state_beta must be non-negative for {name}")
         if representation_target_visibility_beta < 0:
             raise ValueError(f"representation_target_visibility_beta must be non-negative for {name}")
+        if representation_state_beta_end is not None and representation_state_beta_end < 0:
+            raise ValueError(f"representation_state_beta_end must be non-negative for {name}")
+        if representation_target_visibility_beta_end is not None and representation_target_visibility_beta_end < 0:
+            raise ValueError(f"representation_target_visibility_beta_end must be non-negative for {name}")
+        if representation_anneal_episodes < 0 or representation_anneal_episodes > episodes:
+            raise ValueError(f"representation_anneal_episodes out of range for {name}")
+        if representation_schedule not in {"constant", "linear_anneal"}:
+            raise ValueError(f"invalid representation_schedule for {name}")
         if representation_objective == TWO_HEAD_STATE_TARGET_OBJECTIVE:
             if representation_beta != 0.0:
                 raise ValueError(f"representation_beta must stay zero for two-head objective in {name}")
             if representation_state_beta <= 0.0 or representation_target_visibility_beta <= 0.0:
                 raise ValueError(f"two-head representation betas must be positive for {name}")
+            if representation_schedule == "linear_anneal" and representation_anneal_episodes <= 0:
+                raise ValueError(f"linear representation anneal requires representation_anneal_episodes for {name}")
         elif representation_objective != "none" and representation_beta <= 0.0:
             raise ValueError(f"representation_beta must be positive for {name}")
         elif representation_objective != TWO_HEAD_STATE_TARGET_OBJECTIVE and (
             representation_state_beta != 0.0 or representation_target_visibility_beta != 0.0
         ):
             raise ValueError(f"two-head representation betas require {TWO_HEAD_STATE_TARGET_OBJECTIVE} for {name}")
+        if representation_objective != TWO_HEAD_STATE_TARGET_OBJECTIVE and (
+            representation_state_beta_end is not None
+            or representation_target_visibility_beta_end is not None
+            or representation_anneal_episodes != 0
+            or representation_schedule != "constant"
+        ):
+            raise ValueError(f"representation schedule requires {TWO_HEAD_STATE_TARGET_OBJECTIVE} for {name}")
         if action_prior_weight < 0.0:
             raise ValueError(f"action_prior_weight must be non-negative for {name}")
         if action_prior_weight > 0.0 and representation_objective != "action_prior":
@@ -624,6 +709,10 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 representation_beta=representation_beta,
                 representation_state_beta=representation_state_beta,
                 representation_target_visibility_beta=representation_target_visibility_beta,
+                representation_state_beta_end=representation_state_beta_end,
+                representation_target_visibility_beta_end=representation_target_visibility_beta_end,
+                representation_anneal_episodes=representation_anneal_episodes,
+                representation_schedule=representation_schedule,
                 action_prior_weight=action_prior_weight,
                 freeze_encoder_after_delay=freeze_encoder_after_delay,
                 stop_representation_after_delay=stop_representation_after_delay,
@@ -720,6 +809,10 @@ def run_minigrid_torch_condition(
         episodes: list[EpisodeMetrics] = []
         mission_probes: list[dict[str, float | str]] = []
         representation_losses: list[float] = []
+        representation_state_losses: list[float] = []
+        representation_target_visibility_losses: list[float] = []
+        representation_state_betas: list[float] = []
+        representation_target_visibility_betas: list[float] = []
         representation_update_counts: list[int] = []
         first_schema: dict[str, Any] | None = None
 
@@ -737,6 +830,10 @@ def run_minigrid_torch_condition(
             external_return = 0.0
             intrinsic_return = 0.0
             representation_loss = 0.0
+            representation_state_loss = 0.0
+            representation_target_visibility_loss = 0.0
+            representation_state_beta = 0.0
+            representation_target_visibility_beta = 0.0
             representation_updates = 0
             success = False
             steps = 0
@@ -775,9 +872,21 @@ def run_minigrid_torch_condition(
                 )
                 loss = None
                 if _should_update_representation(condition, force_random):
-                    loss = agent.update_representation(features, action, representation_target)
+                    state_beta, visibility_beta = effective_two_head_representation_betas(condition, episode)
+                    loss = agent.update_representation(
+                        features,
+                        action,
+                        representation_target,
+                        representation_state_beta=state_beta,
+                        representation_target_visibility_beta=visibility_beta,
+                    )
                 if loss is not None:
-                    representation_loss += loss
+                    loss_result = _coerce_representation_update_result(loss)
+                    representation_loss += loss_result.loss
+                    representation_state_loss += loss_result.state_loss
+                    representation_target_visibility_loss += loss_result.target_visibility_loss
+                    representation_state_beta += loss_result.state_beta
+                    representation_target_visibility_beta += loss_result.target_visibility_beta
                     representation_updates += 1
                 if not force_random:
                     agent.update(features, action, total_reward, next_features, done)
@@ -808,12 +917,36 @@ def run_minigrid_torch_condition(
             )
             mission_probes.append(mission_preservation_probe(observation))
             representation_losses.append(representation_loss / max(1, representation_updates))
+            representation_state_losses.append(representation_state_loss / max(1, representation_updates))
+            representation_target_visibility_losses.append(
+                representation_target_visibility_loss / max(1, representation_updates)
+            )
+            representation_state_betas.append(representation_state_beta / max(1, representation_updates))
+            representation_target_visibility_betas.append(
+                representation_target_visibility_beta / max(1, representation_updates)
+            )
             representation_update_counts.append(representation_updates)
 
         last_window = episodes[-20:] if len(episodes) >= 20 else episodes
         mission_probe_summary = summarize_mission_preservation_probes(mission_probes)
         representation_last_window = (
             representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
+        )
+        representation_state_last_window = (
+            representation_state_losses[-20:] if len(representation_state_losses) >= 20 else representation_state_losses
+        )
+        representation_visibility_last_window = (
+            representation_target_visibility_losses[-20:]
+            if len(representation_target_visibility_losses) >= 20
+            else representation_target_visibility_losses
+        )
+        representation_state_beta_last_window = (
+            representation_state_betas[-20:] if len(representation_state_betas) >= 20 else representation_state_betas
+        )
+        representation_visibility_beta_last_window = (
+            representation_target_visibility_betas[-20:]
+            if len(representation_target_visibility_betas) >= 20
+            else representation_target_visibility_betas
         )
         successful_steps = [item.steps for item in episodes if item.success]
         return {
@@ -832,6 +965,10 @@ def run_minigrid_torch_condition(
             "representation_beta": condition.representation_beta,
             "representation_state_beta": condition.representation_state_beta,
             "representation_target_visibility_beta": condition.representation_target_visibility_beta,
+            "representation_state_beta_end": condition.representation_state_beta_end,
+            "representation_target_visibility_beta_end": condition.representation_target_visibility_beta_end,
+            "representation_anneal_episodes": condition.representation_anneal_episodes,
+            "representation_schedule": condition.representation_schedule,
             "action_prior_weight": condition.action_prior_weight,
             "freeze_encoder_after_delay": condition.freeze_encoder_after_delay,
             "stop_representation_after_delay": condition.stop_representation_after_delay,
@@ -846,6 +983,10 @@ def run_minigrid_torch_condition(
             "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
             **mission_probe_summary,
             "mean_representation_loss_last_window": mean(representation_last_window),
+            "mean_representation_state_loss_last_window": mean(representation_state_last_window),
+            "mean_representation_target_visibility_loss_last_window": mean(representation_visibility_last_window),
+            "mean_representation_state_beta_last_window": mean(representation_state_beta_last_window),
+            "mean_representation_target_visibility_beta_last_window": mean(representation_visibility_beta_last_window),
             "representation_updates": sum(representation_update_counts),
             "representation_parameter_count": agent.representation_parameter_count(),
             "parameter_count": agent.parameter_count(),
@@ -910,6 +1051,10 @@ def run_minigrid_torch_curriculum_condition(
         "representation_beta": condition.representation_beta,
         "representation_state_beta": condition.representation_state_beta,
         "representation_target_visibility_beta": condition.representation_target_visibility_beta,
+        "representation_state_beta_end": condition.representation_state_beta_end,
+        "representation_target_visibility_beta_end": condition.representation_target_visibility_beta_end,
+        "representation_anneal_episodes": condition.representation_anneal_episodes,
+        "representation_schedule": condition.representation_schedule,
         "action_prior_weight": condition.action_prior_weight,
         "freeze_encoder_after_delay": condition.freeze_encoder_after_delay,
         "stop_representation_after_delay": condition.stop_representation_after_delay,
@@ -930,6 +1075,14 @@ def run_minigrid_torch_curriculum_condition(
         "mission_target_center_rate_last_window": final_stage["mission_target_center_rate_last_window"],
         "mission_target_near_rate_last_window": final_stage["mission_target_near_rate_last_window"],
         "mean_representation_loss_last_window": final_stage["mean_representation_loss_last_window"],
+        "mean_representation_state_loss_last_window": final_stage["mean_representation_state_loss_last_window"],
+        "mean_representation_target_visibility_loss_last_window": final_stage[
+            "mean_representation_target_visibility_loss_last_window"
+        ],
+        "mean_representation_state_beta_last_window": final_stage["mean_representation_state_beta_last_window"],
+        "mean_representation_target_visibility_beta_last_window": final_stage[
+            "mean_representation_target_visibility_beta_last_window"
+        ],
         "representation_updates": sum(stage["representation_updates"] for stage in stage_results),
         "representation_parameter_count": agent.representation_parameter_count(),
         "parameter_count": agent.parameter_count(),
@@ -984,6 +1137,10 @@ def _run_minigrid_torch_stage(
         episodes: list[EpisodeMetrics] = []
         mission_probes: list[dict[str, float | str]] = []
         representation_losses: list[float] = []
+        representation_state_losses: list[float] = []
+        representation_target_visibility_losses: list[float] = []
+        representation_state_betas: list[float] = []
+        representation_target_visibility_betas: list[float] = []
         representation_update_counts: list[int] = []
         first_schema: dict[str, Any] | None = None
 
@@ -1002,6 +1159,10 @@ def _run_minigrid_torch_stage(
             external_return = 0.0
             intrinsic_return = 0.0
             representation_loss = 0.0
+            representation_state_loss = 0.0
+            representation_target_visibility_loss = 0.0
+            representation_state_beta = 0.0
+            representation_target_visibility_beta = 0.0
             representation_updates = 0
             success = False
             steps = 0
@@ -1040,9 +1201,21 @@ def _run_minigrid_torch_stage(
                 )
                 loss = None
                 if _should_update_representation(condition, force_random):
-                    loss = agent.update_representation(features, action, representation_target)
+                    state_beta, visibility_beta = effective_two_head_representation_betas(condition, global_episode)
+                    loss = agent.update_representation(
+                        features,
+                        action,
+                        representation_target,
+                        representation_state_beta=state_beta,
+                        representation_target_visibility_beta=visibility_beta,
+                    )
                 if loss is not None:
-                    representation_loss += loss
+                    loss_result = _coerce_representation_update_result(loss)
+                    representation_loss += loss_result.loss
+                    representation_state_loss += loss_result.state_loss
+                    representation_target_visibility_loss += loss_result.target_visibility_loss
+                    representation_state_beta += loss_result.state_beta
+                    representation_target_visibility_beta += loss_result.target_visibility_beta
                     representation_updates += 1
                 if not force_random:
                     agent.update(features, action, total_reward, next_features, done)
@@ -1073,6 +1246,14 @@ def _run_minigrid_torch_stage(
             )
             mission_probes.append(mission_preservation_probe(observation))
             representation_losses.append(representation_loss / max(1, representation_updates))
+            representation_state_losses.append(representation_state_loss / max(1, representation_updates))
+            representation_target_visibility_losses.append(
+                representation_target_visibility_loss / max(1, representation_updates)
+            )
+            representation_state_betas.append(representation_state_beta / max(1, representation_updates))
+            representation_target_visibility_betas.append(
+                representation_target_visibility_beta / max(1, representation_updates)
+            )
             representation_update_counts.append(representation_updates)
 
         return (
@@ -1083,6 +1264,10 @@ def _run_minigrid_torch_stage(
                 mission_probes=mission_probes,
                 first_schema=first_schema,
                 representation_losses=representation_losses,
+                representation_state_losses=representation_state_losses,
+                representation_target_visibility_losses=representation_target_visibility_losses,
+                representation_state_betas=representation_state_betas,
+                representation_target_visibility_betas=representation_target_visibility_betas,
                 representation_update_counts=representation_update_counts,
                 agent=agent,
             ),
@@ -1101,6 +1286,10 @@ def _torch_stage_summary(
     mission_probes: list[dict[str, float | str]],
     first_schema: dict[str, Any] | None,
     representation_losses: list[float],
+    representation_state_losses: list[float],
+    representation_target_visibility_losses: list[float],
+    representation_state_betas: list[float],
+    representation_target_visibility_betas: list[float],
     representation_update_counts: list[int],
     agent: TorchDQNAgent,
 ) -> dict[str, Any]:
@@ -1108,6 +1297,22 @@ def _torch_stage_summary(
     mission_probe_summary = summarize_mission_preservation_probes(mission_probes)
     representation_last_window = (
         representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
+    )
+    representation_state_last_window = (
+        representation_state_losses[-20:] if len(representation_state_losses) >= 20 else representation_state_losses
+    )
+    representation_visibility_last_window = (
+        representation_target_visibility_losses[-20:]
+        if len(representation_target_visibility_losses) >= 20
+        else representation_target_visibility_losses
+    )
+    representation_state_beta_last_window = (
+        representation_state_betas[-20:] if len(representation_state_betas) >= 20 else representation_state_betas
+    )
+    representation_visibility_beta_last_window = (
+        representation_target_visibility_betas[-20:]
+        if len(representation_target_visibility_betas) >= 20
+        else representation_target_visibility_betas
     )
     successful_steps = [item.steps for item in episodes if item.success]
     return {
@@ -1125,6 +1330,10 @@ def _torch_stage_summary(
         "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
         **mission_probe_summary,
         "mean_representation_loss_last_window": mean(representation_last_window),
+        "mean_representation_state_loss_last_window": mean(representation_state_last_window),
+        "mean_representation_target_visibility_loss_last_window": mean(representation_visibility_last_window),
+        "mean_representation_state_beta_last_window": mean(representation_state_beta_last_window),
+        "mean_representation_target_visibility_beta_last_window": mean(representation_visibility_beta_last_window),
         "representation_updates": sum(representation_update_counts),
         "updates": agent.updates,
     }
@@ -1766,24 +1975,28 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
             [
                 f"- stages: `{stage_text}`",
                 "",
-                "| condition | active_stages | final_stage | prior | success_all | success_last | return_last | target_visible_last | target_center_last | target_near_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
-                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| condition | active_stages | final_stage | prior | success_all | success_last | return_last | target_visible_last | target_center_last | target_near_last | mean_steps_success | rep_loss | state_loss | visibility_loss | state_beta | visibility_beta | rep_updates | updates | parameters |",
+                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
     else:
         lines.extend(
             [
-                "| condition | prior | success_all | success_last | return_last | target_visible_last | target_center_last | target_near_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| condition | prior | success_all | success_last | return_last | target_visible_last | target_center_last | target_near_last | mean_steps_success | rep_loss | state_loss | visibility_loss | state_beta | visibility_beta | rep_updates | updates | parameters |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
     for row in report["results"]:
         mean_steps = row["mean_steps_success"]
         rep_loss = row.get("mean_representation_loss_last_window", 0.0)
+        state_loss = row.get("mean_representation_state_loss_last_window", 0.0)
+        visibility_loss = row.get("mean_representation_target_visibility_loss_last_window", 0.0)
+        state_beta = row.get("mean_representation_state_beta_last_window", 0.0)
+        visibility_beta = row.get("mean_representation_target_visibility_beta_last_window", 0.0)
         if is_curriculum:
             final_stage = row["final_stage"]
             lines.append(
-                "| {name} | {stages} | {stage} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {visible:.3f} | {center:.3f} | {near:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
+                "| {name} | {stages} | {stage} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {visible:.3f} | {center:.3f} | {near:.3f} | {steps} | {rep_loss:.4f} | {state_loss:.4f} | {visibility_loss:.4f} | {state_beta:.4f} | {visibility_beta:.4f} | {rep_updates} | {updates} | {params} |".format(
                     name=row["name"],
                     stages=",".join(row["active_stages"]),
                     stage=final_stage["stage"],
@@ -1796,6 +2009,10 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
                     near=row.get("mission_target_near_rate_last_window", 0.0),
                     steps="" if mean_steps is None else f"{mean_steps:.2f}",
                     rep_loss=rep_loss,
+                    state_loss=state_loss,
+                    visibility_loss=visibility_loss,
+                    state_beta=state_beta,
+                    visibility_beta=visibility_beta,
                     rep_updates=row.get("representation_updates", 0),
                     updates=row["updates"],
                     params=row["parameter_count"],
@@ -1803,7 +2020,7 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
             )
         else:
             lines.append(
-                "| {name} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {visible:.3f} | {center:.3f} | {near:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
+                "| {name} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {visible:.3f} | {center:.3f} | {near:.3f} | {steps} | {rep_loss:.4f} | {state_loss:.4f} | {visibility_loss:.4f} | {state_beta:.4f} | {visibility_beta:.4f} | {rep_updates} | {updates} | {params} |".format(
                     name=row["name"],
                     prior=row.get("action_prior_weight", 0.0),
                     all=row["success_rate_all"],
@@ -1814,6 +2031,10 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
                     near=row.get("mission_target_near_rate_last_window", 0.0),
                     steps="" if mean_steps is None else f"{mean_steps:.2f}",
                     rep_loss=rep_loss,
+                    state_loss=state_loss,
+                    visibility_loss=visibility_loss,
+                    state_beta=state_beta,
+                    visibility_beta=visibility_beta,
                     rep_updates=row.get("representation_updates", 0),
                     updates=row["updates"],
                     params=row["parameter_count"],

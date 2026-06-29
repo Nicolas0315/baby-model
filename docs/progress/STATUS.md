@@ -809,13 +809,31 @@ Updated: 2026-06-30 JST
     final-window success (`0.500`) and return (`0.367`), while the two-head
     variants reached only `0.200`/`0.300` success and `0.156`/`0.151` return.
   - Do not launch CUDA for v2.31.
+- Issue #56 v2.32 two-head diagnostics and gating is implemented and has a CPU
+  result:
+  - `configs/experiments/minigrid-torch-adda-v43.json`
+  - `docs/experiments/minigrid-torch-adda-v43.md`
+  - Added per-head diagnostics for two-head representation learning:
+    state-delta raw loss, target-visibility raw loss, and effective per-head
+    beta values.
+  - Added `representation_schedule=linear_anneal` with per-head beta end
+    values for the two-head objective.
+  - Local CPU smoke on seed `3801` completed with `torch==2.12.1` and
+    `device=cpu`.
+  - The result was negative for CUDA escalation: `ZU` still won final-window
+    success (`0.400`), while constant two-head reached `0.300`, anneal-to-zero
+    reached `0.100`, and AD-only stop reached `0.200`.
+  - The useful diagnostic is that active two-head state-delta raw loss was about
+    2x target-visibility raw loss (`0.0326` vs `0.0157`), suggesting equal
+    head pressure is the wrong protocol.
+  - Do not launch CUDA for v2.32.
 
 ## Next
 
-- Start a protocol-changing branch rather than another scalar or naive two-head
-  split. Good candidates: per-head loss diagnostics plus annealing, or a
-  phase-gated representation schedule that protects the decoder from early
-  auxiliary loss.
+- Start a visibility-first or state-head-downweighted branch. The next protocol
+  should not apply equal pressure to state-delta and target-visibility heads;
+  use the v2.32 diagnostics to bias toward target-visibility or decouple the
+  representation probe from DQN training.
 
 ## Not Yet Proven
 
@@ -829,5 +847,7 @@ Updated: 2026-06-30 JST
   gates. v2.29 beta `0.075` is now the strongest beta-neighborhood candidate
   from a bounded three-seed CUDA sweep, but v2.30 did not preserve that edge
   cleanly under a longer CPU horizon and v2.31's naive two-head split
-  underperformed the single combined `ZU` baseline on CPU.
+  underperformed the single combined `ZU` baseline on CPU. v2.32's diagnostics
+  and anneal/gate variants also underperformed `ZU`, but identified state-head
+  loss pressure as the likely two-head failure mode.
 - Full objective completion.

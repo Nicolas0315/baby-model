@@ -69,6 +69,7 @@ from baby_model.minigrid_torch import (
     affordance_progress_vector,
     controllability_target,
     dense_feature_vector,
+    effective_two_head_representation_betas,
     mission_preservation_probe,
     mission_target_transition_vector,
     parse_minigrid_torch_config,
@@ -1638,6 +1639,78 @@ class ExperimentTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "two-head representation betas require"):
             parse_minigrid_torch_config(non_two_head_config, seed=3701)
 
+    def test_minigrid_torch_v43_two_head_diagnostics_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v43.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=3801,
+        )
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay",
+                "ZU_torch_gotoobj_state_plus_target_visibility_b0075",
+                "ZY_torch_gotoobj_two_head_state0375_visibility0375",
+                "ZZ_torch_gotoobj_two_head_anneal_to_zero",
+                "ZA_torch_gotoobj_two_head_ad_only_stop",
+            ],
+        )
+        annealed = parsed.conditions[3]
+        self.assertEqual(annealed.representation_objective, "state_delta_and_target_visibility")
+        self.assertEqual(annealed.representation_schedule, "linear_anneal")
+        self.assertEqual(annealed.representation_anneal_episodes, 18)
+        self.assertEqual(annealed.representation_state_beta_end, 0.0)
+        self.assertEqual(annealed.representation_target_visibility_beta_end, 0.0)
+        self.assertEqual(effective_two_head_representation_betas(annealed, 0), (0.0375, 0.0375))
+        self.assertEqual(effective_two_head_representation_betas(annealed, 18), (0.0, 0.0))
+        mid_state_beta, mid_visibility_beta = effective_two_head_representation_betas(annealed, 9)
+        self.assertAlmostEqual(mid_state_beta, 0.01875)
+        self.assertAlmostEqual(mid_visibility_beta, 0.01875)
+        ad_only = parsed.conditions[4]
+        self.assertTrue(ad_only.stop_representation_after_delay)
+        for condition in parsed.conditions:
+            self.assertEqual(condition.episodes, 42)
+            self.assertEqual(condition.decoder_delay_episodes, 4)
+
+    def test_minigrid_torch_two_head_schedule_rejects_non_two_head_objectives(self) -> None:
+        config = json.loads(Path("configs/experiments/minigrid-torch-adda-v43.json").read_text(encoding="utf-8"))
+        config["conditions"][1]["representation_schedule"] = "linear_anneal"
+        config["conditions"][1]["representation_anneal_episodes"] = 4
+        with self.assertRaisesRegex(ValueError, "representation schedule requires"):
+            parse_minigrid_torch_config(config, seed=3801)
+
+    def test_minigrid_torch_summary_includes_two_head_diagnostics(self) -> None:
+        summary = torch_summary_markdown(
+            {
+                "created_at": "2026-06-30T00:00:00+00:00",
+                "hypothesis": "diagnostics",
+                "env_id": "BabyAI-GoToObj-v0",
+                "framework": {"version": "fake", "device": "cpu"},
+                "winner_last_window": "two_head",
+                "results": [
+                    {
+                        "name": "two_head",
+                        "success_rate_all": 1.0,
+                        "success_rate_last_window": 1.0,
+                        "mean_return_last_window": 0.5,
+                        "mean_steps_success": 2.0,
+                        "mean_representation_loss_last_window": 0.1,
+                        "mean_representation_state_loss_last_window": 0.2,
+                        "mean_representation_target_visibility_loss_last_window": 0.3,
+                        "mean_representation_state_beta_last_window": 0.04,
+                        "mean_representation_target_visibility_beta_last_window": 0.02,
+                        "representation_updates": 10,
+                        "updates": 5,
+                        "parameter_count": 20,
+                    }
+                ],
+            }
+        )
+        self.assertIn("state_loss", summary)
+        self.assertIn("visibility_loss", summary)
+        self.assertIn("0.0400", summary)
+        self.assertIn("0.0200", summary)
+
     def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")
         parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
@@ -2426,6 +2499,8 @@ class ExperimentTest(unittest.TestCase):
                 features: dict[int, float],
                 action: int,
                 target_vector: list[float] | int,
+                representation_state_beta: float | None = None,
+                representation_target_visibility_beta: float | None = None,
             ) -> float | None:
                 if self.representation_objective == "none":
                     return None
@@ -2599,6 +2674,8 @@ class ExperimentTest(unittest.TestCase):
                 features: dict[int, float],
                 action: int,
                 target_vector: list[float] | int,
+                representation_state_beta: float | None = None,
+                representation_target_visibility_beta: float | None = None,
             ) -> float | None:
                 self.representation_updates += 1
                 return 0.5

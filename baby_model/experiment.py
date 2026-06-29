@@ -29,6 +29,10 @@ class Condition:
     representation_beta: float = 0.0
     representation_state_beta: float = 0.0
     representation_target_visibility_beta: float = 0.0
+    representation_state_beta_end: float | None = None
+    representation_target_visibility_beta_end: float | None = None
+    representation_anneal_episodes: int = 0
+    representation_schedule: str = "constant"
     action_prior_weight: float = 0.0
     freeze_encoder_after_delay: bool = False
     stop_representation_after_delay: bool = False
