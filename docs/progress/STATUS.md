@@ -856,12 +856,29 @@ Updated: 2026-06-30 JST
     target-near rate (`0.400`) over same-seed `ZU`.
   - Promote `ZB` to a bounded three-seed CUDA sweep before baseline
     replacement.
+- Issue #59 v2.35 CUDA multi-seed sweep for visibility-first `ZB` is complete:
+  - `docs/experiments/minigrid-torch-adda-v46.md`
+  - The sweep ran on `rtx4090` / WSL Ubuntu at commit
+    `6fc5a5923eb3374bb8468a198120fd67677edb4e` with seeds
+    `3901,3902,3903`.
+  - Setup used `NVIDIA GeForce RTX 4090`, driver `610.62`,
+    `torch==2.11.0+cu128`, and `device=cuda`.
+  - Remote artifact:
+    `~/work/baby-model-cuda-6fc5a59/.tmp/rtx4090-v59-zb-cuda-sweep/20260629T160825Z/summary.md`.
+  - The seed winners split: `ZB` won `3901`, `ZK` won `3902`, and
+    `ZD` won `3903`.
+  - `ZB` beat same-sweep `ZU` on mean final-window success (`0.267` vs
+    `0.233`) and return (`0.176` vs `0.152`), but not on target-visible
+    (`0.583` vs `0.617`) or target-near (`0.333` vs `0.350`) averages.
+  - `ZD_torch_gotoobj_two_head_state010_visibility065_state_anneal` led mean
+    final-window success (`0.283`) and return (`0.178`), but won only one seed.
+  - Do not promote `ZB` as a stable baseline yet.
 
 ## Next
 
-- Run a bounded three-seed CUDA sweep for
-  `ZB_torch_gotoobj_two_head_state010_visibility065` against the current `ZU`
-  baseline.
+- Start a narrower `ZB` vs `ZD` visibility-first refinement. The next protocol
+  should decide whether fixed state-downweighting or state-head anneal is the
+  better candidate before any baseline replacement.
 
 ## Not Yet Proven
 
@@ -879,5 +896,6 @@ Updated: 2026-06-30 JST
   and anneal/gate variants also underperformed `ZU`, but identified state-head
   loss pressure as the likely two-head failure mode. v2.33 has only single-seed
   CPU evidence for the visibility-first fix, and v2.34 has same-seed CUDA
-  replication but not multi-seed stability.
+  replication. v2.35 has multi-seed CUDA evidence that the visibility-first
+  family is promising but not stable enough for baseline replacement.
 - Full objective completion.
