@@ -23,6 +23,7 @@ class TorchDeviceUnavailable(RuntimeError):
 
 TASK_SIGNAL_DIM = 16
 CONTROLLABILITY_DIM = 1
+AFFORDANCE_PROGRESS_DIM = 16
 ACTION_LEFT = 0
 ACTION_RIGHT = 1
 ACTION_FORWARD = 2
@@ -95,7 +96,7 @@ class TorchDQNAgent:
         self.target.eval()
         self.representation_predictor = None
         parameters = list(self.model.parameters())
-        if representation_objective in {"next_feature", "next_task_signal", "controllability"}:
+        if representation_objective in {"next_feature", "next_task_signal", "controllability", "affordance_progress"}:
             target_dim = _representation_target_dim(representation_objective, config.feature_dim)
             self.representation_predictor = build_next_feature_predictor(
                 torch,
@@ -182,7 +183,7 @@ class TorchDQNAgent:
     ) -> float | None:
         if self.representation_objective == "none":
             return None
-        if self.representation_objective not in {"next_feature", "next_task_signal", "action_prior", "controllability"} or self.representation_predictor is None:
+        if self.representation_objective not in {"next_feature", "next_task_signal", "action_prior", "controllability", "affordance_progress"} or self.representation_predictor is None:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
         state = self._feature_tensor(features).unsqueeze(0)
@@ -428,7 +429,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         if intrinsic_target not in {"reward", "auxiliary"}:
             raise ValueError(f"invalid intrinsic_target for {name}")
         representation_objective = str(item.get("representation_objective", "none"))
-        if representation_objective not in {"none", "next_feature", "next_task_signal", "action_prior", "controllability"}:
+        if representation_objective not in {"none", "next_feature", "next_task_signal", "action_prior", "controllability", "affordance_progress"}:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
         action_prior_weight = float(item.get("action_prior_weight", 0.0))
@@ -983,6 +984,8 @@ def _representation_target_dim(representation_objective: str, feature_dim: int) 
         return TASK_SIGNAL_DIM
     if representation_objective == "controllability":
         return CONTROLLABILITY_DIM
+    if representation_objective == "affordance_progress":
+        return AFFORDANCE_PROGRESS_DIM
     raise ValueError(f"unsupported representation objective: {representation_objective}")
 
 
@@ -1001,6 +1004,8 @@ def representation_target_for_objective(
         return task_signal_vector(next_observation)
     if condition.representation_objective == "controllability":
         return controllability_target(features, next_features)
+    if condition.representation_objective == "affordance_progress":
+        return affordance_progress_vector(next_observation)
     if condition.representation_objective == "action_prior":
         return action_prior_label(observation, actions)
     return []
@@ -1009,6 +1014,55 @@ def representation_target_for_objective(
 def controllability_target(features: SparseFeatures, next_features: SparseFeatures) -> list[float]:
     changed = feature_signature(features) != feature_signature(next_features)
     return [1.0 if changed else 0.0]
+
+
+def affordance_progress_vector(observation: Any) -> list[float]:
+    if not isinstance(observation, dict):
+        return [0.0 for _ in range(AFFORDANCE_PROGRESS_DIM)]
+    image = observation.get("image")
+    if hasattr(image, "tolist"):
+        image = image.tolist()
+    cells = _flat_image_cells(image)
+    front = _image_cell(image, VIEW_FORWARD_X, VIEW_FORWARD_Y)
+    mission = str(observation.get("mission", "")).lower()
+    direction = float(observation.get("direction", 0))
+
+    type_counts: dict[int, int] = {}
+    door_state_counts = {0: 0, 1: 0, 2: 0}
+    for cell in cells:
+        if len(cell) < 3:
+            continue
+        obj_type = int(cell[0])
+        state = int(cell[2])
+        type_counts[obj_type] = type_counts.get(obj_type, 0) + 1
+        if obj_type == OBJECT_DOOR and state in door_state_counts:
+            door_state_counts[state] += 1
+
+    front_type = int(front[0]) if front is not None and len(front) >= 3 else -1
+    front_state = int(front[2]) if front is not None and len(front) >= 3 else -1
+    mission_mentions_key = "key" in mission or "unlock" in mission
+    mission_mentions_door = "door" in mission or "open" in mission or "unlock" in mission
+
+    return [
+        min(1.0, max(0.0, direction / 3.0)),
+        1.0 if "unlock" in mission else 0.0,
+        1.0 if "open" in mission else 0.0,
+        1.0 if "key" in mission else 0.0,
+        1.0 if "door" in mission else 0.0,
+        1.0 if front_type == OBJECT_KEY else 0.0,
+        1.0 if front_type == OBJECT_DOOR else 0.0,
+        1.0 if front_type == OBJECT_DOOR and front_state == 0 else 0.0,
+        1.0 if front_type == OBJECT_DOOR and front_state == 2 else 0.0,
+        1.0 if front_type == OBJECT_GOAL else 0.0,
+        1.0 if front_type == OBJECT_WALL else 0.0,
+        1.0 if type_counts.get(OBJECT_KEY, 0) > 0 else 0.0,
+        1.0 if type_counts.get(OBJECT_DOOR, 0) > 0 else 0.0,
+        1.0 if door_state_counts[2] > 0 else 0.0,
+        1.0 if type_counts.get(OBJECT_GOAL, 0) > 0 else 0.0,
+        1.0 if (mission_mentions_key and type_counts.get(OBJECT_KEY, 0) == 0)
+        or (mission_mentions_door and type_counts.get(OBJECT_DOOR, 0) == 0)
+        else 0.0,
+    ]
 
 
 def action_prior_label(observation: Any, actions: int) -> int:

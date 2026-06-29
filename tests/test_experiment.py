@@ -48,6 +48,7 @@ from baby_model.minigrid_torch import (
     TorchAgentConfig,
     TorchCurriculumStage,
     action_prior_label,
+    affordance_progress_vector,
     controllability_target,
     dense_feature_vector,
     parse_minigrid_torch_config,
@@ -887,6 +888,21 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(controllability_target({1: 1.0, 2: 0.0}, {1: 1.0}), [0.0])
         self.assertEqual(controllability_target({1: 1.0}, {1: 1.0, 3: 1.0}), [1.0])
 
+    def test_minigrid_torch_affordance_progress_vector_is_dependency_free(self) -> None:
+        image = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        image[0][0] = [5, 0, 0]
+        image[1][0] = [8, 0, 0]
+        image[2][0] = [4, 0, 2]
+        image[3][5] = [4, 0, 2]
+        vector = affordance_progress_vector(
+            {"direction": 3, "mission": "unlock the door with the key", "image": image}
+        )
+        self.assertEqual(len(vector), 16)
+        self.assertEqual(vector[0], 1.0)
+        self.assertEqual(vector[1:5], [1.0, 0.0, 1.0, 1.0])
+        self.assertEqual(vector[5:11], [0.0, 1.0, 0.0, 1.0, 0.0, 0.0])
+        self.assertEqual(vector[11:16], [1.0, 1.0, 1.0, 1.0, 0.0])
+
     def test_minigrid_torch_v14_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v14.json")
         parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1001)
@@ -993,6 +1009,23 @@ class ExperimentTest(unittest.TestCase):
         self.assertIn("doorkey_warmup", active["V_torch_dense_ladder_controllability_delay"])
         self.assertEqual(parsed.conditions[2].episodes, 144)
         self.assertEqual(parsed.conditions[2].representation_objective, "controllability")
+        self.assertEqual(parsed.conditions[3].intrinsic_target, "auxiliary")
+
+    def test_minigrid_torch_v19_affordance_progress_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v19.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1501)
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "T_torch_controllability_delay",
+                "X_torch_affordance_progress_delay",
+                "Y_torch_affordance_progress_aux_progress",
+            ],
+        )
+        self.assertEqual(parsed.conditions[2].representation_objective, "affordance_progress")
+        self.assertEqual(parsed.conditions[2].representation_beta, 0.3)
         self.assertEqual(parsed.conditions[3].intrinsic_target, "auxiliary")
 
     def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:

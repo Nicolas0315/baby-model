@@ -348,12 +348,24 @@ Updated: 2026-06-29 JST
   return (`0.042`), while both dense-ladder controllability conditions stayed
   at `0.000` success and return. Treat v1.8 as negative ladder evidence for the
   current controllability target.
+- Issue #24 v1.9 affordance-progress representation target is implemented:
+  - `configs/experiments/minigrid-torch-adda-v19.json`
+  - `docs/experiments/minigrid-torch-adda-v19.md`
+  - PyTorch DQN now supports an `affordance_progress` representation objective
+    that predicts a structured local key/door/goal/front-cell affordance vector
+    for the next observation.
+- Local v1.9 CPU smoke passed in the existing optional PyTorch venv with
+  `torch==2.12.1` and `device=cpu`, but did not meet the CUDA escalation rule.
+  The v1.7-style `T_torch_controllability_delay` baseline won final-stage
+  last-window success (`0.050`) and return (`0.045`), while both
+  affordance-progress conditions stayed at `0.000` success and return. Treat
+  v1.9 as negative evidence for this affordance-progress target.
 
 ## Next
 
-- Open the next design issue for a stronger representation target. The current
-  controllability target showed weak positive v1.7 evidence, but v1.8 suggests
-  simply densifying the task ladder is not enough.
+- Open the next design issue for a transition-group or explicit subgoal-progress
+  representation target. v1.9 suggests next-observation affordance bits alone
+  are not enough.
 
 ## Not Yet Proven
 
