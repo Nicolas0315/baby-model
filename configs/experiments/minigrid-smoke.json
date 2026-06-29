@@ -1,0 +1,33 @@
+{
+  "hypothesis": "Baby-AD/DA MiniGrid smoke",
+  "environment": {
+    "id": "MiniGrid-Empty-5x5-v0",
+    "max_steps": 80
+  },
+  "conditions": [
+    {
+      "name": "A_end_to_end",
+      "encoder_mode": "raw",
+      "episodes": 40,
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "B_encoder_first",
+      "encoder_mode": "coarse",
+      "episodes": 40,
+      "decoder_delay_episodes": 10,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "E_progress_anneal",
+      "encoder_mode": "coarse",
+      "episodes": 40,
+      "decoder_delay_episodes": 10,
+      "intrinsic_beta": 0.03,
+      "intrinsic_mode": "progress"
+    }
+  ]
+}

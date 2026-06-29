@@ -10,4 +10,8 @@ case "$VERIFY_MINIGRID_DIR" in
   *) echo "refusing to remove unexpected path: $VERIFY_MINIGRID_DIR" >&2; exit 2 ;;
 esac
 
-python3 -m baby_model.minigrid_probe --output-dir "$VERIFY_MINIGRID_DIR"
+python3 -m baby_model.minigrid_probe --output-dir "$VERIFY_MINIGRID_DIR/probe"
+python3 -m baby_model.minigrid_experiment \
+  --config configs/experiments/minigrid-smoke.json \
+  --output-dir "$VERIFY_MINIGRID_DIR/smoke" \
+  --seed 101

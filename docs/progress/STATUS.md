@@ -75,14 +75,22 @@ Updated: 2026-06-29 JST
   `git archive | ssh | tmux`; all workers produced the same aggregate winner,
   `B_encoder_first`, and the same condition table as the local run. Exact
   host-level evidence is kept outside this repository in local docs.
+- MiniGrid/BabyAI optional verifier is implemented:
+  - `baby_model/minigrid_probe.py`
+  - `baby_model/minigrid_experiment.py`
+  - `configs/experiments/minigrid-smoke.json`
+  - `scripts/verify_minigrid.sh`
+- Local optional venv verification passed with `minigrid==3.1.0` and
+  `gymnasium==1.3.0`.
+- MiniGrid trained smoke on `MiniGrid-Empty-5x5-v0` completed; `A_end_to_end`
+  won with `success_last=1.000`.
 
 ## Next
 
-- Run `./scripts/verify_minigrid.sh` inside an optional MiniGrid venv, then add
-  a trained MiniGrid config for issue #2.
+- Replicate `MODE=minigrid ./scripts/fleet_archive_run.sh ...` on the fleet and
+  record host-level evidence outside the repo.
 
 ## Not Yet Proven
 
-- MiniGrid/BabyAI dependency install.
 - Any GPU training result.
 - Full objective completion.

@@ -41,6 +41,38 @@ The probe records action-space size, observation schema, random-policy return,
 success rate, and episode length. It is an API and dependency check, not a
 scientific result.
 
+## Local Verification
+
+Local optional venv created on 2026-06-29:
+
+- `minigrid==3.1.0`
+- `gymnasium==1.3.0`
+- `numpy==2.5.0`
+- `pygame-ce==2.5.7`
+
+Command:
+
+```sh
+. .venv-minigrid/bin/activate
+./scripts/verify_minigrid.sh
+```
+
+Probe result:
+
+| env | action_n | obs_keys | success_rate | mean_return | mean_steps |
+| --- | ---: | --- | ---: | ---: | ---: |
+| `MiniGrid-Empty-8x8-v0` | 7 | `direction,image,mission` | 0.000 | 0.000 | 80.00 |
+| `MiniGrid-DoorKey-8x8-v0` | 7 | `direction,image,mission` | 0.000 | 0.000 | 80.00 |
+| `BabyAI-GoToRedBall-v0` | 7 | `direction,image,mission` | 0.000 | 0.000 | 64.00 |
+
+Trained smoke result on `MiniGrid-Empty-5x5-v0`, 40 episodes:
+
+| condition | success_all | success_last | return_last | mean_steps_success | intrinsic_last |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `A_end_to_end` | 0.900 | 1.000 | 0.937 | 13.00 | 0.000 |
+| `B_encoder_first` | 0.325 | 0.450 | 0.220 | 48.85 | 0.000 |
+| `E_progress_anneal` | 0.125 | 0.150 | 0.089 | 43.40 | 0.000 |
+
 ## Metrics Schema
 
 Future trained runs should preserve this top-level shape:

@@ -15,6 +15,7 @@ from baby_model.experiment import (
     write_run,
 )
 from baby_model.envs import BabyGrid
+from baby_model.minigrid_experiment import encode_observation, parse_minigrid_config
 from baby_model.minigrid_probe import observation_schema, summary_markdown
 from baby_model.sweep import parse_seeds, run_sweep
 
@@ -258,6 +259,33 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         self.assertIn("MiniGrid-Empty-8x8-v0", summary)
+
+    def test_minigrid_config_and_encoder_are_dependency_free(self) -> None:
+        parsed = parse_minigrid_config(
+            {
+                "environment": {"id": "MiniGrid-Empty-8x8-v0", "max_steps": 4},
+                "conditions": [
+                    {
+                        "name": "base",
+                        "encoder_mode": "coarse",
+                        "episodes": 3,
+                        "decoder_delay_episodes": 1,
+                        "intrinsic_beta": 0.0,
+                        "intrinsic_mode": "none",
+                    }
+                ],
+            },
+            seed=7,
+        )
+        self.assertEqual(parsed.env_id, "MiniGrid-Empty-8x8-v0")
+        self.assertEqual(parsed.conditions[0].seed, 7)
+
+        class FakeImage:
+            def tolist(self) -> list[list[list[int]]]:
+                return [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+
+        feature = encode_observation({"image": FakeImage(), "direction": 2}, "coarse")
+        self.assertEqual(feature[:4], (2, 0, 0, 0))
 
 
 if __name__ == "__main__":
