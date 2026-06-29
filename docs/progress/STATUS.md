@@ -905,13 +905,29 @@ Updated: 2026-06-30 JST
     positive signal is the lighter beta `0.05` mission-conditioned combined
     objective, not a matched-beta replacement.
   - Promote `ZE` to bounded CUDA replication before any baseline replacement.
+- Issue #62 v2.38 CUDA replication for low-beta mission target `ZE` is
+  complete:
+  - `docs/experiments/minigrid-torch-adda-v49.md`
+  - The CUDA smoke ran on `rtx4090` / WSL Ubuntu at source commit
+    `03d58b7ddbfd843414ebd9e57617b60c5346ba9f` with seed `4101`.
+  - Setup proved `NVIDIA GeForce RTX 4090`, driver `610.62`,
+    `torch==2.11.0+cu128`, `cuda_available=True`, and `device=cuda`.
+  - Remote artifact:
+    `~/work/baby-model-cuda-03d58b7/.tmp/rtx4090-v62-ze-cuda/20260629T164512Z/summary.md`.
+  - CUDA reproduced the CPU-positive success and mission-probe direction:
+    `ZE_torch_gotoobj_state_plus_mission_target_b005` won final-window success
+    (`0.350` vs `ZU` at `0.300`) and beat `ZU` on target-visible (`0.800` vs
+    `0.650`), target-center (`0.400` vs `0.300`), and target-near (`0.550` vs
+    `0.350`).
+  - `ZE` trailed `ZU` on final-window return (`0.157` vs `0.202`), so this is
+    a CUDA replication signal, not a baseline replacement.
 
 ## Next
 
-- Run a bounded CUDA replication for
-  `ZE_torch_gotoobj_state_plus_mission_target_b005` on the same v2.37 protocol.
-  If CUDA reproduces the same-seed direction, follow with a multi-seed CUDA
-  gate before replacing `ZU`.
+- Run a multi-seed CUDA gate for
+  `ZE_torch_gotoobj_state_plus_mission_target_b005` against `ZU`, `ZF`, and
+  `ZD`. Replacement requires multi-seed success and mission-probe gains without
+  an unacceptable return regression.
 
 ## Not Yet Proven
 
@@ -935,5 +951,7 @@ Updated: 2026-06-30 JST
   two-head variant, but still not better than `ZU` on success and return. v2.37
   found a positive CPU signal for low-beta `state_plus_mission_target`, but it
   still needs CUDA replication and multi-seed confirmation before baseline
-  replacement.
+  replacement. v2.38 reproduced the success and mission-probe direction on
+  CUDA seed `4101`, but return still lagged `ZU`, so multi-seed CUDA is the
+  next gate.
 - Full objective completion.
