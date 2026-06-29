@@ -29,6 +29,14 @@ python3 -m pip install minigrid
 ./scripts/verify_minigrid.sh
 ```
 
+Run the default probe and smoke plus one extra trained config:
+
+```sh
+MINIGRID_EXTRA_CONFIG=configs/experiments/minigrid-babyai-unlock.json \
+MINIGRID_EXTRA_SEED=201 \
+./scripts/verify_minigrid.sh
+```
+
 ## Probe Environments
 
 The optional probe starts with:
@@ -73,6 +81,17 @@ Trained smoke result on `MiniGrid-Empty-5x5-v0`, 40 episodes:
 | `B_encoder_first` | 0.325 | 0.450 | 0.220 | 48.85 | 0.000 |
 | `E_progress_anneal` | 0.125 | 0.150 | 0.089 | 43.40 | 0.000 |
 
+Harder trained result on `BabyAI-Unlock-v0`, 60 episodes:
+
+| condition | success_all | success_last | return_last | mean_steps_success | intrinsic_last |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `A_end_to_end` | 0.033 | 0.050 | 0.040 | 107.50 | 0.000 |
+| `B_encoder_first` | 0.050 | 0.000 | 0.000 | 26.00 | 0.000 |
+| `E_progress_anneal` | 0.000 | 0.000 | 0.000 |  | 0.177 |
+
+The hard-task local result is recorded in
+`docs/experiments/minigrid-babyai-unlock.md`.
+
 ## Fleet Verification
 
 The optional verifier and trained smoke were replicated on all four configured
@@ -107,5 +126,5 @@ Before GPU or long fleet jobs:
 - A MiniGrid config compares `A_end_to_end`, `B_encoder_first`, and at least one
   intrinsic variant on the same sparse-reward environment.
 - A local tmux run writes summaries under `runs/`.
-- The next MiniGrid run uses a harder sparse-reward task, such as
-  `MiniGrid-DoorKey-8x8-v0` or a BabyAI task.
+- Harder sparse-reward results are recorded separately from the easy smoke run,
+  so the optional verifier can stay lightweight by default.

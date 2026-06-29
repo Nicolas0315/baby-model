@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import contextlib
+import io
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -15,7 +19,7 @@ from baby_model.experiment import (
     write_run,
 )
 from baby_model.envs import BabyGrid
-from baby_model.minigrid_experiment import encode_observation, parse_minigrid_config
+from baby_model.minigrid_experiment import encode_observation, parse_minigrid_config, run_minigrid_suite
 from baby_model.minigrid_probe import observation_schema, summary_markdown
 from baby_model.sweep import parse_seeds, run_sweep
 
@@ -278,6 +282,7 @@ class ExperimentTest(unittest.TestCase):
             seed=7,
         )
         self.assertEqual(parsed.env_id, "MiniGrid-Empty-8x8-v0")
+        self.assertIs(parsed.quiet_env_output, True)
         self.assertEqual(parsed.conditions[0].seed, 7)
 
         class FakeImage:
@@ -286,6 +291,79 @@ class ExperimentTest(unittest.TestCase):
 
         feature = encode_observation({"image": FakeImage(), "direction": 2}, "coarse")
         self.assertEqual(feature[:4], (2, 0, 0, 0))
+
+    def test_minigrid_suite_forwards_quiet_env_output(self) -> None:
+        class FakeImage:
+            def tolist(self) -> list[list[list[int]]]:
+                return [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+
+        observation = {"image": FakeImage(), "direction": 0, "mission": "go"}
+
+        class FakeActionSpace:
+            n = 2
+
+            def seed(self, seed: int) -> None:
+                self.last_seed = seed
+
+        class FakeEnv:
+            action_space = FakeActionSpace()
+
+            def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
+                print("fake-reset")
+                return observation, {}
+
+            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+                print("fake-step")
+                return observation, 0.0, True, False, {}
+
+            def close(self) -> None:
+                pass
+
+        fake_gym = types.ModuleType("gymnasium")
+        fake_gym.make = lambda env_id: FakeEnv()  # type: ignore[attr-defined]
+        fake_minigrid = types.ModuleType("minigrid")
+        previous_gym = sys.modules.get("gymnasium")
+        previous_minigrid = sys.modules.get("minigrid")
+        sys.modules["gymnasium"] = fake_gym
+        sys.modules["minigrid"] = fake_minigrid
+        try:
+            quiet_config = {
+                "environment": {"id": "FakeMiniGrid-v0", "max_steps": 1, "quiet_env_output": True},
+                "conditions": [
+                    {
+                        "name": "base",
+                        "encoder_mode": "coarse",
+                        "episodes": 1,
+                        "decoder_delay_episodes": 0,
+                        "intrinsic_beta": 0.0,
+                        "intrinsic_mode": "none",
+                    }
+                ],
+            }
+            noisy_config = {
+                **quiet_config,
+                "environment": {"id": "FakeMiniGrid-v0", "max_steps": 1, "quiet_env_output": False},
+            }
+
+            quiet_stdout = io.StringIO()
+            with contextlib.redirect_stdout(quiet_stdout):
+                run_minigrid_suite(quiet_config, seed=11)
+            self.assertEqual(quiet_stdout.getvalue(), "")
+
+            noisy_stdout = io.StringIO()
+            with contextlib.redirect_stdout(noisy_stdout):
+                run_minigrid_suite(noisy_config, seed=11)
+            self.assertIn("fake-reset", noisy_stdout.getvalue())
+            self.assertIn("fake-step", noisy_stdout.getvalue())
+        finally:
+            if previous_gym is None:
+                sys.modules.pop("gymnasium", None)
+            else:
+                sys.modules["gymnasium"] = previous_gym
+            if previous_minigrid is None:
+                sys.modules.pop("minigrid", None)
+            else:
+                sys.modules["minigrid"] = previous_minigrid
 
 
 if __name__ == "__main__":

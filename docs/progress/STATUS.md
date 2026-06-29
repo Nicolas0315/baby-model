@@ -89,11 +89,19 @@ Updated: 2026-06-29 JST
   classes using `git archive | ssh | tmux`; all workers produced the same
   trained smoke table. Exact host-level evidence is kept outside this
   repository in local docs.
+- Harder BabyAI trained config for issue #7 is implemented:
+  - `configs/experiments/minigrid-babyai-unlock.json`
+  - `docs/experiments/minigrid-babyai-unlock.md`
+  - optional verifier support via `MINIGRID_EXTRA_CONFIG`
+- Local hard-task result on `BabyAI-Unlock-v0`: `A_end_to_end` won by
+  last-window success (`0.050`). `B_encoder_first` had higher all-window
+  success (`0.050`) but no last-window success, and `E_progress_anneal` did not
+  reach external reward.
 
 ## Next
 
-- Add a harder MiniGrid/BabyAI trained config for issue #7, starting with
-  `MiniGrid-DoorKey-8x8-v0` or a BabyAI task.
+- Replicate the `BabyAI-Unlock-v0` hard config through fleet tmux while runtime
+  remains lightweight, then update issue #7.
 
 ## Not Yet Proven
 

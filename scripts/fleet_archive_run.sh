@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="${MODE:-both}"
 SEEDS="${SEEDS:-101,102,103,104,105}"
 CONFIG="${CONFIG:-configs/experiments/v02-sweep.json}"
+MINIGRID_EXTRA_CONFIG="${MINIGRID_EXTRA_CONFIG:-}"
+MINIGRID_EXTRA_SEED="${MINIGRID_EXTRA_SEED:-201}"
 RUN_ID="${RUN_ID:-baby-model-fleet-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT" rev-parse --short HEAD)}"
 SESSION="${SESSION:-$RUN_ID}"
 
@@ -13,6 +15,7 @@ usage() {
 Usage:
   MODE=both SEEDS=101,102,103 ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   MODE=both CONFIG=configs/experiments/v03-sweep.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
+  MODE=minigrid MINIGRID_EXTRA_CONFIG=configs/experiments/minigrid-babyai-unlock.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   BABY_MODEL_FLEET_HOSTS="mac:host-a wsl:host-b" ./scripts/fleet_archive_run.sh
 
 MODE values:
@@ -35,6 +38,16 @@ fi
 
 if [[ ! "$CONFIG" =~ ^[A-Za-z0-9._/-]+$ ]]; then
   echo "invalid CONFIG: $CONFIG" >&2
+  exit 2
+fi
+
+if [[ -n "$MINIGRID_EXTRA_CONFIG" && ! "$MINIGRID_EXTRA_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
+  echo "invalid MINIGRID_EXTRA_CONFIG: $MINIGRID_EXTRA_CONFIG" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_EXTRA_SEED" =~ ^[0-9]+$ ]]; then
+  echo "invalid MINIGRID_EXTRA_SEED: $MINIGRID_EXTRA_SEED" >&2
   exit 2
 fi
 
@@ -67,7 +80,11 @@ case "$MODE" in
     JOB_CMD="CONFIG=$CONFIG SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"
     ;;
   minigrid)
-    JOB_CMD="if command -v uv >/dev/null 2>&1; then uv run --with minigrid bash scripts/verify_minigrid.sh; else python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && ./scripts/verify_minigrid.sh; fi; status=\$?; echo exit=\$status; exec bash"
+    MINIGRID_ENV=""
+    if [[ -n "$MINIGRID_EXTRA_CONFIG" ]]; then
+      MINIGRID_ENV="MINIGRID_EXTRA_CONFIG=$(printf '%q' "$MINIGRID_EXTRA_CONFIG") MINIGRID_EXTRA_SEED=$(printf '%q' "$MINIGRID_EXTRA_SEED") "
+    fi
+    JOB_CMD="if command -v uv >/dev/null 2>&1; then ${MINIGRID_ENV}uv run --with minigrid bash scripts/verify_minigrid.sh; else python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; fi; status=\$?; echo exit=\$status; exec bash"
     ;;
   both)
     JOB_CMD="./scripts/verify.sh && CONFIG=$CONFIG SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"

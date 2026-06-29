@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 from collections import defaultdict
 from dataclasses import dataclass
@@ -18,6 +20,7 @@ from baby_model.minigrid_probe import observation_schema
 class MiniGridConfig:
     env_id: str
     max_steps: int
+    quiet_env_output: bool
     conditions: tuple[Condition, ...]
 
 
@@ -55,6 +58,7 @@ def run_minigrid_suite(config: dict[str, Any], seed: int = 101) -> dict[str, Any
             env_id=parsed.env_id,
             condition=condition,
             max_steps=parsed.max_steps,
+            quiet_env_output=parsed.quiet_env_output,
         )
         for condition in parsed.conditions
     ]
@@ -76,6 +80,7 @@ def parse_minigrid_config(config: dict[str, Any], seed: int = 101) -> MiniGridCo
     max_steps = int(env_cfg.get("max_steps", 80))
     if max_steps < 1:
         raise ValueError("environment.max_steps must be positive")
+    quiet_env_output = bool(env_cfg.get("quiet_env_output", True))
 
     condition_cfgs = config.get("conditions", [])
     if not isinstance(condition_cfgs, list) or not condition_cfgs:
@@ -121,10 +126,37 @@ def parse_minigrid_config(config: dict[str, Any], seed: int = 101) -> MiniGridCo
                 intrinsic_target=intrinsic_target,
             )
         )
-    return MiniGridConfig(env_id=env_id, max_steps=max_steps, conditions=tuple(conditions))
+    return MiniGridConfig(
+        env_id=env_id,
+        max_steps=max_steps,
+        quiet_env_output=quiet_env_output,
+        conditions=tuple(conditions),
+    )
 
 
-def run_minigrid_condition(gym: Any, env_id: str, condition: Condition, max_steps: int) -> dict[str, Any]:
+def run_minigrid_condition(
+    gym: Any,
+    env_id: str,
+    condition: Condition,
+    max_steps: int,
+    quiet_env_output: bool = True,
+) -> dict[str, Any]:
+    return _run_minigrid_condition(
+        gym=gym,
+        env_id=env_id,
+        condition=condition,
+        max_steps=max_steps,
+        quiet_env_output=quiet_env_output,
+    )
+
+
+def _run_minigrid_condition(
+    gym: Any,
+    env_id: str,
+    condition: Condition,
+    max_steps: int,
+    quiet_env_output: bool,
+) -> dict[str, Any]:
     env = gym.make(env_id)
     try:
         if hasattr(env.action_space, "seed"):
@@ -136,7 +168,11 @@ def run_minigrid_condition(gym: Any, env_id: str, condition: Condition, max_step
         first_schema: dict[str, Any] | None = None
 
         for episode in range(condition.episodes):
-            observation, _info = env.reset(seed=condition.seed * 1000 + episode)
+            observation, _info = _env_call(
+                env.reset,
+                quiet=quiet_env_output,
+                seed=condition.seed * 1000 + episode,
+            )
             if first_schema is None:
                 first_schema = observation_schema(observation)
             feature = encode_observation(observation, condition.encoder_mode)
@@ -152,7 +188,11 @@ def run_minigrid_condition(gym: Any, env_id: str, condition: Condition, max_step
                 if condition.intrinsic_target == "auxiliary" and not force_random:
                     action_bonus = auxiliary_agent.action_values(feature)
                 action = agent.choose(feature, force_random=force_random, action_bonus=action_bonus)
-                next_observation, reward, terminated, truncated, _info = env.step(action)
+                next_observation, reward, terminated, truncated, _info = _env_call(
+                    env.step,
+                    action,
+                    quiet=quiet_env_output,
+                )
                 next_feature = encode_observation(next_observation, condition.encoder_mode)
                 intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature, action, next_feature)
                 intrinsic = condition.intrinsic_beta * intrinsic_signal
@@ -207,6 +247,13 @@ def run_minigrid_condition(gym: Any, env_id: str, condition: Condition, max_step
         }
     finally:
         env.close()
+
+
+def _env_call(function: Any, *args: Any, quiet: bool, **kwargs: Any) -> Any:
+    if not quiet:
+        return function(*args, **kwargs)
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        return function(*args, **kwargs)
 
 
 def write_minigrid_run(report: dict[str, Any], output_dir: Path) -> Path:
