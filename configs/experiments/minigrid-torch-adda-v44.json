@@ -1,0 +1,107 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v2.33: visibility-first two-head weighting",
+  "environment": {
+    "id": "BabyAI-GoToObj-v0",
+    "max_steps": 80,
+    "quiet_env_output": true
+  },
+  "stages": [
+    {
+      "name": "empty_warmup",
+      "env_id": "MiniGrid-Empty-5x5-v0",
+      "max_steps": 30,
+      "episodes": 6
+    },
+    {
+      "name": "goto_red_ball_warmup",
+      "env_id": "BabyAI-GoToRedBall-v0",
+      "max_steps": 80,
+      "episodes": 12
+    },
+    {
+      "name": "goto_obj_eval",
+      "env_id": "BabyAI-GoToObj-v0",
+      "max_steps": 80,
+      "episodes": 24
+    }
+  ],
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "cpu"
+  },
+  "conditions": [
+    {
+      "name": "ZK_torch_gotoobj_curriculum_no_repr_delay",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "ZU_torch_gotoobj_state_plus_target_visibility_b0075",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_target_visibility",
+      "representation_beta": 0.075
+    },
+    {
+      "name": "ZY_torch_gotoobj_two_head_state0375_visibility0375",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_delta_and_target_visibility",
+      "representation_state_beta": 0.0375,
+      "representation_target_visibility_beta": 0.0375
+    },
+    {
+      "name": "ZB_torch_gotoobj_two_head_state010_visibility065",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_delta_and_target_visibility",
+      "representation_state_beta": 0.01,
+      "representation_target_visibility_beta": 0.065
+    },
+    {
+      "name": "ZC_torch_gotoobj_two_head_state005_visibility070",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_delta_and_target_visibility",
+      "representation_state_beta": 0.005,
+      "representation_target_visibility_beta": 0.07
+    },
+    {
+      "name": "ZD_torch_gotoobj_two_head_state010_visibility065_state_anneal",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_delta_and_target_visibility",
+      "representation_state_beta": 0.01,
+      "representation_target_visibility_beta": 0.065,
+      "representation_state_beta_end": 0.0,
+      "representation_target_visibility_beta_end": 0.065,
+      "representation_anneal_episodes": 18,
+      "representation_schedule": "linear_anneal"
+    }
+  ]
+}

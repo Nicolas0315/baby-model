@@ -1711,6 +1711,43 @@ class ExperimentTest(unittest.TestCase):
         self.assertIn("0.0400", summary)
         self.assertIn("0.0200", summary)
 
+    def test_minigrid_torch_v44_visibility_first_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v44.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=3901,
+        )
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay",
+                "ZU_torch_gotoobj_state_plus_target_visibility_b0075",
+                "ZY_torch_gotoobj_two_head_state0375_visibility0375",
+                "ZB_torch_gotoobj_two_head_state010_visibility065",
+                "ZC_torch_gotoobj_two_head_state005_visibility070",
+                "ZD_torch_gotoobj_two_head_state010_visibility065_state_anneal",
+            ],
+        )
+        visibility_first = parsed.conditions[3]
+        self.assertEqual(visibility_first.representation_objective, "state_delta_and_target_visibility")
+        self.assertEqual(visibility_first.representation_state_beta, 0.01)
+        self.assertEqual(visibility_first.representation_target_visibility_beta, 0.065)
+        visibility_heavy = parsed.conditions[4]
+        self.assertEqual(visibility_heavy.representation_state_beta, 0.005)
+        self.assertEqual(visibility_heavy.representation_target_visibility_beta, 0.07)
+        annealed = parsed.conditions[5]
+        self.assertEqual(annealed.representation_schedule, "linear_anneal")
+        self.assertEqual(annealed.representation_state_beta_end, 0.0)
+        self.assertEqual(annealed.representation_target_visibility_beta_end, 0.065)
+        self.assertEqual(effective_two_head_representation_betas(annealed, 0), (0.01, 0.065))
+        self.assertEqual(effective_two_head_representation_betas(annealed, 18), (0.0, 0.065))
+        mid_state_beta, mid_visibility_beta = effective_two_head_representation_betas(annealed, 9)
+        self.assertAlmostEqual(mid_state_beta, 0.005)
+        self.assertAlmostEqual(mid_visibility_beta, 0.065)
+        for condition in parsed.conditions:
+            self.assertEqual(condition.episodes, 42)
+            self.assertEqual(condition.decoder_delay_episodes, 4)
+
     def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")
         parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))

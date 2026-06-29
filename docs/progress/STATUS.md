@@ -827,13 +827,28 @@ Updated: 2026-06-30 JST
     2x target-visibility raw loss (`0.0326` vs `0.0157`), suggesting equal
     head pressure is the wrong protocol.
   - Do not launch CUDA for v2.32.
+- Issue #57 v2.33 visibility-first two-head weighting has a positive CPU gate:
+  - `configs/experiments/minigrid-torch-adda-v44.json`
+  - `docs/experiments/minigrid-torch-adda-v44.md`
+  - Tested visibility-first/downweighted state-head variants against `ZU` and
+    equal-pressure two-head baselines.
+  - Local CPU smoke on seed `3901` completed with `torch==2.12.1` and
+    `device=cpu`.
+  - `ZB_torch_gotoobj_two_head_state010_visibility065` won the CPU gate:
+    `success_last=0.250`, `return_last=0.172`,
+    `target_visible_last=0.650`, `target_center_last=0.250`,
+    `target_near_last=0.400`.
+  - On the same seed, `ZB` beat `ZU` on success (`0.250` vs `0.200`), return
+    (`0.172` vs `0.158`), target visibility (`0.650` vs `0.450`), and
+    target-near rate (`0.400` vs `0.250`).
+  - This justifies bounded CUDA replication for `ZB`, not a baseline
+    replacement until CUDA evidence exists.
 
 ## Next
 
-- Start a visibility-first or state-head-downweighted branch. The next protocol
-  should not apply equal pressure to state-delta and target-visibility heads;
-  use the v2.32 diagnostics to bias toward target-visibility or decouple the
-  representation probe from DQN training.
+- Run bounded CUDA replication for
+  `ZB_torch_gotoobj_two_head_state010_visibility065`, then decide whether to
+  promote the visibility-first protocol beyond single-seed CPU evidence.
 
 ## Not Yet Proven
 
@@ -849,5 +864,6 @@ Updated: 2026-06-30 JST
   cleanly under a longer CPU horizon and v2.31's naive two-head split
   underperformed the single combined `ZU` baseline on CPU. v2.32's diagnostics
   and anneal/gate variants also underperformed `ZU`, but identified state-head
-  loss pressure as the likely two-head failure mode.
+  loss pressure as the likely two-head failure mode. v2.33 has only single-seed
+  CPU evidence for the visibility-first fix.
 - Full objective completion.
