@@ -1180,6 +1180,28 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.conditions[2].representation_objective, "state_plus_delta")
         self.assertEqual(parsed.conditions[3].intrinsic_target, "auxiliary")
 
+    def test_minigrid_torch_v24_two_phase_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v24.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=2001)
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "T_torch_controllability_delay",
+                "ZF_torch_dense_keydoor_state_plus_delta_delay",
+                "ZH_torch_two_phase_state_plus_delta_frozen",
+            ],
+        )
+        active = dict(parsed.active_stages_by_condition)
+        self.assertEqual(active["ZH_torch_two_phase_state_plus_delta_frozen"], tuple(stage.name for stage in parsed.stages))
+        two_phase = parsed.conditions[3]
+        self.assertEqual(two_phase.episodes, 164)
+        self.assertEqual(two_phase.decoder_delay_episodes, 116)
+        self.assertEqual(two_phase.representation_objective, "state_plus_delta")
+        self.assertTrue(two_phase.freeze_encoder_after_delay)
+        self.assertTrue(two_phase.stop_representation_after_delay)
+
     def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:
         class FakeTorch:
             def manual_seed(self, seed: int) -> None:
@@ -1236,6 +1258,8 @@ class ExperimentTest(unittest.TestCase):
                 self.updates = 0
                 self.representation_objective = representation_objective
                 self.representation_updates = 0
+                self.encoder_frozen = False
+                self.freeze_calls = 0
                 FakeAgent.instances.append(self)
 
             def choose(
@@ -1274,6 +1298,10 @@ class ExperimentTest(unittest.TestCase):
                 self.representation_updates += 1
                 self.last_representation_target = target_vector
                 return 0.25
+
+            def freeze_encoder(self) -> None:
+                self.encoder_frozen = True
+                self.freeze_calls += 1
 
             def parameter_count(self) -> int:
                 return 10
@@ -1327,20 +1355,175 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(report["updates"], 3)
         self.assertEqual(report["action_prior_weight"], 0.2)
         self.assertIsInstance(FakeAgent.instances[0].last_representation_target, int)
-        self.assertIn("warmup", torch_summary_markdown(
-            {
-                "created_at": "2026-06-29T00:00:00+00:00",
-                "hypothesis": "torch curriculum",
-                "env_id": "BabyAI-Unlock-v0",
-                "framework": {"version": "fake", "device": "cpu"},
-                "winner_last_window": "curriculum",
-                "stages": [
-                    {"name": "warmup", "env_id": "FakeWarmup-v0", "episodes": 2},
-                    {"name": "eval", "env_id": "FakeEval-v0", "episodes": 2},
-                ],
-                "results": [report],
-            }
-        ))
+        self.assertIn(
+            "warmup",
+            torch_summary_markdown(
+                {
+                    "created_at": "2026-06-29T00:00:00+00:00",
+                    "hypothesis": "torch curriculum",
+                    "env_id": "BabyAI-Unlock-v0",
+                    "framework": {"version": "fake", "device": "cpu"},
+                    "winner_last_window": "curriculum",
+                    "stages": [
+                        {"name": "warmup", "env_id": "FakeWarmup-v0", "episodes": 2},
+                        {"name": "eval", "env_id": "FakeEval-v0", "episodes": 2},
+                    ],
+                    "results": [report],
+                }
+            ),
+        )
+
+    def test_minigrid_torch_two_phase_protocol_freezes_and_stops_representation(self) -> None:
+        class FakeTorch:
+            def manual_seed(self, seed: int) -> None:
+                self.last_seed = seed
+
+        class FakeImage:
+            def tolist(self) -> list[list[list[int]]]:
+                return [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+
+        observation = {"image": FakeImage(), "direction": 0, "mission": "go"}
+        made_envs: list[str] = []
+
+        class FakeActionSpace:
+            n = 2
+
+            def seed(self, seed: int) -> None:
+                self.last_seed = seed
+
+        class FakeEnv:
+            def __init__(self, env_id: str) -> None:
+                self.env_id = env_id
+                self.action_space = FakeActionSpace()
+
+            def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
+                return observation, {}
+
+            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+                return observation, 1.0 if self.env_id == "FakeEval-v0" else 0.0, True, False, {}
+
+            def close(self) -> None:
+                pass
+
+        class FakeGym:
+            def make(self, env_id: str) -> FakeEnv:
+                made_envs.append(env_id)
+                return FakeEnv(env_id)
+
+        class FakeAgent:
+            instances: list["FakeAgent"] = []
+
+            def __init__(
+                self,
+                torch: object,
+                actions: int,
+                config: TorchAgentConfig,
+                device: object,
+                seed: int,
+                epsilon: float | None = None,
+                representation_objective: str = "none",
+                representation_beta: float = 0.0,
+            ) -> None:
+                self.actions = actions
+                self.updates = 0
+                self.representation_objective = representation_objective
+                self.representation_updates = 0
+                self.encoder_frozen = False
+                self.freeze_calls = 0
+                FakeAgent.instances.append(self)
+
+            def choose(
+                self,
+                features: dict[int, float],
+                force_random: bool = False,
+                action_bonus: dict[int, float] | None = None,
+                bonus_weight: float = 1.0,
+            ) -> int:
+                return 0
+
+            def action_values(self, features: dict[int, float]) -> dict[int, float]:
+                return {0: 0.0, 1: 0.0}
+
+            def action_prior_values(self, features: dict[int, float]) -> dict[int, float]:
+                return {}
+
+            def update(
+                self,
+                features: dict[int, float],
+                action: int,
+                reward: float,
+                next_features: dict[int, float],
+                done: bool,
+            ) -> None:
+                self.updates += 1
+
+            def update_representation(
+                self,
+                features: dict[int, float],
+                action: int,
+                target_vector: list[float] | int,
+            ) -> float | None:
+                self.representation_updates += 1
+                return 0.5
+
+            def freeze_encoder(self) -> None:
+                self.encoder_frozen = True
+                self.freeze_calls += 1
+
+            def parameter_count(self) -> int:
+                return 10
+
+            def representation_parameter_count(self) -> int:
+                return 2
+
+        stages = (
+            TorchCurriculumStage("ad_warmup", "FakeWarmup-v0", max_steps=1, episodes=2),
+            TorchCurriculumStage("da_eval", "FakeEval-v0", max_steps=1, episodes=2),
+        )
+        condition = Condition(
+            name="two_phase",
+            encoder_mode="raw",
+            episodes=4,
+            decoder_delay_episodes=2,
+            intrinsic_beta=0.0,
+            intrinsic_mode="none",
+            seed=41,
+            representation_objective="state_plus_delta",
+            representation_beta=0.3,
+            freeze_encoder_after_delay=True,
+            stop_representation_after_delay=True,
+        )
+        agent_config = TorchAgentConfig(
+            feature_dim=128,
+            hidden_dim=8,
+            learning_rate=0.001,
+            gamma=0.9,
+            epsilon=0.0,
+            batch_size=1,
+            replay_capacity=4,
+            target_sync_updates=2,
+            device="cpu",
+        )
+
+        with mock.patch.object(minigrid_torch_module, "TorchDQNAgent", FakeAgent):
+            report = run_minigrid_torch_curriculum_condition(
+                gym=FakeGym(),
+                torch=FakeTorch(),
+                stages=stages,
+                active_stages=("ad_warmup", "da_eval"),
+                condition=condition,
+                agent_config=agent_config,
+                device="cpu",
+            )
+
+        agent = FakeAgent.instances[0]
+        self.assertEqual(made_envs, ["FakeWarmup-v0", "FakeEval-v0"])
+        self.assertEqual(agent.representation_updates, 2)
+        self.assertEqual(agent.updates, 2)
+        self.assertEqual(agent.freeze_calls, 1)
+        self.assertTrue(report["encoder_frozen"])
+        self.assertEqual(report["representation_updates"], 2)
+        self.assertEqual(report["final_stage"]["representation_updates"], 0)
 
     def test_minigrid_torch_rejects_invalid_representation_objective(self) -> None:
         with self.assertRaises(ValueError):

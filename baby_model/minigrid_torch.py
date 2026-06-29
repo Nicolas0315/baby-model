@@ -98,6 +98,7 @@ class TorchDQNAgent:
         self.target.load_state_dict(self.model.state_dict())
         self.target.eval()
         self.representation_predictor = None
+        self.encoder_frozen = False
         parameters = list(self.model.parameters())
         if representation_objective in {
             "next_feature",
@@ -185,6 +186,14 @@ class TorchDQNAgent:
         self.updates += 1
         if self.updates % self.config.target_sync_updates == 0:
             self.target.load_state_dict(self.model.state_dict())
+
+    def freeze_encoder(self) -> None:
+        if self.encoder_frozen:
+            return
+        self.target.load_state_dict(self.model.state_dict())
+        for parameter in self.model.encoder.parameters():
+            parameter.requires_grad = False
+        self.encoder_frozen = True
 
     def update_representation(
         self,
@@ -379,6 +388,15 @@ def _combined_action_bonus(
     return bonus or None
 
 
+def _maybe_freeze_encoder_after_delay(condition: Condition, agent: TorchDQNAgent, force_random: bool) -> None:
+    if condition.freeze_encoder_after_delay and not force_random and not agent.encoder_frozen:
+        agent.freeze_encoder()
+
+
+def _should_update_representation(condition: Condition, force_random: bool) -> bool:
+    return not (condition.stop_representation_after_delay and not force_random)
+
+
 def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> MiniGridTorchConfig:
     env_cfg = config.get("environment", {})
     if not isinstance(env_cfg, dict):
@@ -463,6 +481,8 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
         action_prior_weight = float(item.get("action_prior_weight", 0.0))
+        freeze_encoder_after_delay = bool(item.get("freeze_encoder_after_delay", False))
+        stop_representation_after_delay = bool(item.get("stop_representation_after_delay", False))
         active_stages = tuple(str(stage_name) for stage_name in item.get("active_stages", all_stage_names))
         if stages:
             if not active_stages:
@@ -491,6 +511,10 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             raise ValueError(f"action_prior_weight must be non-negative for {name}")
         if action_prior_weight > 0.0 and representation_objective != "action_prior":
             raise ValueError(f"action_prior_weight requires action_prior for {name}")
+        if (freeze_encoder_after_delay or stop_representation_after_delay) and delay == 0:
+            raise ValueError(f"two-phase controls require decoder_delay_episodes for {name}")
+        if stop_representation_after_delay and representation_objective == "none":
+            raise ValueError(f"stop_representation_after_delay requires representation_objective for {name}")
         conditions.append(
             Condition(
                 name=name,
@@ -504,6 +528,8 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 representation_objective=representation_objective,
                 representation_beta=representation_beta,
                 action_prior_weight=action_prior_weight,
+                freeze_encoder_after_delay=freeze_encoder_after_delay,
+                stop_representation_after_delay=stop_representation_after_delay,
             )
         )
         active_stages_by_condition.append((name, active_stages))
@@ -625,6 +651,7 @@ def run_minigrid_torch_condition(
                     force_random=force_random,
                 )
                 action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
+                _maybe_freeze_encoder_after_delay(condition, agent, force_random)
                 next_observation, reward, terminated, truncated, _info = _env_call(
                     env.step,
                     action,
@@ -646,7 +673,9 @@ def run_minigrid_torch_condition(
                     feature_dim=agent_config.feature_dim,
                     actions=actions,
                 )
-                loss = agent.update_representation(features, action, representation_target)
+                loss = None
+                if _should_update_representation(condition, force_random):
+                    loss = agent.update_representation(features, action, representation_target)
                 if loss is not None:
                     representation_loss += loss
                     representation_updates += 1
@@ -700,6 +729,9 @@ def run_minigrid_torch_condition(
             "representation_objective": condition.representation_objective,
             "representation_beta": condition.representation_beta,
             "action_prior_weight": condition.action_prior_weight,
+            "freeze_encoder_after_delay": condition.freeze_encoder_after_delay,
+            "stop_representation_after_delay": condition.stop_representation_after_delay,
+            "encoder_frozen": agent.encoder_frozen,
             "seed": condition.seed,
             "observation_schema": first_schema or {},
             "success_rate_all": mean(1.0 if item.success else 0.0 for item in episodes),
@@ -772,6 +804,9 @@ def run_minigrid_torch_curriculum_condition(
         "representation_objective": condition.representation_objective,
         "representation_beta": condition.representation_beta,
         "action_prior_weight": condition.action_prior_weight,
+        "freeze_encoder_after_delay": condition.freeze_encoder_after_delay,
+        "stop_representation_after_delay": condition.stop_representation_after_delay,
+        "encoder_frozen": agent.encoder_frozen,
         "seed": condition.seed,
         "active_stages": list(active_stages),
         "stage_results": stage_results,
@@ -866,6 +901,7 @@ def _run_minigrid_torch_stage(
                     force_random=force_random,
                 )
                 action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
+                _maybe_freeze_encoder_after_delay(condition, agent, force_random)
                 next_observation, reward, terminated, truncated, _info = _env_call(
                     env.step,
                     action,
@@ -887,7 +923,9 @@ def _run_minigrid_torch_stage(
                     feature_dim=agent_config.feature_dim,
                     actions=actions,
                 )
-                loss = agent.update_representation(features, action, representation_target)
+                loss = None
+                if _should_update_representation(condition, force_random):
+                    loss = agent.update_representation(features, action, representation_target)
                 if loss is not None:
                     representation_loss += loss
                     representation_updates += 1

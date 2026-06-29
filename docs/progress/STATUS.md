@@ -410,10 +410,23 @@ Updated: 2026-06-29 JST
   final-stage last-window success and return of `0.000`. Treat v2.3 as negative
   ladder evidence: intermediate tasks are learnable, but they did not transfer
   to stable final unlock success under the current PyTorch DQN setup.
+- Issue #29 v2.4 two-phase frozen-encoder protocol is implemented:
+  - `configs/experiments/minigrid-torch-adda-v24.json`
+  - `docs/experiments/minigrid-torch-adda-v24.md`
+  - PyTorch DQN now supports `freeze_encoder_after_delay` and
+    `stop_representation_after_delay`, so a condition can run AD-only
+    representation learning first, then freeze the shared encoder and train the
+    DA decoder/head.
+- Local v2.4 CPU smoke passed in the existing optional PyTorch venv with
+  `torch==2.12.1` and `device=cpu`, but did not meet the CUDA escalation rule.
+  `ZH_torch_two_phase_state_plus_delta_frozen` correctly froze the encoder and
+  ran `8480` representation updates before the DA phase, but final-stage
+  last-window success and return were both `0.000`. Treat v2.4 as negative
+  evidence for the current PyTorch DQN family.
 
 ## Next
 
-- Redesign around a task-family change or a non-DQN representation learner.
+- Move to a task-family change or a separate non-DQN representation learner.
 
 ## Not Yet Proven
 

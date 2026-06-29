@@ -1,0 +1,129 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v2.4: two-phase AD-only pretraining then frozen DA decoder",
+  "environment": {
+    "id": "BabyAI-Unlock-v0",
+    "max_steps": 120,
+    "quiet_env_output": true
+  },
+  "stages": [
+    {
+      "name": "empty_warmup",
+      "env_id": "MiniGrid-Empty-5x5-v0",
+      "max_steps": 30,
+      "episodes": 12
+    },
+    {
+      "name": "goto_warmup",
+      "env_id": "BabyAI-GoToRedBall-v0",
+      "max_steps": 80,
+      "episodes": 24
+    },
+    {
+      "name": "goto_door_warmup",
+      "env_id": "MiniGrid-GoToDoor-5x5-v0",
+      "max_steps": 60,
+      "episodes": 12
+    },
+    {
+      "name": "open_door_warmup",
+      "env_id": "BabyAI-OpenDoor-v0",
+      "max_steps": 80,
+      "episodes": 12
+    },
+    {
+      "name": "doorkey_warmup",
+      "env_id": "MiniGrid-DoorKey-5x5-v0",
+      "max_steps": 100,
+      "episodes": 16
+    },
+    {
+      "name": "unlock_local_warmup",
+      "env_id": "BabyAI-UnlockLocal-v0",
+      "max_steps": 100,
+      "episodes": 20
+    },
+    {
+      "name": "unlock_pickup_warmup",
+      "env_id": "MiniGrid-UnlockPickup-v0",
+      "max_steps": 120,
+      "episodes": 20
+    },
+    {
+      "name": "unlock_eval",
+      "env_id": "BabyAI-Unlock-v0",
+      "max_steps": 120,
+      "episodes": 48
+    }
+  ],
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "auto"
+  },
+  "conditions": [
+    {
+      "name": "A_torch_hard_only_long",
+      "encoder_mode": "raw",
+      "active_stages": ["unlock_eval"],
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "T_torch_controllability_delay",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_warmup", "unlock_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "controllability",
+      "representation_beta": 0.3
+    },
+    {
+      "name": "ZF_torch_dense_keydoor_state_plus_delta_delay",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_warmup",
+        "goto_door_warmup",
+        "open_door_warmup",
+        "doorkey_warmup",
+        "unlock_local_warmup",
+        "unlock_pickup_warmup",
+        "unlock_eval"
+      ],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_delta",
+      "representation_beta": 0.3
+    },
+    {
+      "name": "ZH_torch_two_phase_state_plus_delta_frozen",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_warmup",
+        "goto_door_warmup",
+        "open_door_warmup",
+        "doorkey_warmup",
+        "unlock_local_warmup",
+        "unlock_pickup_warmup",
+        "unlock_eval"
+      ],
+      "decoder_delay_episodes": 116,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_delta",
+      "representation_beta": 0.3,
+      "freeze_encoder_after_delay": true,
+      "stop_representation_after_delay": true
+    }
+  ]
+}
