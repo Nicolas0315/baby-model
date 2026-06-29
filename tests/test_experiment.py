@@ -1544,6 +1544,100 @@ class ExperimentTest(unittest.TestCase):
         for condition in parsed.conditions[1:]:
             self.assertEqual(condition.representation_objective, "state_plus_target_visibility")
 
+    def test_minigrid_torch_v42_two_head_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v42.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=3701,
+        )
+        self.assertEqual(parsed.agent.device, "cpu")
+        self.assertEqual(parsed.env_id, "BabyAI-GoToObj-v0")
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay",
+                "ZU_torch_gotoobj_state_plus_target_visibility_b0075",
+                "ZX_torch_gotoobj_two_head_state050_visibility025",
+                "ZY_torch_gotoobj_two_head_state0375_visibility0375",
+            ],
+        )
+        combined = parsed.conditions[1]
+        self.assertEqual(combined.representation_objective, "state_plus_target_visibility")
+        self.assertEqual(combined.representation_beta, 0.075)
+        two_head = parsed.conditions[2]
+        self.assertEqual(two_head.representation_objective, "state_delta_and_target_visibility")
+        self.assertEqual(two_head.representation_beta, 0.0)
+        self.assertEqual(two_head.representation_state_beta, 0.05)
+        self.assertEqual(two_head.representation_target_visibility_beta, 0.025)
+        balanced = parsed.conditions[3]
+        self.assertEqual(balanced.representation_state_beta, 0.0375)
+        self.assertEqual(balanced.representation_target_visibility_beta, 0.0375)
+        for condition in parsed.conditions:
+            self.assertEqual(condition.episodes, 42)
+            self.assertEqual(condition.decoder_delay_episodes, 4)
+
+    def test_minigrid_torch_two_head_target_is_dependency_free(self) -> None:
+        before_observation = {
+            "image": [[[0, 0, 0] for _ in range(7)] for _ in range(7)],
+            "direction": 0,
+            "mission": "go to the red ball",
+        }
+        after_image = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        after_image[3][5] = [6, 0, 0]
+        after_observation = {
+            "image": after_image,
+            "direction": 1,
+            "mission": "go to the red ball",
+        }
+        condition = Condition(
+            name="two_head",
+            encoder_mode="raw",
+            episodes=1,
+            decoder_delay_episodes=0,
+            intrinsic_beta=0.0,
+            intrinsic_mode="none",
+            seed=1,
+            representation_objective="state_delta_and_target_visibility",
+            representation_state_beta=0.05,
+            representation_target_visibility_beta=0.025,
+        )
+        target = minigrid_torch_module.representation_target_for_objective(
+            condition=condition,
+            features={},
+            observation=before_observation,
+            next_observation=after_observation,
+            next_features={},
+            feature_dim=128,
+            actions=7,
+        )
+        self.assertEqual(set(target.keys()), {"state_plus_delta", "target_visibility_transition"})
+        self.assertEqual(target["state_plus_delta"], state_plus_delta_vector(before_observation, after_observation))
+        self.assertEqual(
+            target["target_visibility_transition"],
+            target_visibility_transition_vector(before_observation, after_observation),
+        )
+        self.assertEqual(len(target["state_plus_delta"]), 58)
+        self.assertEqual(len(target["target_visibility_transition"]), 49)
+
+    def test_minigrid_torch_two_head_config_rejects_ambiguous_betas(self) -> None:
+        config = json.loads(Path("configs/experiments/minigrid-torch-adda-v42.json").read_text(encoding="utf-8"))
+        two_head = config["conditions"][2]
+
+        scalar_beta_config = json.loads(json.dumps(config))
+        scalar_beta_config["conditions"][2] = dict(two_head, representation_beta=0.075)
+        with self.assertRaisesRegex(ValueError, "representation_beta must stay zero"):
+            parse_minigrid_torch_config(scalar_beta_config, seed=3701)
+
+        missing_head_beta_config = json.loads(json.dumps(config))
+        missing_head_beta_config["conditions"][2].pop("representation_target_visibility_beta")
+        with self.assertRaisesRegex(ValueError, "two-head representation betas must be positive"):
+            parse_minigrid_torch_config(missing_head_beta_config, seed=3701)
+
+        non_two_head_config = json.loads(json.dumps(config))
+        non_two_head_config["conditions"][1]["representation_state_beta"] = 0.01
+        with self.assertRaisesRegex(ValueError, "two-head representation betas require"):
+            parse_minigrid_torch_config(non_two_head_config, seed=3701)
+
     def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")
         parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
@@ -2291,6 +2385,8 @@ class ExperimentTest(unittest.TestCase):
                 epsilon: float | None = None,
                 representation_objective: str = "none",
                 representation_beta: float = 0.0,
+                representation_state_beta: float = 0.0,
+                representation_target_visibility_beta: float = 0.0,
             ) -> None:
                 self.actions = actions
                 self.updates = 0
@@ -2462,6 +2558,8 @@ class ExperimentTest(unittest.TestCase):
                 epsilon: float | None = None,
                 representation_objective: str = "none",
                 representation_beta: float = 0.0,
+                representation_state_beta: float = 0.0,
+                representation_target_visibility_beta: float = 0.0,
             ) -> None:
                 self.actions = actions
                 self.updates = 0

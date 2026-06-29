@@ -31,6 +31,7 @@ TARGET_VISIBILITY_TRANSITION_DIM = len(TARGET_VISIBILITY_RELATIONS) * len(TARGET
 STATE_PLUS_DELTA_DIM = AFFORDANCE_PROGRESS_DIM + AFFORDANCE_PROGRESS_DIM + TRANSITION_GROUP_DIM + SUBGOAL_PROGRESS_DIM
 STATE_PLUS_TARGET_VISIBILITY_DIM = STATE_PLUS_DELTA_DIM + TARGET_VISIBILITY_TRANSITION_DIM
 STATE_PLUS_MISSION_TARGET_DIM = STATE_PLUS_DELTA_DIM + TARGET_VISIBILITY_TRANSITION_DIM
+TWO_HEAD_STATE_TARGET_OBJECTIVE = "state_delta_and_target_visibility"
 ACTION_LEFT = 0
 ACTION_RIGHT = 1
 ACTION_FORWARD = 2
@@ -93,6 +94,8 @@ class TorchDQNAgent:
         epsilon: float | None = None,
         representation_objective: str = "none",
         representation_beta: float = 0.0,
+        representation_state_beta: float = 0.0,
+        representation_target_visibility_beta: float = 0.0,
     ) -> None:
         self.torch = torch
         self.actions = actions
@@ -101,15 +104,34 @@ class TorchDQNAgent:
         self.epsilon = config.epsilon if epsilon is None else epsilon
         self.representation_objective = representation_objective
         self.representation_beta = representation_beta
+        self.representation_state_beta = representation_state_beta
+        self.representation_target_visibility_beta = representation_target_visibility_beta
         self.rng = Random(seed)
         self.model = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(device)
         self.target = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(device)
         self.target.load_state_dict(self.model.state_dict())
         self.target.eval()
         self.representation_predictor = None
+        self.state_delta_predictor = None
+        self.target_visibility_predictor = None
         self.encoder_frozen = False
         parameters = list(self.model.parameters())
-        if representation_objective in {
+        if representation_objective == TWO_HEAD_STATE_TARGET_OBJECTIVE:
+            self.state_delta_predictor = build_next_feature_predictor(
+                torch,
+                hidden_dim=config.hidden_dim,
+                actions=actions,
+                target_dim=STATE_PLUS_DELTA_DIM,
+            ).to(device)
+            self.target_visibility_predictor = build_next_feature_predictor(
+                torch,
+                hidden_dim=config.hidden_dim,
+                actions=actions,
+                target_dim=TARGET_VISIBILITY_TRANSITION_DIM,
+            ).to(device)
+            parameters.extend(self.state_delta_predictor.parameters())
+            parameters.extend(self.target_visibility_predictor.parameters())
+        elif representation_objective in {
             "next_feature",
             "next_task_signal",
             "controllability",
@@ -212,7 +234,7 @@ class TorchDQNAgent:
         self,
         features: SparseFeatures,
         action: int,
-        target_vector: list[float] | int,
+        target_vector: list[float] | int | dict[str, list[float]],
     ) -> float | None:
         if self.representation_objective == "none":
             return None
@@ -229,12 +251,37 @@ class TorchDQNAgent:
             "state_plus_delta",
             "state_plus_target_visibility",
             "state_plus_mission_target",
-        } or self.representation_predictor is None:
+            TWO_HEAD_STATE_TARGET_OBJECTIVE,
+        }:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
         state = self._feature_tensor(features).unsqueeze(0)
         hidden = self.model.encode(state)
+        if self.representation_objective == TWO_HEAD_STATE_TARGET_OBJECTIVE:
+            if self.state_delta_predictor is None or self.target_visibility_predictor is None:
+                raise ValueError("two-head representation predictors are not initialized")
+            if not isinstance(target_vector, dict):
+                raise ValueError("two-head representation target must be an object")
+            state_target_vector = target_vector.get("state_plus_delta")
+            visibility_target_vector = target_vector.get("target_visibility_transition")
+            if not isinstance(state_target_vector, list) or not isinstance(visibility_target_vector, list):
+                raise ValueError("two-head representation target vectors must be lists")
+            action_one_hot = self.torch.zeros((1, self.actions), dtype=self.torch.float32, device=self.device)
+            action_one_hot[0, action] = 1.0
+            predictor_input = self.torch.cat([hidden, action_one_hot], dim=1)
+            state_target = self.torch.tensor([state_target_vector], dtype=self.torch.float32, device=self.device)
+            visibility_target = self.torch.tensor([visibility_target_vector], dtype=self.torch.float32, device=self.device)
+            state_prediction = self.state_delta_predictor(predictor_input)
+            visibility_prediction = self.target_visibility_predictor(predictor_input)
+            loss = self.loss_fn(state_prediction, state_target) * self.representation_state_beta
+            loss = loss + self.loss_fn(visibility_prediction, visibility_target) * self.representation_target_visibility_beta
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            return float(loss.detach().cpu().item())
         if self.representation_objective == "action_prior":
+            if self.representation_predictor is None:
+                raise ValueError("action_prior predictor is not initialized")
             target_action = int(target_vector)
             if target_action < 0 or target_action >= self.actions:
                 raise ValueError(f"action_prior target out of range: {target_action}")
@@ -242,6 +289,8 @@ class TorchDQNAgent:
             prediction = self.representation_predictor(hidden)
             loss = self.classification_loss_fn(prediction, target) * self.representation_beta
         else:
+            if self.representation_predictor is None:
+                raise ValueError("representation predictor is not initialized")
             target = self.torch.tensor([target_vector], dtype=self.torch.float32, device=self.device)
             action_one_hot = self.torch.zeros((1, self.actions), dtype=self.torch.float32, device=self.device)
             action_one_hot[0, action] = 1.0
@@ -256,12 +305,21 @@ class TorchDQNAgent:
         parameters = list(self.model.parameters())
         if self.representation_predictor is not None:
             parameters.extend(self.representation_predictor.parameters())
+        if self.state_delta_predictor is not None:
+            parameters.extend(self.state_delta_predictor.parameters())
+        if self.target_visibility_predictor is not None:
+            parameters.extend(self.target_visibility_predictor.parameters())
         return sum(int(parameter.numel()) for parameter in parameters)
 
     def representation_parameter_count(self) -> int:
-        if self.representation_predictor is None:
-            return 0
-        return sum(int(parameter.numel()) for parameter in self.representation_predictor.parameters())
+        parameters = []
+        if self.representation_predictor is not None:
+            parameters.extend(self.representation_predictor.parameters())
+        if self.state_delta_predictor is not None:
+            parameters.extend(self.state_delta_predictor.parameters())
+        if self.target_visibility_predictor is not None:
+            parameters.extend(self.target_visibility_predictor.parameters())
+        return sum(int(parameter.numel()) for parameter in parameters)
 
     def _q_values(self, features: SparseFeatures) -> list[float]:
         with self.torch.no_grad():
@@ -498,9 +556,12 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             "state_plus_delta",
             "state_plus_target_visibility",
             "state_plus_mission_target",
+            TWO_HEAD_STATE_TARGET_OBJECTIVE,
         }:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
+        representation_state_beta = float(item.get("representation_state_beta", 0.0))
+        representation_target_visibility_beta = float(item.get("representation_target_visibility_beta", 0.0))
         action_prior_weight = float(item.get("action_prior_weight", 0.0))
         freeze_encoder_after_delay = bool(item.get("freeze_encoder_after_delay", False))
         stop_representation_after_delay = bool(item.get("stop_representation_after_delay", False))
@@ -526,8 +587,21 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             raise ValueError(f"intrinsic_beta must be non-negative for {name}")
         if representation_beta < 0:
             raise ValueError(f"representation_beta must be non-negative for {name}")
-        if representation_objective != "none" and representation_beta <= 0.0:
+        if representation_state_beta < 0:
+            raise ValueError(f"representation_state_beta must be non-negative for {name}")
+        if representation_target_visibility_beta < 0:
+            raise ValueError(f"representation_target_visibility_beta must be non-negative for {name}")
+        if representation_objective == TWO_HEAD_STATE_TARGET_OBJECTIVE:
+            if representation_beta != 0.0:
+                raise ValueError(f"representation_beta must stay zero for two-head objective in {name}")
+            if representation_state_beta <= 0.0 or representation_target_visibility_beta <= 0.0:
+                raise ValueError(f"two-head representation betas must be positive for {name}")
+        elif representation_objective != "none" and representation_beta <= 0.0:
             raise ValueError(f"representation_beta must be positive for {name}")
+        elif representation_objective != TWO_HEAD_STATE_TARGET_OBJECTIVE and (
+            representation_state_beta != 0.0 or representation_target_visibility_beta != 0.0
+        ):
+            raise ValueError(f"two-head representation betas require {TWO_HEAD_STATE_TARGET_OBJECTIVE} for {name}")
         if action_prior_weight < 0.0:
             raise ValueError(f"action_prior_weight must be non-negative for {name}")
         if action_prior_weight > 0.0 and representation_objective != "action_prior":
@@ -548,6 +622,8 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 intrinsic_target=intrinsic_target,
                 representation_objective=representation_objective,
                 representation_beta=representation_beta,
+                representation_state_beta=representation_state_beta,
+                representation_target_visibility_beta=representation_target_visibility_beta,
                 action_prior_weight=action_prior_weight,
                 freeze_encoder_after_delay=freeze_encoder_after_delay,
                 stop_representation_after_delay=stop_representation_after_delay,
@@ -629,6 +705,8 @@ def run_minigrid_torch_condition(
             seed=condition.seed,
             representation_objective=condition.representation_objective,
             representation_beta=condition.representation_beta,
+            representation_state_beta=condition.representation_state_beta,
+            representation_target_visibility_beta=condition.representation_target_visibility_beta,
         )
         auxiliary_agent = TorchDQNAgent(
             torch=torch,
@@ -752,6 +830,8 @@ def run_minigrid_torch_condition(
             "intrinsic_target": condition.intrinsic_target,
             "representation_objective": condition.representation_objective,
             "representation_beta": condition.representation_beta,
+            "representation_state_beta": condition.representation_state_beta,
+            "representation_target_visibility_beta": condition.representation_target_visibility_beta,
             "action_prior_weight": condition.action_prior_weight,
             "freeze_encoder_after_delay": condition.freeze_encoder_after_delay,
             "stop_representation_after_delay": condition.stop_representation_after_delay,
@@ -828,6 +908,8 @@ def run_minigrid_torch_curriculum_condition(
         "intrinsic_target": condition.intrinsic_target,
         "representation_objective": condition.representation_objective,
         "representation_beta": condition.representation_beta,
+        "representation_state_beta": condition.representation_state_beta,
+        "representation_target_visibility_beta": condition.representation_target_visibility_beta,
         "action_prior_weight": condition.action_prior_weight,
         "freeze_encoder_after_delay": condition.freeze_encoder_after_delay,
         "stop_representation_after_delay": condition.stop_representation_after_delay,
@@ -884,6 +966,8 @@ def _run_minigrid_torch_stage(
                 seed=condition.seed,
                 representation_objective=condition.representation_objective,
                 representation_beta=condition.representation_beta,
+                representation_state_beta=condition.representation_state_beta,
+                representation_target_visibility_beta=condition.representation_target_visibility_beta,
             )
         if auxiliary_agent is None:
             auxiliary_agent = TorchDQNAgent(
@@ -1115,7 +1199,7 @@ def representation_target_for_objective(
     next_features: SparseFeatures,
     feature_dim: int,
     actions: int,
-) -> list[float] | int:
+) -> list[float] | int | dict[str, list[float]]:
     if condition.representation_objective == "next_feature":
         return dense_feature_vector(next_features, feature_dim)
     if condition.representation_objective == "next_task_signal":
@@ -1136,6 +1220,11 @@ def representation_target_for_objective(
         return state_plus_delta_vector(observation, next_observation)
     if condition.representation_objective == "state_plus_target_visibility":
         return state_plus_target_visibility_vector(observation, next_observation)
+    if condition.representation_objective == TWO_HEAD_STATE_TARGET_OBJECTIVE:
+        return {
+            "state_plus_delta": state_plus_delta_vector(observation, next_observation),
+            "target_visibility_transition": target_visibility_transition_vector(observation, next_observation),
+        }
     if condition.representation_objective == "state_plus_mission_target":
         return state_plus_mission_target_vector(observation, next_observation)
     if condition.representation_objective == "action_prior":

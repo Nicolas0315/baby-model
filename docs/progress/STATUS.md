@@ -1,6 +1,6 @@
 # baby-model Status
 
-Updated: 2026-06-29 JST
+Updated: 2026-06-30 JST
 
 ## Proven
 
@@ -796,12 +796,26 @@ Updated: 2026-06-29 JST
     (`0.550` vs `ZU` at `0.500`), while `ZU` beat `ZK` on return
     (`0.367` vs `0.262`) and `target_near_last` (`0.600` vs `0.550`).
   - Do not open a CUDA follow-up from v2.30 alone.
+- Issue #55 v2.31 true two-head objective is implemented and has a CPU result:
+  - `configs/experiments/minigrid-torch-adda-v42.json`
+  - `docs/experiments/minigrid-torch-adda-v42.md`
+  - Added `state_delta_and_target_visibility`, a true two-head objective with
+    separate `state_plus_delta` and `target_visibility_transition` predictors
+    plus explicit per-head config weights.
+  - Local CPU smoke on seed `3701` completed with `torch==2.12.1` and
+    `device=cpu`.
+  - The result was negative for CUDA escalation: the existing single combined
+    `ZU_torch_gotoobj_state_plus_target_visibility_b0075` baseline won
+    final-window success (`0.500`) and return (`0.367`), while the two-head
+    variants reached only `0.200`/`0.300` success and `0.156`/`0.151` return.
+  - Do not launch CUDA for v2.31.
 
 ## Next
 
-- Start a true two-head objective branch from the `ZU` beta `0.075` baseline,
-  because longer-horizon scalar beta tuning did not cleanly beat the no-repr
-  curriculum on success.
+- Start a protocol-changing branch rather than another scalar or naive two-head
+  split. Good candidates: per-head loss diagnostics plus annealing, or a
+  phase-gated representation schedule that protects the decoder from early
+  auxiliary loss.
 
 ## Not Yet Proven
 
@@ -814,5 +828,6 @@ Updated: 2026-06-29 JST
   v2.24 beta `0.1` passed CPU, CUDA replication, and bounded three-seed CUDA
   gates. v2.29 beta `0.075` is now the strongest beta-neighborhood candidate
   from a bounded three-seed CUDA sweep, but v2.30 did not preserve that edge
-  cleanly under a longer CPU horizon.
+  cleanly under a longer CPU horizon and v2.31's naive two-head split
+  underperformed the single combined `ZU` baseline on CPU.
 - Full objective completion.
