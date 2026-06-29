@@ -827,6 +827,44 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(aux.intrinsic_mode, "progress")
         self.assertEqual(aux.intrinsic_target, "auxiliary")
 
+    def test_minigrid_torch_v13_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v13.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=901)
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "L_torch_predictive_delay",
+                "M_torch_predictive_aux_progress",
+            ],
+        )
+        predictive = parsed.conditions[1]
+        self.assertEqual(predictive.representation_objective, "next_feature")
+        self.assertEqual(predictive.representation_beta, 0.10)
+        self.assertEqual(predictive.decoder_delay_episodes, 4)
+        self.assertEqual(parsed.conditions[2].intrinsic_target, "auxiliary")
+
+    def test_minigrid_torch_rejects_invalid_representation_objective(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_minigrid_torch_config(
+                {
+                    "conditions": [
+                        {
+                            "name": "bad",
+                            "encoder_mode": "raw",
+                            "episodes": 4,
+                            "decoder_delay_episodes": 1,
+                            "intrinsic_beta": 0.0,
+                            "intrinsic_mode": "none",
+                            "representation_objective": "mystery",
+                            "representation_beta": 0.1,
+                        }
+                    ]
+                },
+                seed=1,
+            )
+
     def test_minigrid_torch_sweep_aggregate_is_dependency_free(self) -> None:
         runs = [
             {

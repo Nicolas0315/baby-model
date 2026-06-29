@@ -1,0 +1,50 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v1.3: predictive next-feature representation objective on BabyAI Unlock",
+  "environment": {
+    "id": "BabyAI-Unlock-v0",
+    "max_steps": 120,
+    "quiet_env_output": true
+  },
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "auto"
+  },
+  "conditions": [
+    {
+      "name": "A_torch_hard_only_long",
+      "encoder_mode": "raw",
+      "episodes": 48,
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "L_torch_predictive_delay",
+      "encoder_mode": "raw",
+      "episodes": 48,
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "next_feature",
+      "representation_beta": 0.10
+    },
+    {
+      "name": "M_torch_predictive_aux_progress",
+      "encoder_mode": "raw",
+      "episodes": 48,
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.03,
+      "intrinsic_mode": "progress",
+      "intrinsic_target": "auxiliary",
+      "representation_objective": "next_feature",
+      "representation_beta": 0.10
+    }
+  ]
+}

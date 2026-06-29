@@ -25,6 +25,8 @@ class Condition:
     intrinsic_schedule: str = "constant"
     intrinsic_gate: str = "none"
     intrinsic_target: str = "reward"
+    representation_objective: str = "none"
+    representation_beta: float = 0.0
 
 
 def default_conditions(seed: int = 7) -> list[Condition]:

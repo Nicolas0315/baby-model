@@ -52,18 +52,32 @@ class TorchDQNAgent:
         device: Any,
         seed: int,
         epsilon: float | None = None,
+        representation_objective: str = "none",
+        representation_beta: float = 0.0,
     ) -> None:
         self.torch = torch
         self.actions = actions
         self.config = config
         self.device = device
         self.epsilon = config.epsilon if epsilon is None else epsilon
+        self.representation_objective = representation_objective
+        self.representation_beta = representation_beta
         self.rng = Random(seed)
         self.model = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(device)
         self.target = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(device)
         self.target.load_state_dict(self.model.state_dict())
         self.target.eval()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.learning_rate)
+        self.representation_predictor = None
+        parameters = list(self.model.parameters())
+        if representation_objective == "next_feature":
+            self.representation_predictor = build_next_feature_predictor(
+                torch,
+                hidden_dim=config.hidden_dim,
+                actions=actions,
+                feature_dim=config.feature_dim,
+            ).to(device)
+            parameters.extend(self.representation_predictor.parameters())
+        self.optimizer = torch.optim.Adam(parameters, lr=config.learning_rate)
         self.loss_fn = torch.nn.MSELoss()
         self.replay: deque[tuple[SparseFeatures, int, float, SparseFeatures, bool]] = deque(maxlen=config.replay_capacity)
         self.updates = 0
@@ -115,8 +129,34 @@ class TorchDQNAgent:
         if self.updates % self.config.target_sync_updates == 0:
             self.target.load_state_dict(self.model.state_dict())
 
+    def update_representation(self, features: SparseFeatures, action: int, next_features: SparseFeatures) -> float | None:
+        if self.representation_objective == "none":
+            return None
+        if self.representation_objective != "next_feature" or self.representation_predictor is None:
+            raise ValueError(f"unsupported representation objective: {self.representation_objective}")
+
+        state = self._feature_tensor(features).unsqueeze(0)
+        target = self._feature_tensor(next_features).unsqueeze(0)
+        hidden = self.model.encode(state)
+        action_one_hot = self.torch.zeros((1, self.actions), dtype=self.torch.float32, device=self.device)
+        action_one_hot[0, action] = 1.0
+        prediction = self.representation_predictor(self.torch.cat([hidden, action_one_hot], dim=1))
+        loss = self.loss_fn(prediction, target) * self.representation_beta
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        return float(loss.detach().cpu().item())
+
     def parameter_count(self) -> int:
-        return sum(int(parameter.numel()) for parameter in self.model.parameters())
+        parameters = list(self.model.parameters())
+        if self.representation_predictor is not None:
+            parameters.extend(self.representation_predictor.parameters())
+        return sum(int(parameter.numel()) for parameter in parameters)
+
+    def representation_parameter_count(self) -> int:
+        if self.representation_predictor is None:
+            return 0
+        return sum(int(parameter.numel()) for parameter in self.representation_predictor.parameters())
 
     def _q_values(self, features: SparseFeatures) -> list[float]:
         with self.torch.no_grad():
@@ -278,6 +318,10 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         intrinsic_target = str(item.get("intrinsic_target", "reward"))
         if intrinsic_target not in {"reward", "auxiliary"}:
             raise ValueError(f"invalid intrinsic_target for {name}")
+        representation_objective = str(item.get("representation_objective", "none"))
+        if representation_objective not in {"none", "next_feature"}:
+            raise ValueError(f"invalid representation_objective for {name}")
+        representation_beta = float(item.get("representation_beta", 0.0))
         episodes = int(item.get("episodes", 0))
         delay = int(item.get("decoder_delay_episodes", 0))
         beta = float(item.get("intrinsic_beta", 0.0))
@@ -287,6 +331,10 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             raise ValueError(f"decoder_delay_episodes out of range for {name}")
         if beta < 0:
             raise ValueError(f"intrinsic_beta must be non-negative for {name}")
+        if representation_beta < 0:
+            raise ValueError(f"representation_beta must be non-negative for {name}")
+        if representation_objective != "none" and representation_beta <= 0.0:
+            raise ValueError(f"representation_beta must be positive for {name}")
         conditions.append(
             Condition(
                 name=name,
@@ -297,6 +345,8 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 intrinsic_mode=intrinsic_mode,
                 seed=seed + i,
                 intrinsic_target=intrinsic_target,
+                representation_objective=representation_objective,
+                representation_beta=representation_beta,
             )
         )
     return MiniGridTorchConfig(
@@ -334,7 +384,15 @@ def run_minigrid_torch_condition(
         if hasattr(env.action_space, "seed"):
             env.action_space.seed(condition.seed)
         torch.manual_seed(condition.seed)
-        agent = TorchDQNAgent(torch=torch, actions=actions, config=agent_config, device=device, seed=condition.seed)
+        agent = TorchDQNAgent(
+            torch=torch,
+            actions=actions,
+            config=agent_config,
+            device=device,
+            seed=condition.seed,
+            representation_objective=condition.representation_objective,
+            representation_beta=condition.representation_beta,
+        )
         auxiliary_agent = TorchDQNAgent(
             torch=torch,
             actions=actions,
@@ -345,6 +403,8 @@ def run_minigrid_torch_condition(
         )
         transition = TransitionSurprise()
         episodes: list[EpisodeMetrics] = []
+        representation_losses: list[float] = []
+        representation_update_counts: list[int] = []
         first_schema: dict[str, Any] | None = None
 
         for episode in range(condition.episodes):
@@ -360,6 +420,8 @@ def run_minigrid_torch_condition(
             visited = {feature_key}
             external_return = 0.0
             intrinsic_return = 0.0
+            representation_loss = 0.0
+            representation_updates = 0
             success = False
             steps = 0
 
@@ -381,6 +443,10 @@ def run_minigrid_torch_condition(
                 total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
                 done = bool(terminated or truncated)
 
+                loss = agent.update_representation(features, action, next_features)
+                if loss is not None:
+                    representation_loss += loss
+                    representation_updates += 1
                 if not force_random:
                     agent.update(features, action, total_reward, next_features, done)
                     if condition.intrinsic_target == "auxiliary":
@@ -407,8 +473,13 @@ def run_minigrid_torch_condition(
                     unique_features=len(visited),
                 )
             )
+            representation_losses.append(representation_loss / max(1, representation_updates))
+            representation_update_counts.append(representation_updates)
 
         last_window = episodes[-20:] if len(episodes) >= 20 else episodes
+        representation_last_window = (
+            representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
+        )
         successful_steps = [item.steps for item in episodes if item.success]
         return {
             "name": condition.name,
@@ -422,6 +493,8 @@ def run_minigrid_torch_condition(
             "intrinsic_beta": condition.intrinsic_beta,
             "intrinsic_mode": condition.intrinsic_mode,
             "intrinsic_target": condition.intrinsic_target,
+            "representation_objective": condition.representation_objective,
+            "representation_beta": condition.representation_beta,
             "seed": condition.seed,
             "observation_schema": first_schema or {},
             "success_rate_all": mean(1.0 if item.success else 0.0 for item in episodes),
@@ -430,6 +503,9 @@ def run_minigrid_torch_condition(
             "mean_return_last_window": mean(item.external_return for item in last_window),
             "mean_intrinsic_return_last_window": mean(item.intrinsic_return for item in last_window),
             "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
+            "mean_representation_loss_last_window": mean(representation_last_window),
+            "representation_updates": sum(representation_update_counts),
+            "representation_parameter_count": agent.representation_parameter_count(),
             "parameter_count": agent.parameter_count(),
             "updates": agent.updates,
         }
@@ -441,16 +517,27 @@ def build_q_network(torch: Any, feature_dim: int, hidden_dim: int, actions: int)
     class QNetwork(torch.nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.net = torch.nn.Sequential(
+            self.encoder = torch.nn.Sequential(
                 torch.nn.Linear(feature_dim, hidden_dim),
                 torch.nn.ReLU(),
-                torch.nn.Linear(hidden_dim, actions),
             )
+            self.head = torch.nn.Linear(hidden_dim, actions)
+
+        def encode(self, x: Any) -> Any:
+            return self.encoder(x)
 
         def forward(self, x: Any) -> Any:
-            return self.net(x)
+            return self.head(self.encode(x))
 
     return QNetwork()
+
+
+def build_next_feature_predictor(torch: Any, hidden_dim: int, actions: int, feature_dim: int) -> Any:
+    return torch.nn.Sequential(
+        torch.nn.Linear(hidden_dim + actions, hidden_dim),
+        torch.nn.ReLU(),
+        torch.nn.Linear(hidden_dim, feature_dim),
+    )
 
 
 def dense_feature_vector(features: SparseFeatures, feature_dim: int) -> list[float]:
@@ -514,18 +601,21 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
         f"- device: `{framework['device']}`",
         f"- winner_last_window: `{report['winner_last_window']}`",
         "",
-        "| condition | success_all | success_last | return_last | mean_steps_success | updates | parameters |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| condition | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in report["results"]:
         mean_steps = row["mean_steps_success"]
+        rep_loss = row.get("mean_representation_loss_last_window", 0.0)
         lines.append(
-            "| {name} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {updates} | {params} |".format(
+            "| {name} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
                 name=row["name"],
                 all=row["success_rate_all"],
                 last=row["success_rate_last_window"],
                 ret=row["mean_return_last_window"],
                 steps="" if mean_steps is None else f"{mean_steps:.2f}",
+                rep_loss=rep_loss,
+                rep_updates=row.get("representation_updates", 0),
                 updates=row["updates"],
                 params=row["parameter_count"],
             )
