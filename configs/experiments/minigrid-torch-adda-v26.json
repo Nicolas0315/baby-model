@@ -1,0 +1,77 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v2.6: matched GoToObj representation objective isolation",
+  "environment": {
+    "id": "BabyAI-GoToObj-v0",
+    "max_steps": 80,
+    "quiet_env_output": true
+  },
+  "stages": [
+    {
+      "name": "empty_warmup",
+      "env_id": "MiniGrid-Empty-5x5-v0",
+      "max_steps": 30,
+      "episodes": 12
+    },
+    {
+      "name": "goto_red_ball_warmup",
+      "env_id": "BabyAI-GoToRedBall-v0",
+      "max_steps": 80,
+      "episodes": 24
+    },
+    {
+      "name": "goto_obj_eval",
+      "env_id": "BabyAI-GoToObj-v0",
+      "max_steps": 80,
+      "episodes": 48
+    }
+  ],
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "auto"
+  },
+  "conditions": [
+    {
+      "name": "A_torch_gotoobj_hard_only",
+      "encoder_mode": "raw",
+      "active_stages": ["goto_obj_eval"],
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "ZK_torch_gotoobj_curriculum_no_repr_delay",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "ZL_torch_gotoobj_controllability_matched_delay",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "controllability",
+      "representation_beta": 0.3
+    },
+    {
+      "name": "ZM_torch_gotoobj_state_plus_delta_matched_delay",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_delta",
+      "representation_beta": 0.3
+    }
+  ]
+}

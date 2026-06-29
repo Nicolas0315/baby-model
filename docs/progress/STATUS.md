@@ -440,11 +440,24 @@ Updated: 2026-06-29 JST
   - Per-seed winners split one win each across `T`, hard-only, and `ZI`. Treat
     v2.5 as positive task-family evidence, but not a stable single-condition
     winner.
+- Issue #31 v2.6 matched GoToObj representation isolation is implemented:
+  - `configs/experiments/minigrid-torch-adda-v26.json`
+  - `docs/experiments/minigrid-torch-adda-v26.md`
+  - local CPU smoke passed with `torch==2.12.1` and `device=cpu`;
+    `ZM_torch_gotoobj_state_plus_delta_matched_delay` tied the matched
+    no-representation curriculum on final-stage last-window success (`0.650`)
+    while improving return (`0.461` vs `0.366`), meeting the CUDA escalation
+    rule.
+  - bounded CUDA smoke completed on `gpu-worker-c` with `torch==2.12.1+cu132`
+    and `device=cuda`; it reproduced the same result.
+  - Treat v2.6 as evidence that the GoToObj curriculum explains most of the
+    success lift, while state-plus-delta remains the best representation
+    candidate by return.
 
 ## Next
 
-- Design v2.6 to separate the GoToObj task-family effect from the
-  representation objective effect.
+- Run a multi-seed matched GoToObj sweep before spending more design effort on
+  state-plus-delta or moving to a non-DQN representation probe.
 
 ## Not Yet Proven
 

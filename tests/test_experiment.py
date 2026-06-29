@@ -1235,6 +1235,40 @@ class ExperimentTest(unittest.TestCase):
         self.assertTrue(two_phase.freeze_encoder_after_delay)
         self.assertTrue(two_phase.stop_representation_after_delay)
 
+    def test_minigrid_torch_v26_gotoobj_matched_repr_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v26.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=2201,
+        )
+        self.assertEqual(parsed.env_id, "BabyAI-GoToObj-v0")
+        self.assertEqual(
+            [stage.name for stage in parsed.stages],
+            ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+        )
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_gotoobj_hard_only",
+                "ZK_torch_gotoobj_curriculum_no_repr_delay",
+                "ZL_torch_gotoobj_controllability_matched_delay",
+                "ZM_torch_gotoobj_state_plus_delta_matched_delay",
+            ],
+        )
+        active = dict(parsed.active_stages_by_condition)
+        self.assertEqual(active["A_torch_gotoobj_hard_only"], ("goto_obj_eval",))
+        self.assertEqual(
+            active["ZK_torch_gotoobj_curriculum_no_repr_delay"],
+            ("empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"),
+        )
+        for condition in parsed.conditions[1:]:
+            self.assertEqual(condition.episodes, 84)
+            self.assertEqual(condition.decoder_delay_episodes, 8)
+        self.assertEqual(parsed.conditions[1].representation_objective, "none")
+        self.assertEqual(parsed.conditions[2].representation_objective, "controllability")
+        self.assertEqual(parsed.conditions[3].representation_objective, "state_plus_delta")
+
     def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:
         class FakeTorch:
             def manual_seed(self, seed: int) -> None:
