@@ -48,7 +48,8 @@ Updated: 2026-06-29 JST
   - v0.5 function approximation pilot: `https://github.com/Nicolas0315/baby-model/issues/9` closed
   - v0.6 multi-seed linear BabyAI Unlock sweep: `https://github.com/Nicolas0315/baby-model/issues/10` closed
   - v0.7 optional neural encoder pilot: `https://github.com/Nicolas0315/baby-model/issues/11` closed
-  - v0.8 optional deep-learning/GPU lane: `https://github.com/Nicolas0315/baby-model/issues/12`
+  - v0.8 optional deep-learning/GPU lane: `https://github.com/Nicolas0315/baby-model/issues/12` closed
+  - v0.9 full-fleet GPU-ready PyTorch lane: `https://github.com/Nicolas0315/baby-model/issues/13`
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -193,9 +194,8 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Decide whether issue #12 should close as "optional PyTorch lane attempted and
-  full-fleet non-GPU-backed coverage recorded", or stay open for driver-level
-  full-fleet GPU proof.
+- Work issue #13: full-fleet GPU-ready PyTorch lane with explicit driver/wheel
+  compatibility evidence and per-worker GPU fallback rules.
 
 ## Not Yet Proven
 
