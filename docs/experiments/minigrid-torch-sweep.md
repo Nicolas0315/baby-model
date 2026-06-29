@@ -59,3 +59,24 @@ The summary reports:
 The current smoke result is not enough to claim robust learning. A condition
 should be treated as a real signal only if it survives at least a three-seed
 sweep and beats the baseline on mean last-window success or win count.
+
+## Current Result
+
+Source commit: `8bd7583c3a351f6d81a1b2e6c28fdf997039102f`
+
+The three-seed CUDA sweep completed on both CUDA-proven worker classes:
+
+- `gpu-worker-a`: `torch==2.12.1+cu132`, `device=cuda`
+- `gpu-worker-c`: `torch==2.12.1+cu132`, `device=cuda`
+
+Both workers produced the same aggregate table:
+
+| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only` | 3 | 0.028 | 0.028 | 0.000 | 0.026 |
+| `B_torch_encoder_first` | 0 | 0.000 | 0.000 | 0.000 | 0.000 |
+| `E_torch_progress` | 0 | 0.000 | 0.000 | 0.000 | 0.000 |
+
+Conclusion: the single-seed hard-only win survives the three-seed CUDA sweep.
+The current AD/DA variants do not yet beat the hard-only PyTorch baseline on
+`BabyAI-Unlock-v0`.

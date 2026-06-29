@@ -215,17 +215,22 @@ Updated: 2026-06-29 JST
   - optional verifier support via `MINIGRID_TORCH_SWEEP_CONFIG`
   - docs in `docs/experiments/minigrid-torch-sweep.md`
   - tracking issue: `https://github.com/Nicolas0315/baby-model/issues/14`
-  This is the next step from GPU smoke toward robust GPU training evidence.
+- Issue #14 three-seed CUDA sweep completed on both CUDA-proven worker classes
+  at commit `8bd7583c3a351f6d81a1b2e6c28fdf997039102f`. Both workers produced
+  the same aggregate result: `A_torch_hard_only` won all three seeds with
+  `mean_success_last=0.028`; `B_torch_encoder_first` and `E_torch_progress`
+  stayed at `0.000`. This is a robust negative result for the current PyTorch
+  AD/DA variants.
 
 ## Next
 
-- Execute issue #14: run a three-seed PyTorch GPU sweep on CUDA-proven worker
-  classes, then compare whether any AD/DA condition survives beyond the
-  single-seed smoke result.
+- Close issue #14 after push and green CI. The next research issue should focus
+  on changing the AD/DA PyTorch conditions, not just rerunning the same smoke
+  config.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
-- Any robust multi-seed GPU training result.
+- Any robust positive AD/DA GPU training result.
 - Full objective completion.
