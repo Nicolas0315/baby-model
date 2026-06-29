@@ -121,6 +121,20 @@ MINIGRID_PYTHON=3.12 \
 ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
 ```
 
+Multi-seed sweep command shape:
+
+```sh
+MODE=minigrid \
+MINIGRID_TORCH_SWEEP_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
+MINIGRID_TORCH_SWEEP_SEEDS=601,602,603 \
+MINIGRID_TORCH_DEVICE=cuda \
+MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cu132 \
+MINIGRID_TORCH_INSTALLER=pip \
+MINIGRID_ENV_BACKEND=uv \
+MINIGRID_PYTHON=3.12 \
+./scripts/fleet_archive_run.sh wsl:host
+```
+
 For Windows CUDA workers, set `MINIGRID_TORCH_INDEX_URL` to the official wheel
 index for that worker, for example
 `https://download.pytorch.org/whl/cu132`.

@@ -8,6 +8,7 @@ MINIGRID_ENV_BACKEND="${MINIGRID_ENV_BACKEND:-auto}"
 MINIGRID_PYTHON="${MINIGRID_PYTHON:-3.12}"
 MINIGRID_VENV_DIR="${MINIGRID_VENV_DIR:-.venv-minigrid}"
 MINIGRID_TORCH_CONFIG="${MINIGRID_TORCH_CONFIG:-}"
+MINIGRID_TORCH_SWEEP_CONFIG="${MINIGRID_TORCH_SWEEP_CONFIG:-}"
 MINIGRID_TORCH_INDEX_URL="${MINIGRID_TORCH_INDEX_URL:-}"
 MINIGRID_TORCH_CPU_FALLBACK="${MINIGRID_TORCH_CPU_FALLBACK:-0}"
 MINIGRID_TORCH_INSTALLER="${MINIGRID_TORCH_INSTALLER:-auto}"
@@ -53,6 +54,10 @@ if [[ ! "$MINIGRID_ENV_CLEAR" =~ ^(0|1)$ ]]; then
   echo "invalid MINIGRID_ENV_CLEAR: $MINIGRID_ENV_CLEAR" >&2
   exit 2
 fi
+
+needs_torch() {
+  [[ -n "$MINIGRID_TORCH_CONFIG" || -n "$MINIGRID_TORCH_SWEEP_CONFIG" ]]
+}
 
 choose_backend() {
   if [[ "$MINIGRID_ENV_BACKEND" != "auto" ]]; then
@@ -161,7 +166,7 @@ install_with_venv() {
   echo "minigrid_env_backend=venv"
   echo "python_bin=$python_bin"
   echo "venv_dir=$MINIGRID_VENV_DIR"
-  if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
+  if needs_torch; then
     echo "torch_installer=$(select_torch_installer venv)"
   fi
   if [[ "$MINIGRID_SETUP_DRY_RUN" == "1" ]]; then
@@ -176,7 +181,7 @@ install_with_venv() {
   . "$MINIGRID_VENV_DIR/bin/activate"
   python -m pip install --upgrade pip
   python -m pip install minigrid
-  if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
+  if needs_torch; then
     install_torch "$(select_torch_installer venv)"
   fi
 }
@@ -191,7 +196,7 @@ install_with_uv() {
   echo "python_request=$MINIGRID_PYTHON"
   echo "venv_dir=$MINIGRID_VENV_DIR"
   echo "venv_clear=$MINIGRID_ENV_CLEAR"
-  if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
+  if needs_torch; then
     echo "torch_installer=$(select_torch_installer uv)"
   fi
   if [[ "$MINIGRID_SETUP_DRY_RUN" == "1" ]]; then
@@ -206,7 +211,7 @@ install_with_uv() {
   # shellcheck disable=SC1090
   . "$MINIGRID_VENV_DIR/bin/activate"
   uv pip install minigrid
-  if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
+  if needs_torch; then
     install_torch "$(select_torch_installer uv)"
   fi
 }

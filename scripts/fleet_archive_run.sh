@@ -17,6 +17,8 @@ MINIGRID_NEURAL_CONFIG="${MINIGRID_NEURAL_CONFIG:-}"
 MINIGRID_NEURAL_SEED="${MINIGRID_NEURAL_SEED:-501}"
 MINIGRID_TORCH_CONFIG="${MINIGRID_TORCH_CONFIG:-}"
 MINIGRID_TORCH_SEED="${MINIGRID_TORCH_SEED:-601}"
+MINIGRID_TORCH_SWEEP_CONFIG="${MINIGRID_TORCH_SWEEP_CONFIG:-}"
+MINIGRID_TORCH_SWEEP_SEEDS="${MINIGRID_TORCH_SWEEP_SEEDS:-601,602,603}"
 MINIGRID_TORCH_DEVICE="${MINIGRID_TORCH_DEVICE:-auto}"
 MINIGRID_TORCH_INDEX_URL="${MINIGRID_TORCH_INDEX_URL:-}"
 MINIGRID_TORCH_CPU_FALLBACK="${MINIGRID_TORCH_CPU_FALLBACK:-0}"
@@ -39,6 +41,7 @@ Usage:
   MODE=minigrid MINIGRID_LINEAR_SWEEP_CONFIG=configs/experiments/minigrid-linear-unlock.json MINIGRID_LINEAR_SWEEP_SEEDS=401,402,403 ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   MODE=minigrid MINIGRID_NEURAL_CONFIG=configs/experiments/minigrid-neural-unlock.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   MODE=minigrid MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json MINIGRID_TORCH_DEVICE=auto ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
+  MODE=minigrid MINIGRID_TORCH_SWEEP_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json MINIGRID_TORCH_SWEEP_SEEDS=601,602,603 MINIGRID_TORCH_DEVICE=cuda ./scripts/fleet_archive_run.sh wsl:host-b
   MODE=minigrid MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json MINIGRID_ENV_BACKEND=uv MINIGRID_PYTHON=3.12 MINIGRID_TORCH_CPU_FALLBACK=1 ./scripts/fleet_archive_run.sh wsl:host-b
   BABY_MODEL_FLEET_HOSTS="mac:host-a wsl:host-b" ./scripts/fleet_archive_run.sh
 
@@ -122,6 +125,16 @@ fi
 
 if [[ ! "$MINIGRID_TORCH_SEED" =~ ^[0-9]+$ ]]; then
   echo "invalid MINIGRID_TORCH_SEED: $MINIGRID_TORCH_SEED" >&2
+  exit 2
+fi
+
+if [[ -n "$MINIGRID_TORCH_SWEEP_CONFIG" && ! "$MINIGRID_TORCH_SWEEP_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
+  echo "invalid MINIGRID_TORCH_SWEEP_CONFIG: $MINIGRID_TORCH_SWEEP_CONFIG" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_TORCH_SWEEP_SEEDS" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+  echo "invalid MINIGRID_TORCH_SWEEP_SEEDS: $MINIGRID_TORCH_SWEEP_SEEDS" >&2
   exit 2
 fi
 
@@ -212,6 +225,12 @@ case "$MODE" in
     fi
     if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
       MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_TORCH_CONFIG=$(printf '%q' "$MINIGRID_TORCH_CONFIG"); export MINIGRID_TORCH_SEED=$(printf '%q' "$MINIGRID_TORCH_SEED"); export MINIGRID_TORCH_DEVICE=$(printf '%q' "$MINIGRID_TORCH_DEVICE"); "
+      if [[ -n "$MINIGRID_TORCH_INDEX_URL" ]]; then
+        MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_TORCH_INDEX_URL=$(printf '%q' "$MINIGRID_TORCH_INDEX_URL"); "
+      fi
+      JOB_CMD="${MINIGRID_ENV}./scripts/setup_minigrid_env.sh ./scripts/verify_minigrid.sh; status=\$?; if [[ \$status -ne 0 && $(printf '%q' "$MINIGRID_TORCH_CPU_FALLBACK") == 1 && $(printf '%q' "$MINIGRID_TORCH_DEVICE") == cuda* ]]; then echo torch_cpu_fallback=1; export MINIGRID_TORCH_DEVICE=cpu; ./scripts/setup_minigrid_env.sh ./scripts/verify_minigrid.sh; status=\$?; fi; echo exit=\$status; exec bash"
+    elif [[ -n "$MINIGRID_TORCH_SWEEP_CONFIG" ]]; then
+      MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_TORCH_SWEEP_CONFIG=$(printf '%q' "$MINIGRID_TORCH_SWEEP_CONFIG"); export MINIGRID_TORCH_SWEEP_SEEDS=$(printf '%q' "$MINIGRID_TORCH_SWEEP_SEEDS"); export MINIGRID_TORCH_DEVICE=$(printf '%q' "$MINIGRID_TORCH_DEVICE"); "
       if [[ -n "$MINIGRID_TORCH_INDEX_URL" ]]; then
         MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_TORCH_INDEX_URL=$(printf '%q' "$MINIGRID_TORCH_INDEX_URL"); "
       fi

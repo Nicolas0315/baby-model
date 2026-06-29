@@ -47,6 +47,7 @@ from baby_model.minigrid_torch import (
     select_torch_device,
     torch_summary_markdown,
 )
+from baby_model.minigrid_torch_sweep import aggregate_torch_reports, torch_sweep_summary_markdown
 from baby_model.sweep import parse_seeds, run_sweep
 
 
@@ -785,6 +786,77 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         self.assertIn("PyTorch DQN", summary)
+
+    def test_minigrid_torch_sweep_aggregate_is_dependency_free(self) -> None:
+        runs = [
+            {
+                "winner_last_window": "A",
+                "framework": {"version": "2.x", "device": "cuda"},
+                "results": [
+                    {
+                        "name": "A",
+                        "seed": 601,
+                        "success_rate_all": 0.1,
+                        "success_rate_last_window": 0.2,
+                        "mean_return_last_window": 0.3,
+                        "updates": 10,
+                        "parameter_count": 20,
+                    },
+                    {
+                        "name": "B",
+                        "seed": 602,
+                        "success_rate_all": 0.0,
+                        "success_rate_last_window": 0.0,
+                        "mean_return_last_window": 0.0,
+                        "updates": 8,
+                        "parameter_count": 20,
+                    },
+                ],
+            },
+            {
+                "winner_last_window": "B",
+                "framework": {"version": "2.x", "device": "cuda"},
+                "results": [
+                    {
+                        "name": "A",
+                        "seed": 603,
+                        "success_rate_all": 0.0,
+                        "success_rate_last_window": 0.0,
+                        "mean_return_last_window": 0.0,
+                        "updates": 6,
+                        "parameter_count": 20,
+                    },
+                    {
+                        "name": "B",
+                        "seed": 604,
+                        "success_rate_all": 0.2,
+                        "success_rate_last_window": 0.4,
+                        "mean_return_last_window": 0.5,
+                        "updates": 12,
+                        "parameter_count": 20,
+                    },
+                ],
+            },
+        ]
+        aggregate = aggregate_torch_reports(runs, seeds=[701, 702])
+        by_name = {row["name"]: row for row in aggregate}
+        self.assertEqual(by_name["A"]["win_count"], 1)
+        self.assertEqual(by_name["B"]["win_count"], 1)
+        self.assertAlmostEqual(by_name["B"]["mean_success_rate_last_window"], 0.2)
+        self.assertEqual(by_name["A"]["condition_seeds"], [601, 603])
+        summary = torch_sweep_summary_markdown(
+            {
+                "created_at": "2026-06-29T00:00:00+00:00",
+                "hypothesis": "torch sweep",
+                "seeds": [701, 702],
+                "winner_by_mean_success_last_window": "B",
+                "frameworks": [run["framework"] for run in runs],
+                "aggregate": aggregate,
+                "runs": runs,
+            }
+        )
+        self.assertIn("PyTorch sweep", summary)
+        self.assertIn("Per-Seed Winners", summary)
 
     def test_gpu_compat_policy_is_dependency_free(self) -> None:
         self.assertLess(DriverVersion.parse("576.88"), DriverVersion.parse("580.0"))

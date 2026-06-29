@@ -50,6 +50,7 @@ Updated: 2026-06-29 JST
   - v0.7 optional neural encoder pilot: `https://github.com/Nicolas0315/baby-model/issues/11` closed
   - v0.8 optional deep-learning/GPU lane: `https://github.com/Nicolas0315/baby-model/issues/12` closed
   - v0.9 full-fleet GPU-ready PyTorch lane: `https://github.com/Nicolas0315/baby-model/issues/13`
+  - v1.0 multi-seed GPU PyTorch sweep: `https://github.com/Nicolas0315/baby-model/issues/14` open
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -209,16 +210,22 @@ Updated: 2026-06-29 JST
     and matched the worker-a table: `A_torch_hard_only success_last=0.083`,
     `B_torch_encoder_first=0.000`, `E_torch_progress=0.000`. Host-level
     evidence is kept outside this repository.
+- PyTorch multi-seed sweep support is implemented locally:
+  - `baby_model/minigrid_torch_sweep.py`
+  - optional verifier support via `MINIGRID_TORCH_SWEEP_CONFIG`
+  - docs in `docs/experiments/minigrid-torch-sweep.md`
+  - tracking issue: `https://github.com/Nicolas0315/baby-model/issues/14`
+  This is the next step from GPU smoke toward robust GPU training evidence.
 
 ## Next
 
-- Issue #13 can be closed once the pushed verifier is green and the GitHub
-  issue is updated. Open a separate follow-up only if the external
-  driver/wheel path for `gpu-worker-b` is approved.
+- Execute issue #14: run a three-seed PyTorch GPU sweep on CUDA-proven worker
+  classes, then compare whether any AD/DA condition survives beyond the
+  single-seed smoke result.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
-- Any robust GPU training result.
+- Any robust multi-seed GPU training result.
 - Full objective completion.
