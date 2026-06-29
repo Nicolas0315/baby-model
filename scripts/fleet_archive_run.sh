@@ -67,7 +67,7 @@ case "$MODE" in
     JOB_CMD="CONFIG=$CONFIG SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"
     ;;
   minigrid)
-    JOB_CMD="python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && ./scripts/verify_minigrid.sh; status=\$?; echo exit=\$status; exec bash"
+    JOB_CMD="if command -v uv >/dev/null 2>&1; then uv run --with minigrid bash scripts/verify_minigrid.sh; else python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && ./scripts/verify_minigrid.sh; fi; status=\$?; echo exit=\$status; exec bash"
     ;;
   both)
     JOB_CMD="./scripts/verify.sh && CONFIG=$CONFIG SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"
