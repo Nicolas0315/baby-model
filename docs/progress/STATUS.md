@@ -982,12 +982,25 @@ Updated: 2026-06-30 JST
     did not beat current `ZE_long`.
   - The useful change is stopping representation updates after the AD-only /
     decoder-delay phase.
+- Issue #67 v2.43 CUDA replication for long-horizon `ZI` AD-stop is complete:
+  - `docs/experiments/minigrid-torch-adda-v54.md`
+  - The CUDA smoke ran on `rtx4090` / WSL Ubuntu at source commit
+    `42421c68e4d22183adb1f4ec928ad872cc962ef9` with seed `4301`.
+  - Setup proved `NVIDIA GeForce RTX 4090`, driver `610.62`,
+    `torch==2.11.0+cu128`, `cuda_available=True`, and `device=cuda`.
+  - Remote artifact:
+    `~/work/baby-model-cuda-42421c6/.tmp/rtx4090-v67-zi-cuda/20260629T175150Z/summary.md`.
+  - `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` won
+    final-window success (`0.450`) and return (`0.340`) on CUDA seed `4301`,
+    with target-center `0.450`, target-near `0.500`, and only `240`
+    representation updates.
+  - `ZK_long` retained a higher target-visible rate (`0.650` vs `0.600`), so
+    this is CUDA replication evidence, not final baseline replacement.
 
 ## Next
 
-- Run bounded CUDA replication for
-  `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` before
-  promoting it as the long-horizon baseline.
+- Run a bounded multi-seed CUDA gate for
+  `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop`.
 
 ## Not Yet Proven
 
@@ -1019,5 +1032,6 @@ Updated: 2026-06-30 JST
   extended the same protocol to five CUDA seeds and preserved the `ZE` edge;
   v2.41 then showed that the longer horizon favors `ZK_long` over `ZE_long`.
   v2.42 found a CPU-positive fix by stopping representation updates after the
-  AD-only phase, but CUDA replication is still missing.
+  AD-only phase. v2.43 replicated that direction on CUDA seed `4301`, but
+  multi-seed CUDA confirmation is still missing.
 - Full objective completion.
