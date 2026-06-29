@@ -325,11 +325,23 @@ Updated: 2026-06-29 JST
   `A_torch_hard_only_long` on final-stage last-window success (`0.050` vs
   `0.000`) and return (`0.048` vs `0.000`) with non-zero representation updates,
   meeting the v1.7 CUDA escalation rule.
+- A bounded v1.7 CUDA smoke completed on `gpu-worker-c` at commit
+  `556308831bafe60c99f5767e4e2c9a1b2199702f` with `torch==2.12.1+cu132` and
+  `device=cuda`. It reproduced the local positive signal:
+  `T_torch_controllability_delay` beat `A_torch_hard_only_long` on final-stage
+  last-window success (`0.050` vs `0.000`) and return (`0.048` vs `0.000`).
+- The v1.7 three-seed CUDA sweep completed on `gpu-worker-c` at the same commit
+  with seeds `1301,1302,1303`. `T_torch_controllability_delay` led by mean
+  final-window success (`0.017` vs `0.000`) and return (`0.016` vs `0.000`),
+  but median final-window success and median return were both `0.000`, and
+  `A_torch_hard_only_long` had the higher seed win count (`2` vs `1`). Treat
+  v1.7 as weak positive but not robust enough to escalate without changing the
+  task ladder or representation target.
 
 ## Next
 
-- Run a bounded v1.7 CUDA smoke for `T_torch_controllability_delay` on
-  `gpu-worker-c` before treating the controllability signal as useful.
+- Open the next design issue for a denser task ladder or stronger representation
+  target, using v1.7 as weak positive but non-robust evidence.
 
 ## Not Yet Proven
 
