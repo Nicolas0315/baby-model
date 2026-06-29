@@ -967,13 +967,27 @@ Updated: 2026-06-30 JST
     (`0.483`) columns.
   - Do not treat `ZE` as a universal baseline from short-protocol evidence
     alone; the longer horizon exposes a no-representation curriculum challenge.
+- Issue #66 v2.42 reduced representation pressure for long-horizon `ZE` has a
+  positive CPU result:
+  - `configs/experiments/minigrid-torch-adda-v48.json`
+  - `docs/experiments/minigrid-torch-adda-v53.md`
+  - The local CPU sweep ran with seeds `4301,4302,4303` and `torch==2.12.1`.
+  - Local artifact:
+    `.tmp/local-v66-ze-long-pressure/20260629T171626Z/summary.md`.
+  - `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` won two of
+    three seeds and beat `ZE_long` and `ZK_long` on aggregate final-window
+    success (`0.500`), return (`0.381`), target-visible (`0.700`),
+    target-center (`0.517`), and target-near (`0.567`).
+  - Lower beta alone underperformed: `ZG` beta `0.025` and `ZH` beta `0.0375`
+    did not beat current `ZE_long`.
+  - The useful change is stopping representation updates after the AD-only /
+    decoder-delay phase.
 
 ## Next
 
-- Investigate why low-beta mission-target representation helps the short
-  protocol but loses to no-representation under the longer horizon. Candidate
-  next gates: lower beta, stopped representation updates after warmup, or a
-  handoff schedule that reduces representation pressure during long evaluation.
+- Run bounded CUDA replication for
+  `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` before
+  promoting it as the long-horizon baseline.
 
 ## Not Yet Proven
 
@@ -1004,4 +1018,6 @@ Updated: 2026-06-30 JST
   is still needed before calling the overall research objective complete. v2.40
   extended the same protocol to five CUDA seeds and preserved the `ZE` edge;
   v2.41 then showed that the longer horizon favors `ZK_long` over `ZE_long`.
+  v2.42 found a CPU-positive fix by stopping representation updates after the
+  AD-only phase, but CUDA replication is still missing.
 - Full objective completion.

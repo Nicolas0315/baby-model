@@ -1839,6 +1839,37 @@ class ExperimentTest(unittest.TestCase):
             self.assertEqual(condition.episodes, 84)
             self.assertEqual(condition.decoder_delay_episodes, 8)
 
+    def test_minigrid_torch_v48_long_reduced_pressure_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v48.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=4301,
+        )
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay_long",
+                "ZE_torch_gotoobj_state_plus_mission_target_b005_long",
+                "ZG_torch_gotoobj_state_plus_mission_target_b0025_long",
+                "ZH_torch_gotoobj_state_plus_mission_target_b00375_long",
+                "ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop",
+            ],
+        )
+        no_repr, current, beta_0025, beta_00375, ad_stop = parsed.conditions
+        self.assertEqual(no_repr.representation_objective, "none")
+        self.assertEqual(current.representation_objective, "state_plus_mission_target")
+        self.assertEqual(current.representation_beta, 0.05)
+        self.assertEqual(beta_0025.representation_objective, "state_plus_mission_target")
+        self.assertEqual(beta_0025.representation_beta, 0.025)
+        self.assertEqual(beta_00375.representation_objective, "state_plus_mission_target")
+        self.assertEqual(beta_00375.representation_beta, 0.0375)
+        self.assertEqual(ad_stop.representation_objective, "state_plus_mission_target")
+        self.assertEqual(ad_stop.representation_beta, 0.05)
+        self.assertTrue(ad_stop.stop_representation_after_delay)
+        for condition in parsed.conditions:
+            self.assertEqual(condition.episodes, 84)
+            self.assertEqual(condition.decoder_delay_episodes, 8)
+
     def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")
         parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))

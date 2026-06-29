@@ -1,0 +1,90 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v2.42: reduced representation pressure for long-horizon ZE",
+  "environment": {
+    "id": "BabyAI-GoToObj-v0",
+    "max_steps": 80,
+    "quiet_env_output": true
+  },
+  "stages": [
+    {
+      "name": "empty_warmup",
+      "env_id": "MiniGrid-Empty-5x5-v0",
+      "max_steps": 30,
+      "episodes": 12
+    },
+    {
+      "name": "goto_red_ball_warmup",
+      "env_id": "BabyAI-GoToRedBall-v0",
+      "max_steps": 80,
+      "episodes": 24
+    },
+    {
+      "name": "goto_obj_eval",
+      "env_id": "BabyAI-GoToObj-v0",
+      "max_steps": 80,
+      "episodes": 48
+    }
+  ],
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "cpu"
+  },
+  "conditions": [
+    {
+      "name": "ZK_torch_gotoobj_curriculum_no_repr_delay_long",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "ZE_torch_gotoobj_state_plus_mission_target_b005_long",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.05
+    },
+    {
+      "name": "ZG_torch_gotoobj_state_plus_mission_target_b0025_long",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.025
+    },
+    {
+      "name": "ZH_torch_gotoobj_state_plus_mission_target_b00375_long",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.0375
+    },
+    {
+      "name": "ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.05,
+      "stop_representation_after_delay": true
+    }
+  ]
+}
