@@ -47,7 +47,8 @@ Updated: 2026-06-29 JST
   - v0.4 MiniGrid curriculum to BabyAI Unlock: `https://github.com/Nicolas0315/baby-model/issues/8` closed
   - v0.5 function approximation pilot: `https://github.com/Nicolas0315/baby-model/issues/9` closed
   - v0.6 multi-seed linear BabyAI Unlock sweep: `https://github.com/Nicolas0315/baby-model/issues/10` closed
-  - v0.7 optional neural encoder pilot: `https://github.com/Nicolas0315/baby-model/issues/11`
+  - v0.7 optional neural encoder pilot: `https://github.com/Nicolas0315/baby-model/issues/11` closed
+  - v0.8 optional deep-learning/GPU lane: `https://github.com/Nicolas0315/baby-model/issues/12`
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -152,8 +153,8 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Decide whether to tune the dependency-free neural architecture or move to a
-  real optional deep-learning/GPU lane.
+- Start issue #12 by selecting an optional deep-learning framework from current
+  official docs, while keeping the default verifier dependency-free.
 
 ## Not Yet Proven
 
