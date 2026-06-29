@@ -45,6 +45,14 @@ MINIGRID_CURRICULUM_SEED=301 \
 ./scripts/verify_minigrid.sh
 ```
 
+Run the default probe and smoke plus a linear function-approximation config:
+
+```sh
+MINIGRID_LINEAR_CONFIG=configs/experiments/minigrid-linear-unlock.json \
+MINIGRID_LINEAR_SEED=401 \
+./scripts/verify_minigrid.sh
+```
+
 ## Probe Environments
 
 The optional probe starts with:
@@ -110,6 +118,16 @@ Curriculum result on `BabyAI-Unlock-v0` final stage, 60 final-stage episodes:
 
 The curriculum result is recorded in
 `docs/experiments/minigrid-curriculum-unlock.md`.
+
+Linear function-approximation result on `BabyAI-Unlock-v0`, 60 episodes:
+
+| condition | success_all | success_last | return_last | mean_steps_success |
+| --- | ---: | ---: | ---: | ---: |
+| `A_linear_hard_only` | 0.017 | 0.000 | 0.000 | 45.00 |
+| `B_linear_encoder_first` | 0.050 | 0.050 | 0.044 | 47.33 |
+| `E_linear_progress` | 0.000 | 0.000 | 0.000 |  |
+
+The linear pilot is recorded in `docs/experiments/minigrid-linear-unlock.md`.
 
 ## Fleet Verification
 

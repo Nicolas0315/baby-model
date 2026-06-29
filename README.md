@@ -66,5 +66,7 @@ host.
 - BabyAI Unlock hard task: `docs/experiments/minigrid-babyai-unlock.md`
 - MiniGrid curriculum to BabyAI Unlock:
   `docs/experiments/minigrid-curriculum-unlock.md`
+- MiniGrid linear function approximation:
+  `docs/experiments/minigrid-linear-unlock.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`

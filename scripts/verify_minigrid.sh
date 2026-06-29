@@ -9,6 +9,8 @@ MINIGRID_EXTRA_CONFIG="${MINIGRID_EXTRA_CONFIG:-}"
 MINIGRID_EXTRA_SEED="${MINIGRID_EXTRA_SEED:-201}"
 MINIGRID_CURRICULUM_CONFIG="${MINIGRID_CURRICULUM_CONFIG:-}"
 MINIGRID_CURRICULUM_SEED="${MINIGRID_CURRICULUM_SEED:-301}"
+MINIGRID_LINEAR_CONFIG="${MINIGRID_LINEAR_CONFIG:-}"
+MINIGRID_LINEAR_SEED="${MINIGRID_LINEAR_SEED:-401}"
 
 if [[ -n "$MINIGRID_EXTRA_CONFIG" ]]; then
   if [[ ! "$MINIGRID_EXTRA_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
@@ -28,6 +30,17 @@ if [[ -n "$MINIGRID_CURRICULUM_CONFIG" ]]; then
   fi
   if [[ ! "$MINIGRID_CURRICULUM_SEED" =~ ^[0-9]+$ ]]; then
     echo "invalid MINIGRID_CURRICULUM_SEED: $MINIGRID_CURRICULUM_SEED" >&2
+    exit 2
+  fi
+fi
+
+if [[ -n "$MINIGRID_LINEAR_CONFIG" ]]; then
+  if [[ ! "$MINIGRID_LINEAR_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
+    echo "invalid MINIGRID_LINEAR_CONFIG: $MINIGRID_LINEAR_CONFIG" >&2
+    exit 2
+  fi
+  if [[ ! "$MINIGRID_LINEAR_SEED" =~ ^[0-9]+$ ]]; then
+    echo "invalid MINIGRID_LINEAR_SEED: $MINIGRID_LINEAR_SEED" >&2
     exit 2
   fi
 fi
@@ -55,4 +68,11 @@ if [[ -n "$MINIGRID_CURRICULUM_CONFIG" ]]; then
     --config "$MINIGRID_CURRICULUM_CONFIG" \
     --output-dir "$VERIFY_MINIGRID_DIR/curriculum" \
     --seed "$MINIGRID_CURRICULUM_SEED"
+fi
+
+if [[ -n "$MINIGRID_LINEAR_CONFIG" ]]; then
+  python3 -m baby_model.minigrid_linear \
+    --config "$MINIGRID_LINEAR_CONFIG" \
+    --output-dir "$VERIFY_MINIGRID_DIR/linear" \
+    --seed "$MINIGRID_LINEAR_SEED"
 fi

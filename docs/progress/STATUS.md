@@ -115,14 +115,23 @@ Updated: 2026-06-29 JST
   at commit `976591913b649e50b2455e0dbf44b39b8a4e1c9e`; all workers produced
   the same final-stage table. Exact host-level evidence is kept outside this
   repository in local docs.
+- Linear function-approximation pilot for issue #9 is implemented locally:
+  - `baby_model/minigrid_linear.py`
+  - `configs/experiments/minigrid-linear-unlock.json`
+  - optional verifier support via `MINIGRID_LINEAR_CONFIG`
+- Local linear result on `BabyAI-Unlock-v0`: `B_linear_encoder_first` won by
+  last-window success (`0.050`). This is the first local hard-task run where an
+  encoder-first variant retained last-window success.
 
 ## Next
 
-- Open the next branch for function approximation or a stronger representation
-  model. More beta-only tuning in the same tabular setup is not promising.
-- Track function approximation work in issue #9.
+- Replicate the linear function-approximation run through fleet tmux while
+  runtime remains lightweight.
+- If replicated, run a multi-seed linear sweep or a stronger optional neural
+  encoder lane.
 
 ## Not Yet Proven
 
 - Any GPU training result.
+- Fleet replication of the linear function-approximation run.
 - Full objective completion.

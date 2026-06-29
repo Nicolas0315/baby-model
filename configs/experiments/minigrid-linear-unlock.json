@@ -1,0 +1,40 @@
+{
+  "hypothesis": "Baby-AD/DA MiniGrid linear function approximation on BabyAI Unlock",
+  "environment": {
+    "id": "BabyAI-Unlock-v0",
+    "max_steps": 160,
+    "quiet_env_output": true
+  },
+  "agent": {
+    "feature_dim": 4096,
+    "alpha": 0.06,
+    "gamma": 0.92,
+    "epsilon": 0.2
+  },
+  "conditions": [
+    {
+      "name": "A_linear_hard_only",
+      "encoder_mode": "raw",
+      "episodes": 60,
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "B_linear_encoder_first",
+      "encoder_mode": "raw",
+      "episodes": 60,
+      "decoder_delay_episodes": 16,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "E_linear_progress",
+      "encoder_mode": "raw",
+      "episodes": 60,
+      "decoder_delay_episodes": 16,
+      "intrinsic_beta": 0.03,
+      "intrinsic_mode": "progress"
+    }
+  ]
+}

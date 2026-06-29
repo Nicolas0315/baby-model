@@ -25,6 +25,13 @@ from baby_model.minigrid_curriculum import (
     run_minigrid_curriculum_suite,
 )
 from baby_model.minigrid_experiment import encode_observation, parse_minigrid_config, run_minigrid_suite
+from baby_model.minigrid_linear import (
+    LinearQAgent,
+    linear_features,
+    linear_summary_markdown,
+    parse_minigrid_linear_config,
+    run_minigrid_linear_suite,
+)
 from baby_model.minigrid_probe import observation_schema, summary_markdown
 from baby_model.sweep import parse_seeds, run_sweep
 
@@ -456,6 +463,81 @@ class ExperimentTest(unittest.TestCase):
         self.assertIn(report["winner_final_last_window"], {"hard_only", "curriculum"})
         self.assertEqual(report["results"][1]["final_stage"]["stage"], "eval")
         self.assertIn("MiniGrid curriculum", curriculum_summary_markdown(report))
+
+    def test_minigrid_linear_agent_updates_weights(self) -> None:
+        agent = LinearQAgent(actions=2, feature_dim=128, alpha=0.5, gamma=0.0, epsilon=0.0, seed=1)
+        features = {3: 1.0, 7: 1.0}
+        self.assertEqual(agent.q_value(features, 1), 0.0)
+        agent.update(features, action=1, reward=1.0, next_features=features, done=True)
+        self.assertGreater(agent.q_value(features, 1), 0.0)
+
+    def test_minigrid_linear_config_features_and_runner_are_dependency_free(self) -> None:
+        config = {
+            "environment": {"id": "FakeLinear-v0", "max_steps": 1},
+            "agent": {"feature_dim": 256, "alpha": 0.1, "gamma": 0.9, "epsilon": 0.0},
+            "conditions": [
+                {
+                    "name": "linear",
+                    "encoder_mode": "raw",
+                    "episodes": 2,
+                    "decoder_delay_episodes": 0,
+                    "intrinsic_beta": 0.0,
+                    "intrinsic_mode": "none",
+                }
+            ],
+        }
+        parsed = parse_minigrid_linear_config(config, seed=23)
+        self.assertEqual(parsed.agent.feature_dim, 256)
+        self.assertEqual(parsed.conditions[0].seed, 23)
+
+        class FakeImage:
+            def tolist(self) -> list[list[list[int]]]:
+                return [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+
+        observation = {"image": FakeImage(), "direction": 1, "mission": "unlock red door"}
+        self.assertEqual(linear_features(observation, "raw", 256), linear_features(observation, "raw", 256))
+        self.assertLessEqual(max(linear_features(observation, "raw", 256)), 255)
+
+        class FakeActionSpace:
+            n = 2
+
+            def seed(self, seed: int) -> None:
+                self.last_seed = seed
+
+        class FakeEnv:
+            action_space = FakeActionSpace()
+
+            def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
+                return observation, {}
+
+            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+                return observation, 1.0, True, False, {}
+
+            def close(self) -> None:
+                pass
+
+        fake_gym = types.ModuleType("gymnasium")
+        fake_gym.make = lambda env_id: FakeEnv()  # type: ignore[attr-defined]
+        fake_minigrid = types.ModuleType("minigrid")
+        previous_gym = sys.modules.get("gymnasium")
+        previous_minigrid = sys.modules.get("minigrid")
+        sys.modules["gymnasium"] = fake_gym
+        sys.modules["minigrid"] = fake_minigrid
+        try:
+            report = run_minigrid_linear_suite(config, seed=23)
+        finally:
+            if previous_gym is None:
+                sys.modules.pop("gymnasium", None)
+            else:
+                sys.modules["gymnasium"] = previous_gym
+            if previous_minigrid is None:
+                sys.modules.pop("minigrid", None)
+            else:
+                sys.modules["minigrid"] = previous_minigrid
+
+        self.assertEqual(report["winner_last_window"], "linear")
+        self.assertGreater(report["results"][0]["nonzero_weights"], 0)
+        self.assertIn("linear function approximation", linear_summary_markdown(report))
 
 
 if __name__ == "__main__":
