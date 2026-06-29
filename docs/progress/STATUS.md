@@ -423,14 +423,32 @@ Updated: 2026-06-29 JST
   ran `8480` representation updates before the DA phase, but final-stage
   last-window success and return were both `0.000`. Treat v2.4 as negative
   evidence for the current PyTorch DQN family.
+- Issue #30 v2.5 task-family change to BabyAI GoToObj is implemented:
+  - `configs/experiments/minigrid-torch-adda-v25.json`
+  - `docs/experiments/minigrid-torch-adda-v25.md`
+  - local CPU smoke passed with `torch==2.12.1` and `device=cpu`;
+    `T_torch_gotoobj_controllability_delay` beat the hard-only baseline on
+    final-stage last-window success (`0.550` vs `0.250`) and return (`0.331`
+    vs `0.128`), meeting the CUDA escalation rule.
+  - bounded CUDA smoke completed on `gpu-worker-c` with `torch==2.12.1+cu132`
+    and `device=cuda`; it reproduced the same positive signal for
+    `T_torch_gotoobj_controllability_delay`.
+  - three-seed CUDA sweep completed on `gpu-worker-c` with seeds
+    `2101,2102,2103`; `ZI_torch_gotoobj_state_plus_delta_delay` won by mean
+    final-stage last-window success (`0.533` vs hard-only `0.450`) and mean
+    return (`0.342` vs hard-only `0.280`).
+  - Per-seed winners split one win each across `T`, hard-only, and `ZI`. Treat
+    v2.5 as positive task-family evidence, but not a stable single-condition
+    winner.
 
 ## Next
 
-- Move to a task-family change or a separate non-DQN representation learner.
+- Design v2.6 to separate the GoToObj task-family effect from the
+  representation objective effect.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
-- Any robust positive AD/DA GPU training result.
+- A stable single-condition AD/DA winner across multiple CUDA seeds.
 - Full objective completion.

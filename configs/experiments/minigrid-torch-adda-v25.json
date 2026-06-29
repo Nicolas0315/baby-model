@@ -1,0 +1,81 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v2.5: task-family change to BabyAI GoToObj",
+  "environment": {
+    "id": "BabyAI-GoToObj-v0",
+    "max_steps": 80,
+    "quiet_env_output": true
+  },
+  "stages": [
+    {
+      "name": "empty_warmup",
+      "env_id": "MiniGrid-Empty-5x5-v0",
+      "max_steps": 30,
+      "episodes": 12
+    },
+    {
+      "name": "goto_red_ball_warmup",
+      "env_id": "BabyAI-GoToRedBall-v0",
+      "max_steps": 80,
+      "episodes": 24
+    },
+    {
+      "name": "goto_obj_eval",
+      "env_id": "BabyAI-GoToObj-v0",
+      "max_steps": 80,
+      "episodes": 48
+    }
+  ],
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "auto"
+  },
+  "conditions": [
+    {
+      "name": "A_torch_gotoobj_hard_only",
+      "encoder_mode": "raw",
+      "active_stages": ["goto_obj_eval"],
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "T_torch_gotoobj_controllability_delay",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "controllability",
+      "representation_beta": 0.3
+    },
+    {
+      "name": "ZI_torch_gotoobj_state_plus_delta_delay",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_delta",
+      "representation_beta": 0.3
+    },
+    {
+      "name": "ZJ_torch_gotoobj_two_phase_state_plus_delta_frozen",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+      "decoder_delay_episodes": 36,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_delta",
+      "representation_beta": 0.3,
+      "freeze_encoder_after_delay": true,
+      "stop_representation_after_delay": true
+    }
+  ]
+}

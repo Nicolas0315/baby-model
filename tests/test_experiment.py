@@ -1202,6 +1202,39 @@ class ExperimentTest(unittest.TestCase):
         self.assertTrue(two_phase.freeze_encoder_after_delay)
         self.assertTrue(two_phase.stop_representation_after_delay)
 
+    def test_minigrid_torch_v25_gotoobj_task_family_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v25.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=2101,
+        )
+        self.assertEqual(parsed.env_id, "BabyAI-GoToObj-v0")
+        self.assertEqual(
+            [stage.name for stage in parsed.stages],
+            ["empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"],
+        )
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_gotoobj_hard_only",
+                "T_torch_gotoobj_controllability_delay",
+                "ZI_torch_gotoobj_state_plus_delta_delay",
+                "ZJ_torch_gotoobj_two_phase_state_plus_delta_frozen",
+            ],
+        )
+        active = dict(parsed.active_stages_by_condition)
+        self.assertEqual(active["A_torch_gotoobj_hard_only"], ("goto_obj_eval",))
+        self.assertEqual(
+            active["ZJ_torch_gotoobj_two_phase_state_plus_delta_frozen"],
+            ("empty_warmup", "goto_red_ball_warmup", "goto_obj_eval"),
+        )
+        two_phase = parsed.conditions[3]
+        self.assertEqual(two_phase.episodes, 84)
+        self.assertEqual(two_phase.decoder_delay_episodes, 36)
+        self.assertTrue(two_phase.freeze_encoder_after_delay)
+        self.assertTrue(two_phase.stop_representation_after_delay)
+
     def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:
         class FakeTorch:
             def manual_seed(self, seed: int) -> None:
