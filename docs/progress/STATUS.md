@@ -680,11 +680,29 @@ Updated: 2026-06-29 JST
     `target_near_last=0.500`.
   - The probe did not reveal a hidden mission-preservation winner that
     success/return missed, so no CUDA issue is opened from v2.22 alone.
+- Issue #48 v2.23 mission-conditioned target redesign has a first CPU gate:
+  - `baby_model/minigrid_torch.py`
+  - `configs/experiments/minigrid-torch-adda-v38.json`
+  - `docs/experiments/minigrid-torch-adda-v38.md`
+  - Added `mission_target_transition`, which keeps the same relation-transition
+    label space as `target_visibility_transition` but returns a zero vector
+    when the mission target is unknown or both current and next relation are
+    `absent`.
+  - Added `state_plus_mission_target`, which concatenates `state_plus_delta`
+    with the mission-conditioned semantic transition target.
+  - Local CPU smoke on seed `3301` completed with `torch==2.12.1` and
+    `device=cpu`.
+  - The new candidates were negative on this CPU gate:
+    `ZP_torch_gotoobj_mission_target_visibility_delay` and
+    `ZQ_torch_gotoobj_state_plus_mission_target_delay` both had
+    `success_last=0.000` and `return_last=0.000`.
+  - Do not escalate v2.23 to CUDA from this result.
 
 ## Next
 
-- Redesign the auxiliary objective or training protocol using the new
-  mission-preservation probe as a reporting gate before spending more CUDA.
+- Continue issue #48 with a true two-head auxiliary objective or a small
+  loss-weight sweep, using the mission-preservation probe as the CPU gate
+  before spending more CUDA.
 
 ## Not Yet Proven
 
@@ -693,4 +711,5 @@ Updated: 2026-06-29 JST
 - A stable best representation-driven AD/DA winner across multiple CUDA seeds.
 - A redesigned objective that beats the no-representation curriculum and the
   current best representation baselines under the mission-preservation probe.
+  v2.23's single-head mission-conditioned target did not pass this gate.
 - Full objective completion.

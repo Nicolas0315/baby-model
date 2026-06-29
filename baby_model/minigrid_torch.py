@@ -30,6 +30,7 @@ TARGET_VISIBILITY_RELATIONS = ("absent", "left_near", "left_far", "center_near",
 TARGET_VISIBILITY_TRANSITION_DIM = len(TARGET_VISIBILITY_RELATIONS) * len(TARGET_VISIBILITY_RELATIONS)
 STATE_PLUS_DELTA_DIM = AFFORDANCE_PROGRESS_DIM + AFFORDANCE_PROGRESS_DIM + TRANSITION_GROUP_DIM + SUBGOAL_PROGRESS_DIM
 STATE_PLUS_TARGET_VISIBILITY_DIM = STATE_PLUS_DELTA_DIM + TARGET_VISIBILITY_TRANSITION_DIM
+STATE_PLUS_MISSION_TARGET_DIM = STATE_PLUS_DELTA_DIM + TARGET_VISIBILITY_TRANSITION_DIM
 ACTION_LEFT = 0
 ACTION_RIGHT = 1
 ACTION_FORWARD = 2
@@ -115,9 +116,11 @@ class TorchDQNAgent:
             "affordance_progress",
             "transition_group",
             "target_visibility_transition",
+            "mission_target_transition",
             "subgoal_progress",
             "state_plus_delta",
             "state_plus_target_visibility",
+            "state_plus_mission_target",
         }:
             target_dim = _representation_target_dim(representation_objective, config.feature_dim)
             self.representation_predictor = build_next_feature_predictor(
@@ -221,9 +224,11 @@ class TorchDQNAgent:
             "affordance_progress",
             "transition_group",
             "target_visibility_transition",
+            "mission_target_transition",
             "subgoal_progress",
             "state_plus_delta",
             "state_plus_target_visibility",
+            "state_plus_mission_target",
         } or self.representation_predictor is None:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
@@ -488,9 +493,11 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             "affordance_progress",
             "transition_group",
             "target_visibility_transition",
+            "mission_target_transition",
             "subgoal_progress",
             "state_plus_delta",
             "state_plus_target_visibility",
+            "state_plus_mission_target",
         }:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
@@ -1087,12 +1094,16 @@ def _representation_target_dim(representation_objective: str, feature_dim: int) 
         return TRANSITION_GROUP_DIM
     if representation_objective == "target_visibility_transition":
         return TARGET_VISIBILITY_TRANSITION_DIM
+    if representation_objective == "mission_target_transition":
+        return TARGET_VISIBILITY_TRANSITION_DIM
     if representation_objective == "subgoal_progress":
         return SUBGOAL_PROGRESS_DIM
     if representation_objective == "state_plus_delta":
         return STATE_PLUS_DELTA_DIM
     if representation_objective == "state_plus_target_visibility":
         return STATE_PLUS_TARGET_VISIBILITY_DIM
+    if representation_objective == "state_plus_mission_target":
+        return STATE_PLUS_MISSION_TARGET_DIM
     raise ValueError(f"unsupported representation objective: {representation_objective}")
 
 
@@ -1117,12 +1128,16 @@ def representation_target_for_objective(
         return transition_group_vector(observation, next_observation)
     if condition.representation_objective == "target_visibility_transition":
         return target_visibility_transition_vector(observation, next_observation)
+    if condition.representation_objective == "mission_target_transition":
+        return mission_target_transition_vector(observation, next_observation)
     if condition.representation_objective == "subgoal_progress":
         return subgoal_progress_vector(observation, next_observation)
     if condition.representation_objective == "state_plus_delta":
         return state_plus_delta_vector(observation, next_observation)
     if condition.representation_objective == "state_plus_target_visibility":
         return state_plus_target_visibility_vector(observation, next_observation)
+    if condition.representation_objective == "state_plus_mission_target":
+        return state_plus_mission_target_vector(observation, next_observation)
     if condition.representation_objective == "action_prior":
         return action_prior_label(observation, actions)
     return []
@@ -1198,6 +1213,16 @@ def target_visibility_transition_vector(observation: Any, next_observation: Any)
     return [1.0 if item == index else 0.0 for item in range(TARGET_VISIBILITY_TRANSITION_DIM)]
 
 
+def mission_target_transition_vector(observation: Any, next_observation: Any) -> list[float]:
+    if not (_mission_target_known(observation) and _mission_target_known(next_observation)):
+        return [0.0 for _ in range(TARGET_VISIBILITY_TRANSITION_DIM)]
+    before = target_visibility_relation(observation)
+    after = target_visibility_relation(next_observation)
+    if before == "absent" and after == "absent":
+        return [0.0 for _ in range(TARGET_VISIBILITY_TRANSITION_DIM)]
+    return target_visibility_transition_vector(observation, next_observation)
+
+
 def mission_preservation_probe(observation: Any) -> dict[str, float | str]:
     if not isinstance(observation, dict):
         return _empty_mission_preservation_probe()
@@ -1250,6 +1275,13 @@ def _empty_mission_preservation_probe() -> dict[str, float | str]:
 
 def _probe_mean(probes: list[dict[str, float | str]], field: str) -> float:
     return mean(float(probe.get(field, 0.0)) for probe in probes)
+
+
+def _mission_target_known(observation: Any) -> bool:
+    if not isinstance(observation, dict):
+        return False
+    target = _target_from_mission(str(observation.get("mission", "")))
+    return target.get("object") != "unknown" and target.get("color") != "unknown"
 
 
 def target_visibility_relation(observation: Any) -> str:
@@ -1382,6 +1414,13 @@ def state_plus_delta_vector(observation: Any, next_observation: Any) -> list[flo
 
 def state_plus_target_visibility_vector(observation: Any, next_observation: Any) -> list[float]:
     return state_plus_delta_vector(observation, next_observation) + target_visibility_transition_vector(
+        observation,
+        next_observation,
+    )
+
+
+def state_plus_mission_target_vector(observation: Any, next_observation: Any) -> list[float]:
+    return state_plus_delta_vector(observation, next_observation) + mission_target_transition_vector(
         observation,
         next_observation,
     )

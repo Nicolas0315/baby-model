@@ -70,10 +70,12 @@ from baby_model.minigrid_torch import (
     controllability_target,
     dense_feature_vector,
     mission_preservation_probe,
+    mission_target_transition_vector,
     parse_minigrid_torch_config,
     run_minigrid_torch_curriculum_condition,
     select_torch_device,
     state_plus_delta_vector,
+    state_plus_mission_target_vector,
     state_plus_target_visibility_vector,
     summarize_mission_preservation_probes,
     subgoal_progress_vector,
@@ -1059,6 +1061,28 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(vector[58:], target_visibility)
         self.assertEqual(sum(vector[58:]), 1.0)
 
+    def test_minigrid_torch_mission_target_transition_vector_is_dependency_free(self) -> None:
+        absent = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        visible = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        visible[3][5] = [6, 0, 0]
+        absent_observation = {"direction": 0, "mission": "go to the red ball", "image": absent}
+        visible_observation = {"direction": 0, "mission": "go to the red ball", "image": visible}
+        unknown_observation = {"direction": 0, "mission": "go to the thing", "image": visible}
+
+        absent_to_absent = mission_target_transition_vector(absent_observation, absent_observation)
+        absent_to_visible = mission_target_transition_vector(absent_observation, visible_observation)
+        unknown_to_visible = mission_target_transition_vector(unknown_observation, visible_observation)
+        combined = state_plus_mission_target_vector(absent_observation, visible_observation)
+
+        self.assertEqual(len(absent_to_absent), 49)
+        self.assertEqual(sum(absent_to_absent), 0.0)
+        self.assertEqual(sum(unknown_to_visible), 0.0)
+        self.assertEqual(sum(absent_to_visible), 1.0)
+        self.assertEqual(absent_to_visible[3], 1.0)
+        self.assertEqual(len(combined), 107)
+        self.assertEqual(combined[:58], state_plus_delta_vector(absent_observation, visible_observation))
+        self.assertEqual(combined[58:], absent_to_visible)
+
     def test_minigrid_torch_v14_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v14.json")
         parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1001)
@@ -1402,6 +1426,31 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.conditions[1].representation_objective, "state_plus_delta")
         self.assertEqual(parsed.conditions[2].representation_objective, "target_visibility_transition")
         self.assertEqual(parsed.conditions[3].representation_objective, "state_plus_target_visibility")
+        for condition in parsed.conditions:
+            self.assertEqual(condition.episodes, 42)
+            self.assertEqual(condition.decoder_delay_episodes, 4)
+
+    def test_minigrid_torch_v38_mission_conditioned_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v38.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=3201,
+        )
+        self.assertEqual(parsed.agent.device, "cpu")
+        self.assertEqual(parsed.env_id, "BabyAI-GoToObj-v0")
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay",
+                "ZM_torch_gotoobj_state_plus_delta_matched_delay",
+                "ZN_torch_gotoobj_target_visibility_matched_delay",
+                "ZO_torch_gotoobj_state_plus_target_visibility_delay",
+                "ZP_torch_gotoobj_mission_target_visibility_delay",
+                "ZQ_torch_gotoobj_state_plus_mission_target_delay",
+            ],
+        )
+        self.assertEqual(parsed.conditions[4].representation_objective, "mission_target_transition")
+        self.assertEqual(parsed.conditions[5].representation_objective, "state_plus_mission_target")
         for condition in parsed.conditions:
             self.assertEqual(condition.episodes, 42)
             self.assertEqual(condition.decoder_delay_episodes, 4)
