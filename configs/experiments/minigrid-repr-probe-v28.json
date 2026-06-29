@@ -1,0 +1,34 @@
+{
+  "hypothesis": "Baby-AD/DA v2.8: supervised non-DQN representation diagnostic on GoToObj transitions",
+  "dataset": {
+    "policy": "random",
+    "quiet_env_output": true,
+    "test_every": 5,
+    "signature_buckets": 16,
+    "envs": [
+      {
+        "name": "goto_red_ball",
+        "env_id": "BabyAI-GoToRedBall-v0",
+        "episodes": 6,
+        "max_steps": 80
+      },
+      {
+        "name": "goto_obj",
+        "env_id": "BabyAI-GoToObj-v0",
+        "episodes": 10,
+        "max_steps": 80
+      }
+    ]
+  },
+  "features": {
+    "feature_dim": 1024,
+    "encoder_mode": "raw",
+    "feature_sets": ["raw_current", "affordance_current"]
+  },
+  "decision": {
+    "labels": ["mission_object", "mission_color", "changed"],
+    "min_accuracy": 0.6,
+    "min_lift": 0.05,
+    "min_test_examples": 10
+  }
+}

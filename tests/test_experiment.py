@@ -43,6 +43,13 @@ from baby_model.minigrid_neural import (
     run_minigrid_neural_suite,
 )
 from baby_model.minigrid_probe import observation_schema, summary_markdown
+from baby_model.minigrid_repr_probe import (
+    centroid_probe_metrics,
+    parse_minigrid_representation_probe_config,
+    representation_probe_summary_markdown,
+    transition_probe_labels,
+    vector_to_sparse_features,
+)
 import baby_model.minigrid_torch as minigrid_torch_module
 from baby_model.minigrid_torch import (
     TorchAgentConfig,
@@ -1268,6 +1275,74 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.conditions[1].representation_objective, "none")
         self.assertEqual(parsed.conditions[2].representation_objective, "controllability")
         self.assertEqual(parsed.conditions[3].representation_objective, "state_plus_delta")
+
+    def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")
+        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        self.assertEqual([env.name for env in parsed.envs], ["goto_red_ball", "goto_obj"])
+        self.assertEqual([env.env_id for env in parsed.envs], ["BabyAI-GoToRedBall-v0", "BabyAI-GoToObj-v0"])
+        self.assertEqual(parsed.feature_dim, 1024)
+        self.assertEqual(parsed.encoder_mode, "raw")
+        self.assertEqual(parsed.feature_sets, ("raw_current", "affordance_current"))
+        self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "changed"))
+        self.assertEqual(parsed.decision.min_test_examples, 10)
+
+    def test_minigrid_repr_probe_labels_and_centroid_metrics_are_dependency_free(self) -> None:
+        before = {
+            "direction": 0,
+            "mission": "go to the yellow key",
+            "image": [[[0, 0, 0] for _ in range(7)] for _ in range(7)],
+        }
+        after = {
+            "direction": 1,
+            "mission": "go to the yellow key",
+            "image": [[[0, 0, 0] for _ in range(7)] for _ in range(7)],
+        }
+        labels = transition_probe_labels(
+            observation=before,
+            next_observation=after,
+            features={1: 1.0},
+            next_features={1: 1.0, 2: 1.0},
+            signature_buckets=8,
+        )
+        self.assertEqual(labels["mission_object"], "key")
+        self.assertEqual(labels["mission_color"], "yellow")
+        self.assertEqual(labels["changed"], "changed")
+        self.assertTrue(labels["next_signature_bucket"].startswith("bucket:"))
+
+        self.assertEqual(vector_to_sparse_features([0.0, 1.0, 0.5]), {1: 1.0, 2: 0.5})
+        examples = [{0: 1.0}, {0: 0.9}, {1: 1.0}, {1: 0.9}, {0: 1.0}, {1: 1.0}]
+        metrics = centroid_probe_metrics(examples, ["a", "a", "b", "b", "a", "b"], test_every=3)
+        self.assertEqual(metrics["test_examples"], 2)
+        self.assertGreaterEqual(metrics["accuracy"], metrics["majority_baseline"])
+
+    def test_minigrid_repr_probe_summary_is_dependency_free(self) -> None:
+        summary = representation_probe_summary_markdown(
+            {
+                "created_at": "2026-06-29T00:00:00+00:00",
+                "hypothesis": "repr probe",
+                "seed": 1,
+                "transition_count": 3,
+                "decision": {"met": True, "best_feature_set": "raw_current"},
+                "feature_reports": [
+                    {
+                        "feature_set": "raw_current",
+                        "labels": {
+                            "mission_object": {
+                                "accuracy": 1.0,
+                                "majority_baseline": 0.5,
+                                "lift": 0.5,
+                                "train_examples": 2,
+                                "test_examples": 1,
+                                "classes": ["ball", "key"],
+                            }
+                        },
+                    }
+                ],
+            }
+        )
+        self.assertIn("decision_met: `true`", summary)
+        self.assertIn("raw_current", summary)
 
     def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:
         class FakeTorch:

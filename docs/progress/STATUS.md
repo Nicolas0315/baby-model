@@ -467,15 +467,27 @@ Updated: 2026-06-29 JST
     (`ZK` `0.650`, `ZL` `0.450`, `ZM` `0.500`).
   - Treat the GoToObj curriculum effect as dominant under the current DQN
     auxiliary-head family.
+- Issue #33 v2.8 non-DQN supervised representation diagnostic is implemented:
+  - `baby_model/minigrid_repr_probe.py`
+  - `configs/experiments/minigrid-repr-probe-v28.json`
+  - `docs/experiments/minigrid-repr-probe-v28.md`
+  - local CPU smoke collected `986` GoToObj-family random-policy transitions.
+  - Best fixed feature set was `raw_current`, with mean decision-label accuracy
+    `0.606` and mean lift `0.093`, but the decision rule failed because
+    `mission_color` accuracy was `0.553` and `changed` lift was `-0.010`.
+  - Treat fixed current-observation features as insufficient for the full probe
+    target set; redesign toward stronger transition labels or a trained
+    predictive encoder before returning to RL/CUDA.
 
 ## Next
 
-- Move to a non-DQN representation probe before spending more GPU on the
-  current DQN auxiliary-head family.
+- Redesign the non-DQN representation probe around stronger transition labels
+  or a trained predictive encoder before returning to RL/CUDA.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable representation-driven AD/DA winner across multiple CUDA seeds.
+- A non-DQN probe that cleanly separates both mission and transition labels.
 - Full objective completion.
