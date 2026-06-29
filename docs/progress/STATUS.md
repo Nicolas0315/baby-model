@@ -34,19 +34,18 @@ Updated: 2026-06-29 JST
   docs evidence.
 - `agmsg` is joined locally for turn-based progress delivery. Team details stay
   out of committed docs.
-- GitHub Actions workflow exists, but remote CI is currently blocked by GitHub
-  account billing/spending-limit state before runner startup. Local verifier is
-  the authoritative verification until that account-level blocker is cleared.
+- GitHub Actions `verify` succeeded for commit
+  `764de19117cae1cad927a305c3bbc074a889e00a` on 2026-06-29.
 - GitHub issues:
   - Fleet worker protocol: `https://github.com/Nicolas0315/baby-model/issues/1`
   - MiniGrid/BabyAI migration: `https://github.com/Nicolas0315/baby-model/issues/2`
-  - CI billing/spending-limit blocker: `https://github.com/Nicolas0315/baby-model/issues/3`
+  - CI billing/spending-limit blocker: `https://github.com/Nicolas0315/baby-model/issues/3` resolved
   - v0.1 prediction-improvement reward: `https://github.com/Nicolas0315/baby-model/issues/4` closed
   - v0.2 progress-reward tuning/richer task: `https://github.com/Nicolas0315/baby-model/issues/5`
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
-- v0.2 beta sweep implementation is in progress locally:
+- v0.2 beta sweep implementation landed on `main`:
   - richer sparse-reward BabyGrid with obstacles and multiple toys
   - `configs/experiments/v02-sweep.json`
   - `scripts/run_beta_sweep.sh`
@@ -63,12 +62,10 @@ Updated: 2026-06-29 JST
 - Run the v0.2 beta sweep under local tmux and fleet worker tmux lanes.
 - Open the next experiment issue for beta annealing or auxiliary prediction
   progress instead of direct Q-target reward shaping.
-- Clear GitHub Actions billing/spending-limit blocker and rerun `verify`.
 
 ## Not Yet Proven
 
 - Remote checkout and remote tmux worker loops.
 - MiniGrid/BabyAI dependency install.
 - Any GPU training result.
-- GitHub-hosted CI execution.
 - Full objective completion.
