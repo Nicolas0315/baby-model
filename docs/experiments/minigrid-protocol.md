@@ -22,12 +22,14 @@ Default `./scripts/verify.sh` stays standard-library-only. MiniGrid/BabyAI check
 live in a separate optional verifier:
 
 ```sh
-python3 -m venv .venv-minigrid
-. .venv-minigrid/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install minigrid
-./scripts/verify_minigrid.sh
+MINIGRID_ENV_BACKEND=auto \
+MINIGRID_PYTHON=3.12 \
+./scripts/setup_minigrid_env.sh ./scripts/verify_minigrid.sh
 ```
+
+`scripts/setup_minigrid_env.sh` supports `venv` and `uv` backends. The default
+verifier remains dependency-free; the optional setup wrapper is used only for
+MiniGrid/BabyAI runs.
 
 Run the default probe and smoke plus one extra trained config:
 

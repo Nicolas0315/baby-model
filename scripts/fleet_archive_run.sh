@@ -19,6 +19,10 @@ MINIGRID_TORCH_CONFIG="${MINIGRID_TORCH_CONFIG:-}"
 MINIGRID_TORCH_SEED="${MINIGRID_TORCH_SEED:-601}"
 MINIGRID_TORCH_DEVICE="${MINIGRID_TORCH_DEVICE:-auto}"
 MINIGRID_TORCH_INDEX_URL="${MINIGRID_TORCH_INDEX_URL:-}"
+MINIGRID_TORCH_CPU_FALLBACK="${MINIGRID_TORCH_CPU_FALLBACK:-0}"
+MINIGRID_ENV_BACKEND="${MINIGRID_ENV_BACKEND:-auto}"
+MINIGRID_PYTHON="${MINIGRID_PYTHON:-3.12}"
+MINIGRID_VENV_DIR="${MINIGRID_VENV_DIR:-.venv-minigrid}"
 RUN_ID="${RUN_ID:-baby-model-fleet-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT" rev-parse --short HEAD)}"
 SESSION="${SESSION:-$RUN_ID}"
 
@@ -33,6 +37,7 @@ Usage:
   MODE=minigrid MINIGRID_LINEAR_SWEEP_CONFIG=configs/experiments/minigrid-linear-unlock.json MINIGRID_LINEAR_SWEEP_SEEDS=401,402,403 ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   MODE=minigrid MINIGRID_NEURAL_CONFIG=configs/experiments/minigrid-neural-unlock.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   MODE=minigrid MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json MINIGRID_TORCH_DEVICE=auto ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
+  MODE=minigrid MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json MINIGRID_ENV_BACKEND=uv MINIGRID_PYTHON=3.12 MINIGRID_TORCH_CPU_FALLBACK=1 ./scripts/fleet_archive_run.sh wsl:host-b
   BABY_MODEL_FLEET_HOSTS="mac:host-a wsl:host-b" ./scripts/fleet_archive_run.sh
 
 MODE values:
@@ -128,6 +133,26 @@ if [[ -n "$MINIGRID_TORCH_INDEX_URL" && ! "$MINIGRID_TORCH_INDEX_URL" =~ ^https:
   exit 2
 fi
 
+if [[ ! "$MINIGRID_TORCH_CPU_FALLBACK" =~ ^(0|1)$ ]]; then
+  echo "invalid MINIGRID_TORCH_CPU_FALLBACK: $MINIGRID_TORCH_CPU_FALLBACK" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_ENV_BACKEND" =~ ^(auto|venv|uv)$ ]]; then
+  echo "invalid MINIGRID_ENV_BACKEND: $MINIGRID_ENV_BACKEND" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_PYTHON" =~ ^[A-Za-z0-9._@+-]+$ ]]; then
+  echo "invalid MINIGRID_PYTHON: $MINIGRID_PYTHON" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_VENV_DIR" =~ ^\.venv-minigrid[A-Za-z0-9._-]*$ ]]; then
+  echo "invalid MINIGRID_VENV_DIR: $MINIGRID_VENV_DIR" >&2
+  exit 2
+fi
+
 if [[ ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "invalid RUN_ID: $RUN_ID" >&2
   exit 2
@@ -157,32 +182,30 @@ case "$MODE" in
     JOB_CMD="CONFIG=$CONFIG SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"
     ;;
   minigrid)
-    MINIGRID_ENV=""
+    MINIGRID_ENV="export MINIGRID_ENV_BACKEND=$(printf '%q' "$MINIGRID_ENV_BACKEND"); export MINIGRID_PYTHON=$(printf '%q' "$MINIGRID_PYTHON"); export MINIGRID_VENV_DIR=$(printf '%q' "$MINIGRID_VENV_DIR"); export MINIGRID_TORCH_CPU_FALLBACK=$(printf '%q' "$MINIGRID_TORCH_CPU_FALLBACK"); "
     if [[ -n "$MINIGRID_EXTRA_CONFIG" ]]; then
-      MINIGRID_ENV="MINIGRID_EXTRA_CONFIG=$(printf '%q' "$MINIGRID_EXTRA_CONFIG") MINIGRID_EXTRA_SEED=$(printf '%q' "$MINIGRID_EXTRA_SEED") "
+      MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_EXTRA_CONFIG=$(printf '%q' "$MINIGRID_EXTRA_CONFIG"); export MINIGRID_EXTRA_SEED=$(printf '%q' "$MINIGRID_EXTRA_SEED"); "
     fi
     if [[ -n "$MINIGRID_CURRICULUM_CONFIG" ]]; then
-      MINIGRID_ENV="${MINIGRID_ENV}MINIGRID_CURRICULUM_CONFIG=$(printf '%q' "$MINIGRID_CURRICULUM_CONFIG") MINIGRID_CURRICULUM_SEED=$(printf '%q' "$MINIGRID_CURRICULUM_SEED") "
+      MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_CURRICULUM_CONFIG=$(printf '%q' "$MINIGRID_CURRICULUM_CONFIG"); export MINIGRID_CURRICULUM_SEED=$(printf '%q' "$MINIGRID_CURRICULUM_SEED"); "
     fi
     if [[ -n "$MINIGRID_LINEAR_CONFIG" ]]; then
-      MINIGRID_ENV="${MINIGRID_ENV}MINIGRID_LINEAR_CONFIG=$(printf '%q' "$MINIGRID_LINEAR_CONFIG") MINIGRID_LINEAR_SEED=$(printf '%q' "$MINIGRID_LINEAR_SEED") "
+      MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_LINEAR_CONFIG=$(printf '%q' "$MINIGRID_LINEAR_CONFIG"); export MINIGRID_LINEAR_SEED=$(printf '%q' "$MINIGRID_LINEAR_SEED"); "
     fi
     if [[ -n "$MINIGRID_LINEAR_SWEEP_CONFIG" ]]; then
-      MINIGRID_ENV="${MINIGRID_ENV}MINIGRID_LINEAR_SWEEP_CONFIG=$(printf '%q' "$MINIGRID_LINEAR_SWEEP_CONFIG") MINIGRID_LINEAR_SWEEP_SEEDS=$(printf '%q' "$MINIGRID_LINEAR_SWEEP_SEEDS") "
+      MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_LINEAR_SWEEP_CONFIG=$(printf '%q' "$MINIGRID_LINEAR_SWEEP_CONFIG"); export MINIGRID_LINEAR_SWEEP_SEEDS=$(printf '%q' "$MINIGRID_LINEAR_SWEEP_SEEDS"); "
     fi
     if [[ -n "$MINIGRID_NEURAL_CONFIG" ]]; then
-      MINIGRID_ENV="${MINIGRID_ENV}MINIGRID_NEURAL_CONFIG=$(printf '%q' "$MINIGRID_NEURAL_CONFIG") MINIGRID_NEURAL_SEED=$(printf '%q' "$MINIGRID_NEURAL_SEED") "
+      MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_NEURAL_CONFIG=$(printf '%q' "$MINIGRID_NEURAL_CONFIG"); export MINIGRID_NEURAL_SEED=$(printf '%q' "$MINIGRID_NEURAL_SEED"); "
     fi
     if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
-      MINIGRID_ENV="${MINIGRID_ENV}MINIGRID_TORCH_CONFIG=$(printf '%q' "$MINIGRID_TORCH_CONFIG") MINIGRID_TORCH_SEED=$(printf '%q' "$MINIGRID_TORCH_SEED") MINIGRID_TORCH_DEVICE=$(printf '%q' "$MINIGRID_TORCH_DEVICE") "
+      MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_TORCH_CONFIG=$(printf '%q' "$MINIGRID_TORCH_CONFIG"); export MINIGRID_TORCH_SEED=$(printf '%q' "$MINIGRID_TORCH_SEED"); export MINIGRID_TORCH_DEVICE=$(printf '%q' "$MINIGRID_TORCH_DEVICE"); "
       if [[ -n "$MINIGRID_TORCH_INDEX_URL" ]]; then
-        TORCH_INSTALL="python -m pip install --index-url $(printf '%q' "$MINIGRID_TORCH_INDEX_URL") torch"
-      else
-        TORCH_INSTALL="python -m pip install torch"
+        MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_TORCH_INDEX_URL=$(printf '%q' "$MINIGRID_TORCH_INDEX_URL"); "
       fi
-      JOB_CMD="PYTHON_BIN=; for candidate in python3.12 python3.13 python3.11 python3.10 python3; do if command -v \$candidate >/dev/null 2>&1; then PYTHON_BIN=\$candidate; break; fi; done; if [[ -z \$PYTHON_BIN ]]; then echo no_supported_python >&2; exit 2; fi; echo python_bin=\$PYTHON_BIN; \$PYTHON_BIN -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && $TORCH_INSTALL && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; status=\$?; echo exit=\$status; exec bash"
+      JOB_CMD="${MINIGRID_ENV}./scripts/setup_minigrid_env.sh ./scripts/verify_minigrid.sh; status=\$?; if [[ \$status -ne 0 && $(printf '%q' "$MINIGRID_TORCH_CPU_FALLBACK") == 1 && $(printf '%q' "$MINIGRID_TORCH_DEVICE") == cuda* ]]; then echo torch_cpu_fallback=1; export MINIGRID_TORCH_DEVICE=cpu; ./scripts/setup_minigrid_env.sh ./scripts/verify_minigrid.sh; status=\$?; fi; echo exit=\$status; exec bash"
     else
-      JOB_CMD="if command -v uv >/dev/null 2>&1; then ${MINIGRID_ENV}uv run --with minigrid bash scripts/verify_minigrid.sh; else python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; fi; status=\$?; echo exit=\$status; exec bash"
+      JOB_CMD="${MINIGRID_ENV}./scripts/setup_minigrid_env.sh ./scripts/verify_minigrid.sh; status=\$?; echo exit=\$status; exec bash"
     fi
     ;;
   both)

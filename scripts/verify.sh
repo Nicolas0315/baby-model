@@ -10,6 +10,14 @@ python3 -m baby_model.cli verify-config configs/experiments/v0-smoke.json
 python3 -m baby_model.cli verify-config configs/experiments/v02-sweep.json
 python3 -m baby_model.cli verify-config configs/experiments/v03-sweep.json
 python3 -m json.tool configs/experiments/minigrid-torch-unlock-smoke.json >/dev/null
+bash -n scripts/*.sh
+MINIGRID_SETUP_DRY_RUN=1 \
+MINIGRID_ENV_BACKEND=venv \
+MINIGRID_PYTHON=python3 \
+MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
+MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu \
+MINIGRID_TORCH_CPU_FALLBACK=1 \
+./scripts/setup_minigrid_env.sh >/dev/null
 VERIFY_RUN_DIR=".tmp/verify-run"
 case "$VERIFY_RUN_DIR" in
   .tmp/verify-run) rm -rf -- "$VERIFY_RUN_DIR" ;;

@@ -172,12 +172,19 @@ Updated: 2026-06-29 JST
   - one Windows/WSL worker did not complete dependency installation before the
     clean stop point.
   Exact host-level evidence is kept outside this repository in local docs.
+- Fleet MiniGrid/PyTorch setup is hardened locally:
+  - `scripts/setup_minigrid_env.sh` supports `venv` and `uv` setup backends,
+    Python selection, official PyTorch wheel index selection, and optional CPU
+    fallback after CUDA failure.
+  - `scripts/fleet_archive_run.sh` forwards those controls to tmux workers.
+  - `./scripts/verify.sh` now covers shell syntax and setup dry-run checks
+    without installing optional dependencies.
+  - Local setup smoke passed with `uv`, Python 3.12, and `minigrid==3.1.0`.
 
 ## Next
 
-- Rerun issue #12 only after choosing a compatible driver/wheel path for the
-  newer-GPU worker and a cleaner dependency install path for the remaining
-  Windows/WSL worker.
+- Rerun the issue #12 blocker workers with `MINIGRID_ENV_BACKEND=uv`,
+  `MINIGRID_PYTHON=3.12`, and explicit CPU fallback for non-GPU evidence.
 
 ## Not Yet Proven
 

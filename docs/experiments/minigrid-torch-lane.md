@@ -24,6 +24,9 @@ Retrieved: 2026-06-29 JST
   https://pytorch.org/tutorials/beginner/basics/optimization_tutorial.html
 - `torch.Tensor.to`:
   https://docs.pytorch.org/docs/2.12/generated/torch.Tensor.to.html
+- Astral uv docs via Context7 library `/astral-sh/uv`, plus local `uv venv
+  --help`: `uv venv --python`, `uv venv --allow-existing`, `UV_LINK_MODE`,
+  `uv pip install`, and `uv pip install --index-url` usage.
 
 The official PyTorch install selector reported latest stable `2.12.1` at
 retrieval time. Device checks use `torch.cuda.is_available()` for CUDA and
@@ -60,6 +63,25 @@ python3 -m pip install torch --index-url https://download.pytorch.org/whl/cu130
 python3 -m pip install torch --index-url https://download.pytorch.org/whl/cu132
 ```
 
+Fleet workers should use the repo setup wrapper so Python version selection,
+`venv` vs `uv`, and optional torch installation stay consistent:
+
+```sh
+MINIGRID_ENV_BACKEND=uv \
+MINIGRID_PYTHON=3.12 \
+MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
+MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu \
+./scripts/setup_minigrid_env.sh ./scripts/verify_minigrid.sh
+```
+
+Supported setup controls:
+
+- `MINIGRID_ENV_BACKEND=auto|venv|uv`; `auto` chooses `uv` when available.
+- `MINIGRID_PYTHON=3.12` requests a stable Python for PyTorch wheels on WSL.
+- `MINIGRID_TORCH_INDEX_URL` selects an official PyTorch wheel index.
+- `MINIGRID_TORCH_CPU_FALLBACK=1` lets fleet runs retry the same smoke on CPU
+  when an explicit CUDA device fails.
+
 ## Config
 
 - Config: `configs/experiments/minigrid-torch-unlock-smoke.json`
@@ -88,12 +110,17 @@ MODE=minigrid \
 MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
 MINIGRID_TORCH_SEED=601 \
 MINIGRID_TORCH_DEVICE=auto \
+MINIGRID_ENV_BACKEND=auto \
+MINIGRID_PYTHON=3.12 \
 ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
 ```
 
 For Windows CUDA workers, set `MINIGRID_TORCH_INDEX_URL` to the official wheel
 index for that worker, for example
 `https://download.pytorch.org/whl/cu132`.
+Set `MINIGRID_TORCH_CPU_FALLBACK=1` only when the run should preserve a CPU
+training summary after an explicit CUDA failure; keep it off for strict GPU
+proof.
 
 ## Local Verification
 
@@ -138,6 +165,16 @@ smoke only, not a scientific conclusion.
 The runner/config/verifier hook and local CPU/MPS smoke are implemented. The
 bounded fleet run is partially proven, with host-level evidence kept outside
 this repository.
+
+The fleet environment setup path was hardened after the partial run:
+
+- `scripts/setup_minigrid_env.sh` now supports `venv` and `uv` backends.
+- `scripts/fleet_archive_run.sh` forwards setup controls and can perform an
+  explicit CPU fallback after CUDA failure.
+- `./scripts/verify.sh` includes shell syntax and setup dry-run checks while
+  remaining dependency-free.
+- A local non-torch setup smoke completed with `uv`, Python 3.12, and
+  `minigrid==3.1.0`.
 
 ## Fleet Verification
 
