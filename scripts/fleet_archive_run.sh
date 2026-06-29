@@ -180,7 +180,7 @@ case "$MODE" in
       else
         TORCH_INSTALL="python -m pip install torch"
       fi
-      JOB_CMD="python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && $TORCH_INSTALL && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; status=\$?; echo exit=\$status; exec bash"
+      JOB_CMD="PYTHON_BIN=; for candidate in python3.12 python3.13 python3.11 python3.10 python3; do if command -v \$candidate >/dev/null 2>&1; then PYTHON_BIN=\$candidate; break; fi; done; if [[ -z \$PYTHON_BIN ]]; then echo no_supported_python >&2; exit 2; fi; echo python_bin=\$PYTHON_BIN; \$PYTHON_BIN -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && $TORCH_INSTALL && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; status=\$?; echo exit=\$status; exec bash"
     else
       JOB_CMD="if command -v uv >/dev/null 2>&1; then ${MINIGRID_ENV}uv run --with minigrid bash scripts/verify_minigrid.sh; else python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; fi; status=\$?; echo exit=\$status; exec bash"
     fi
