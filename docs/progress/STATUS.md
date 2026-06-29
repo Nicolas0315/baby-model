@@ -873,12 +873,28 @@ Updated: 2026-06-30 JST
   - `ZD_torch_gotoobj_two_head_state010_visibility065_state_anneal` led mean
     final-window success (`0.283`) and return (`0.178`), but won only one seed.
   - Do not promote `ZB` as a stable baseline yet.
+- Issue #60 v2.36 narrowed `ZB` vs `ZD` CPU precheck is complete:
+  - `configs/experiments/minigrid-torch-adda-v45.json`
+  - `docs/experiments/minigrid-torch-adda-v47.md`
+  - The local CPU sweep ran with seeds `4001,4002,4003,4004,4005` and
+    `torch==2.12.1`.
+  - Local artifact:
+    `.tmp/local-v60-zb-zd-narrow/20260629T161618Z/summary.md`.
+  - `ZU_torch_gotoobj_state_plus_target_visibility_b0075` won three of five
+    seeds and led mean final-window success (`0.320`), median success
+    (`0.250`), mean return (`0.192`), median return (`0.149`), and
+    target-center (`0.320`).
+  - `ZD_torch_gotoobj_two_head_state010_visibility065_state_anneal` was the
+    better two-head candidate and led target-visible (`0.590`) and target-near
+    (`0.360`), but it won only one seed and trailed `ZU` on success and return.
+  - Do not replace `ZU` with `ZB` or `ZD`, and do not escalate this narrowed
+    two-head comparison to CUDA from the CPU gate alone.
 
 ## Next
 
-- Start a narrower `ZB` vs `ZD` visibility-first refinement. The next protocol
-  should decide whether fixed state-downweighting or state-head anneal is the
-  better candidate before any baseline replacement.
+- Start a mission-preservation-first refinement from the `ZU` baseline. The
+  next protocol should preserve the `ZD` target-visible/near advantage while
+  trying to retain or beat `ZU`'s final-window success and return.
 
 ## Not Yet Proven
 
@@ -897,5 +913,7 @@ Updated: 2026-06-30 JST
   loss pressure as the likely two-head failure mode. v2.33 has only single-seed
   CPU evidence for the visibility-first fix, and v2.34 has same-seed CUDA
   replication. v2.35 has multi-seed CUDA evidence that the visibility-first
-  family is promising but not stable enough for baseline replacement.
+  family is promising but not stable enough for baseline replacement. v2.36
+  confirmed on a five-seed CPU precheck that state-head anneal is the better
+  two-head variant, but still not better than `ZU` on success and return.
 - Full objective completion.
