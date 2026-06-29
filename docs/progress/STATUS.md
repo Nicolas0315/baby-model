@@ -570,18 +570,32 @@ Updated: 2026-06-29 JST
     the lift delta was only `0.0055`, below the documented `0.010` threshold.
   - Treat v2.14 as a negative near-miss. The semantic target is learnable and
     directionally useful, but not yet strong enough to return to RL/CUDA.
+- Issue #40 v2.15 multi-seed semantic transition probe is implemented:
+  - `baby_model/minigrid_repr_probe_sweep.py`
+  - `configs/experiments/minigrid-repr-probe-v35.json`
+  - `docs/experiments/minigrid-repr-probe-v35.md`
+  - local CPU sweep ran seeds `2901,2902,2903`.
+  - Mean `target_visibility_transition` lift delta over `raw_current` was
+    `0.045099`, above the `0.010` threshold.
+  - All three seeds had non-negative semantic lift delta (`0.006`, `0.130`,
+    `0.000`), and mission-object/color accuracy never dropped below the
+    `-0.050` gate.
+  - The smallest per-seed semantic-label test set had `131` examples, above
+    the sweep's `10` example gate.
+  - Treat v2.15 as positive non-DQN evidence that the semantic transition label
+    captures a stable representation signal under scripted-policy collection.
 
 ## Next
 
-- Run a small multi-seed semantic probe or refine the semantic relation buckets
-  before returning the non-DQN signal to the RL/CUDA lane.
+- Design a bounded RL/CUDA integration test that uses the positive
+  `target_visibility_transition` signal without claiming transfer before a
+  real RL run proves it.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable representation-driven AD/DA winner across multiple CUDA seeds.
-- A non-DQN probe that improves beyond the current linear `changed` encoder
-  under scripted-policy collection.
-- Transfer of a scripted-policy representation signal back into RL/CUDA.
+- Transfer of the positive semantic scripted-policy signal into an RL/CUDA
+  condition.
 - Full objective completion.

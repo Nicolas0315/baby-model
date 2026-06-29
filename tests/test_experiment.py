@@ -55,6 +55,12 @@ from baby_model.minigrid_repr_probe import (
     transition_probe_labels,
     vector_to_sparse_features,
 )
+from baby_model.minigrid_repr_probe_sweep import (
+    DEFAULT_CONFIG_PATH as REPR_PROBE_SWEEP_DEFAULT_CONFIG_PATH,
+    aggregate_representation_probe_runs,
+    evaluate_representation_probe_sweep_decision,
+    representation_probe_sweep_summary_markdown,
+)
 import baby_model.minigrid_torch as minigrid_torch_module
 from baby_model.minigrid_torch import (
     TorchAgentConfig,
@@ -1528,6 +1534,79 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.decision.transition_min_lift_delta, 0.01)
         self.assertEqual(parsed.decision.max_mission_accuracy_drop, 0.05)
         self.assertEqual(parsed.decision.min_test_examples, 10)
+
+    def test_minigrid_repr_probe_v35_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-repr-probe-v35.json")
+        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        self.assertEqual(parsed.policy, "scripted_object")
+        self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_target_visibility"))
+        self.assertEqual(parsed.predictive_encoders[0].target_label, "target_visibility_transition")
+        self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "target_visibility_transition"))
+        self.assertEqual(parsed.decision.transition_label, "target_visibility_transition")
+
+    def test_minigrid_repr_probe_sweep_aggregate_is_dependency_free(self) -> None:
+        def run(
+            seed: int,
+            *,
+            lift_delta: float,
+            object_delta: float = 0.0,
+            color_delta: float = 0.0,
+            test_examples: int = 20,
+        ) -> dict[str, object]:
+            return {
+                "decision": {
+                    "met": lift_delta >= 0.01,
+                    "rule": {"transition_label": "target_visibility_transition"},
+                    "comparisons": {
+                        "mission_object": {"accuracy_delta": object_delta},
+                        "mission_color": {"accuracy_delta": color_delta},
+                        "target_visibility_transition": {
+                            "lift_delta": lift_delta,
+                            "baseline_lift": 0.30,
+                            "candidate_lift": 0.30 + lift_delta,
+                            "candidate_test_examples": test_examples,
+                        },
+                    },
+                },
+                "seed": seed,
+            }
+
+        runs = [
+            run(1, lift_delta=0.02),
+            run(2, lift_delta=0.01),
+            run(3, lift_delta=-0.005),
+        ]
+        aggregate = aggregate_representation_probe_runs(runs, seeds=[1, 2, 3])
+        self.assertEqual(aggregate["seed_count"], 3)
+        self.assertAlmostEqual(aggregate["mean_transition_lift_delta"], 0.008333333333333333)
+        self.assertEqual(aggregate["nonnegative_transition_lift_delta_count"], 2)
+        self.assertEqual(aggregate["min_transition_test_examples"], 20)
+        decision = evaluate_representation_probe_sweep_decision(aggregate)
+        self.assertFalse(decision["met"])
+
+        positive = aggregate_representation_probe_runs(
+            [run(1, lift_delta=0.02), run(2, lift_delta=0.015), run(3, lift_delta=0.0)],
+            seeds=[1, 2, 3],
+        )
+        self.assertTrue(evaluate_representation_probe_sweep_decision(positive)["met"])
+        low_sample = aggregate_representation_probe_runs(
+            [run(1, lift_delta=0.02), run(2, lift_delta=0.015, test_examples=9), run(3, lift_delta=0.0)],
+            seeds=[1, 2, 3],
+        )
+        self.assertFalse(evaluate_representation_probe_sweep_decision(low_sample)["met"])
+        with self.assertRaises(ValueError):
+            aggregate_representation_probe_runs([run(99, lift_delta=0.02)], seeds=[1])
+        summary = representation_probe_sweep_summary_markdown(
+            {
+                "created_at": "2026-06-29T00:00:00+00:00",
+                "hypothesis": "repr sweep",
+                "seeds": [1, 2, 3],
+                "aggregate": aggregate,
+                "decision": decision,
+            }
+        )
+        self.assertIn("mean_transition_lift_delta", summary)
+        self.assertEqual(REPR_PROBE_SWEEP_DEFAULT_CONFIG_PATH, Path("configs/experiments/minigrid-repr-probe-v35.json"))
 
     def test_minigrid_repr_relative_decision_is_dependency_free(self) -> None:
         config = parse_minigrid_representation_probe_config(
