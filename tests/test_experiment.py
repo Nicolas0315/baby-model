@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 
 from baby_model.experiment import run_suite, validate_config, write_run
+from baby_model.envs import BabyGrid
+from baby_model.sweep import parse_seeds, run_sweep
 
 
 class ExperimentTest(unittest.TestCase):
@@ -73,6 +75,39 @@ class ExperimentTest(unittest.TestCase):
                     ]
                 }
             )
+
+    def test_obstacle_grid_has_walls_and_remains_runnable(self) -> None:
+        env = BabyGrid(size=6, max_steps=20, seed=5, obstacle_count=6, toy_count=2)
+        observation = env.reset(seed=5)
+        self.assertEqual(sum(1 for value in observation if value == 1), 6)
+        result = env.step(0)
+        self.assertEqual(len(result.observation), 36)
+
+    def test_run_sweep_aggregates_conditions(self) -> None:
+        config = {
+            "environment": {"size": 5, "max_steps": 20, "obstacle_count": 3, "toy_count": 1},
+            "conditions": [
+                {
+                    "name": "base",
+                    "encoder_mode": "coarse",
+                    "episodes": 4,
+                    "decoder_delay_episodes": 1,
+                    "intrinsic_beta": 0.0,
+                    "intrinsic_mode": "none",
+                },
+                {
+                    "name": "progress",
+                    "encoder_mode": "coarse",
+                    "episodes": 4,
+                    "decoder_delay_episodes": 1,
+                    "intrinsic_beta": 0.1,
+                    "intrinsic_mode": "progress",
+                },
+            ],
+        }
+        report = run_sweep(config, parse_seeds("1,2"))
+        self.assertEqual(len(report["aggregate"]), 2)
+        self.assertIn(report["winner_by_mean_success_last_window"], {"base", "progress"})
 
 
 if __name__ == "__main__":

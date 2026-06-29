@@ -31,6 +31,7 @@ research pipeline testable before we spend GPU time.
 ./scripts/verify.sh
 python3 -m baby_model.cli run --config configs/experiments/v0-smoke.json --output-dir runs
 ./scripts/launch_tmux_local.sh
+./scripts/launch_tmux_sweep.sh
 ```
 
 ## Fleet Loop
@@ -50,5 +51,6 @@ host.
 - Research hypothesis: `docs/research/hypothesis.md`
 - Source notes: `docs/research/sources.md`
 - Experiment protocol: `docs/experiments/v0-protocol.md`
+- v0.2 sweep result: `docs/experiments/v02-sweep.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`

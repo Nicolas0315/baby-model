@@ -1,6 +1,6 @@
 # baby-model Status
 
-Updated: 2026-06-28 JST
+Updated: 2026-06-29 JST
 
 ## Proven
 
@@ -46,14 +46,23 @@ Updated: 2026-06-28 JST
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
+- v0.2 beta sweep implementation is in progress locally:
+  - richer sparse-reward BabyGrid with obstacles and multiple toys
+  - `configs/experiments/v02-sweep.json`
+  - `scripts/run_beta_sweep.sh`
+  - `scripts/launch_tmux_sweep.sh`
+- `./scripts/verify.sh` passed after adding the v0.2 sweep smoke test.
+- Local tmux sweep `baby-model-sweep` completed:
+  - `runs/sweeps/20260628T030149Z/summary.md`
+- v0.2 result: `B_encoder_first` still won all five seeds by last-window
+  success. The smallest tested progress beta, `0.05`, was closest; larger beta
+  values over-weighted intrinsic reward and reduced sparse-goal success.
 
 ## Next
 
-- Create GitHub repository and push after local verification.
-- Open GitHub issues for MiniGrid/BabyAI migration and fleet worker lanes.
-- Tune `D_baby_progress` beta and test a richer sparse-reward task where
-  intrinsic reward has room to help.
-- Prepare remote worker checkouts after the GitHub repository is available.
+- Run the v0.2 beta sweep under local tmux and fleet worker tmux lanes.
+- Open the next experiment issue for beta annealing or auxiliary prediction
+  progress instead of direct Q-target reward shaping.
 - Clear GitHub Actions billing/spending-limit blocker and rerun `verify`.
 
 ## Not Yet Proven

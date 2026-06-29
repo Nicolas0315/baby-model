@@ -1,0 +1,50 @@
+{
+  "environment": {
+    "size": 9,
+    "max_steps": 100,
+    "obstacle_count": 14,
+    "toy_count": 5
+  },
+  "conditions": [
+    {
+      "name": "B_encoder_first",
+      "encoder_mode": "coarse",
+      "episodes": 120,
+      "decoder_delay_episodes": 24,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "D_progress_b005",
+      "encoder_mode": "coarse",
+      "episodes": 120,
+      "decoder_delay_episodes": 24,
+      "intrinsic_beta": 0.05,
+      "intrinsic_mode": "progress"
+    },
+    {
+      "name": "D_progress_b010",
+      "encoder_mode": "coarse",
+      "episodes": 120,
+      "decoder_delay_episodes": 24,
+      "intrinsic_beta": 0.1,
+      "intrinsic_mode": "progress"
+    },
+    {
+      "name": "D_progress_b020",
+      "encoder_mode": "coarse",
+      "episodes": 120,
+      "decoder_delay_episodes": 24,
+      "intrinsic_beta": 0.2,
+      "intrinsic_mode": "progress"
+    },
+    {
+      "name": "D_progress_b040",
+      "encoder_mode": "coarse",
+      "episodes": 120,
+      "decoder_delay_episodes": 24,
+      "intrinsic_beta": 0.4,
+      "intrinsic_mode": "progress"
+    }
+  ]
+}

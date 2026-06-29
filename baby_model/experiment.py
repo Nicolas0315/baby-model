@@ -31,8 +31,20 @@ def default_conditions(seed: int = 7) -> list[Condition]:
     ]
 
 
-def run_condition(condition: Condition, size: int = 7, max_steps: int = 60) -> dict[str, Any]:
-    env = BabyGrid(size=size, max_steps=max_steps, seed=condition.seed)
+def run_condition(
+    condition: Condition,
+    size: int = 7,
+    max_steps: int = 60,
+    obstacle_count: int = 0,
+    toy_count: int = 3,
+) -> dict[str, Any]:
+    env = BabyGrid(
+        size=size,
+        max_steps=max_steps,
+        seed=condition.seed,
+        obstacle_count=obstacle_count,
+        toy_count=toy_count,
+    )
     encoder = FeatureEncoder(size=size, mode=condition.encoder_mode)
     agent = QAgent(seed=condition.seed)
     transition = TransitionSurprise()
@@ -122,6 +134,8 @@ def run_suite(config: dict[str, Any] | None = None, seed: int = 7) -> dict[str, 
             condition,
             size=int(env_cfg.get("size", 7)),
             max_steps=int(env_cfg.get("max_steps", 60)),
+            obstacle_count=int(env_cfg.get("obstacle_count", 0)),
+            toy_count=int(env_cfg.get("toy_count", 3)),
         )
         for condition in conditions
     ]
@@ -154,10 +168,16 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError("environment must be an object")
     size = int(env_cfg.get("size", 7))
     max_steps = int(env_cfg.get("max_steps", 60))
+    obstacle_count = int(env_cfg.get("obstacle_count", 0))
+    toy_count = int(env_cfg.get("toy_count", 3))
     if size < 4:
         raise ValueError("environment.size must be at least 4")
     if max_steps < 1:
         raise ValueError("environment.max_steps must be positive")
+    if obstacle_count < 0 or obstacle_count > (size * size - 3):
+        raise ValueError("environment.obstacle_count out of range")
+    if toy_count < 0 or toy_count > (size * size - obstacle_count - 2):
+        raise ValueError("environment.toy_count out of range")
 
     condition_cfgs = config.get("conditions", [])
     if condition_cfgs is None:
