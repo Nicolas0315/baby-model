@@ -962,6 +962,39 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.conditions[1].representation_beta, 0.3)
         self.assertEqual(parsed.conditions[2].intrinsic_target, "auxiliary")
 
+    def test_minigrid_torch_v18_dense_ladder_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v18.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1401)
+        self.assertEqual(
+            [stage.name for stage in parsed.stages],
+            [
+                "empty_warmup",
+                "goto_warmup",
+                "goto_door_warmup",
+                "open_door_warmup",
+                "doorkey_warmup",
+                "unlock_local_warmup",
+                "unlock_eval",
+            ],
+        )
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "T_torch_controllability_delay",
+                "V_torch_dense_ladder_controllability_delay",
+                "W_torch_dense_ladder_controllability_aux_progress",
+            ],
+        )
+        active = dict(parsed.active_stages_by_condition)
+        self.assertEqual(active["A_torch_hard_only_long"], ("unlock_eval",))
+        self.assertEqual(active["T_torch_controllability_delay"], ("empty_warmup", "goto_warmup", "unlock_eval"))
+        self.assertIn("doorkey_warmup", active["V_torch_dense_ladder_controllability_delay"])
+        self.assertEqual(parsed.conditions[2].episodes, 144)
+        self.assertEqual(parsed.conditions[2].representation_objective, "controllability")
+        self.assertEqual(parsed.conditions[3].intrinsic_target, "auxiliary")
+
     def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:
         class FakeTorch:
             def manual_seed(self, seed: int) -> None:

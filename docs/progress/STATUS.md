@@ -337,11 +337,23 @@ Updated: 2026-06-29 JST
   `A_torch_hard_only_long` had the higher seed win count (`2` vs `1`). Treat
   v1.7 as weak positive but not robust enough to escalate without changing the
   task ladder or representation target.
+- Issue #23 v1.8 dense controllability ladder is implemented:
+  - `configs/experiments/minigrid-torch-adda-v18.json`
+  - `docs/experiments/minigrid-torch-adda-v18.md`
+  - The config compares the v1.7-style sparse controllability ladder against a
+    denser door/key/local-unlock ladder before final `BabyAI-Unlock-v0`.
+- Local v1.8 CPU smoke passed in the existing optional PyTorch venv with
+  `torch==2.12.1` and `device=cpu`, but did not meet the CUDA escalation rule.
+  `A_torch_hard_only_long` won final-stage last-window success (`0.050`) and
+  return (`0.042`), while both dense-ladder controllability conditions stayed
+  at `0.000` success and return. Treat v1.8 as negative ladder evidence for the
+  current controllability target.
 
 ## Next
 
-- Open the next design issue for a denser task ladder or stronger representation
-  target, using v1.7 as weak positive but non-robust evidence.
+- Open the next design issue for a stronger representation target. The current
+  controllability target showed weak positive v1.7 evidence, but v1.8 suggests
+  simply densifying the task ladder is not enough.
 
 ## Not Yet Proven
 
