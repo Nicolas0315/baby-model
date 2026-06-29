@@ -34,6 +34,15 @@ python3 -m baby_model.cli run --config configs/experiments/v0-smoke.json --outpu
 ./scripts/launch_tmux_sweep.sh
 ```
 
+Optional MiniGrid/BabyAI probe:
+
+```sh
+./scripts/verify_minigrid.sh
+```
+
+This requires the optional `minigrid` dependency; setup details are in
+`docs/experiments/minigrid-protocol.md`.
+
 ## Fleet Loop
 
 Start read-only:
@@ -53,5 +62,6 @@ host.
 - Experiment protocol: `docs/experiments/v0-protocol.md`
 - v0.2 sweep result: `docs/experiments/v02-sweep.md`
 - v0.3 sweep result: `docs/experiments/v03-sweep.md`
+- MiniGrid/BabyAI migration: `docs/experiments/minigrid-protocol.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`

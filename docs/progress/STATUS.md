@@ -78,8 +78,8 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Start issue #2 MiniGrid/BabyAI migration with local-first dependency and
-  protocol design.
+- Run `./scripts/verify_minigrid.sh` inside an optional MiniGrid venv, then add
+  a trained MiniGrid config for issue #2.
 
 ## Not Yet Proven
 

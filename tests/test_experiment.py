@@ -15,6 +15,7 @@ from baby_model.experiment import (
     write_run,
 )
 from baby_model.envs import BabyGrid
+from baby_model.minigrid_probe import observation_schema, summary_markdown
 from baby_model.sweep import parse_seeds, run_sweep
 
 
@@ -231,6 +232,32 @@ class ExperimentTest(unittest.TestCase):
         for row in report["aggregate"]:
             self.assertEqual(row["seeds"], [1, 2])
             self.assertIn("condition_seeds", row)
+
+    def test_minigrid_probe_schema_and_summary_are_dependency_free(self) -> None:
+        schema = observation_schema({"mission": "go to goal", "direction": 1, "image": [[0]]})
+        self.assertEqual(schema["type"], "dict")
+        self.assertEqual(schema["keys"], ["direction", "image", "mission"])
+
+        summary = summary_markdown(
+            {
+                "created_at": "2026-06-29T00:00:00+00:00",
+                "hypothesis": "probe",
+                "episodes": 1,
+                "max_steps": 2,
+                "seed": 3,
+                "results": [
+                    {
+                        "env_id": "MiniGrid-Empty-8x8-v0",
+                        "action_n": 7,
+                        "observation_schema": schema,
+                        "success_rate": 0.0,
+                        "mean_return": 0.0,
+                        "mean_steps": 2.0,
+                    }
+                ],
+            }
+        )
+        self.assertIn("MiniGrid-Empty-8x8-v0", summary)
 
 
 if __name__ == "__main__":
