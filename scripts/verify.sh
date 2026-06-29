@@ -11,6 +11,7 @@ python3 -m baby_model.cli verify-config configs/experiments/v02-sweep.json
 python3 -m baby_model.cli verify-config configs/experiments/v03-sweep.json
 python3 -m json.tool configs/experiments/minigrid-torch-unlock-smoke.json >/dev/null
 python3 -m json.tool configs/experiments/minigrid-torch-adda-v11.json >/dev/null
+python3 -m json.tool configs/experiments/minigrid-torch-adda-v12.json >/dev/null
 python3 -m json.tool configs/fleet/gpu-wheel-policy.json >/dev/null
 python3 -m baby_model.gpu_compat --config configs/fleet/gpu-wheel-policy.json >/dev/null
 bash -n scripts/*.sh

@@ -806,6 +806,27 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(aux.intrinsic_mode, "progress")
         self.assertEqual(aux.intrinsic_target, "auxiliary")
 
+    def test_minigrid_torch_v12_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v12.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=701)
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "I_torch_long_delay",
+                "J_torch_long_aux_progress",
+                "K_torch_long_coarse_aux",
+            ],
+        )
+        self.assertEqual({condition.episodes for condition in parsed.conditions}, {48})
+        self.assertEqual(parsed.agent.batch_size, 16)
+        self.assertEqual(parsed.agent.replay_capacity, 1024)
+        aux = parsed.conditions[2]
+        self.assertEqual(aux.decoder_delay_episodes, 4)
+        self.assertEqual(aux.intrinsic_mode, "progress")
+        self.assertEqual(aux.intrinsic_target, "auxiliary")
+
     def test_minigrid_torch_sweep_aggregate_is_dependency_free(self) -> None:
         runs = [
             {
