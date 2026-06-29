@@ -81,26 +81,19 @@ MINIGRID_TORCH_CPU_FALLBACK=1
   and `E_torch_progress` stayed at `0.000`.
 - `gpu-worker-b` is blocked for CUDA by driver/wheel compatibility and should
   not be counted as GPU-proven until that external state changes.
-- `gpu-worker-c` has a CUDA 13-capable driver path, but strict `cu132` smoke
-  has not reached training. The first attempt stalled in `uv pip install torch`;
-  a resume reused a partial environment and failed `import torch` with missing
-  `libtorch_global_deps.so`. A clean retry at commit `5a803ac` confirmed
-  execution from the extracted `/home` run directory and installed MiniGrid,
-  but still left a partial Torch environment where `import torch` failed with
-  `ModuleNotFoundError: No module named 'torch.version'`. This remains an
-  install-path blocker, not a driver blocker. Use a prewarmed validated venv or
-  a different wheel install path before counting this worker as GPU-proven.
-  The fleet launcher now prepends explicit `cd`/`pwd` logging so WSL execution
-  paths are auditable before dependency installation.
-- Follow-up setup hardening adds `MINIGRID_TORCH_INSTALLER=pip` and validates
-  `import torch` plus CUDA availability before training, so partial Torch wheel
-  environments fail during setup instead of being mistaken for smoke evidence.
+- `gpu-worker-c` completed strict CUDA smoke with `cu132` at source commit
+  `d2a1c606e13e9c65e51308083169b6fd4c0abd3f` after switching Torch setup to
+  `MINIGRID_TORCH_INSTALLER=pip`. Setup proved `torch==2.12.1+cu132`,
+  `torch_cuda_available=True`, and `torch_cuda_device_count=1` before training.
+  The smoke ran on `device=cuda`; `A_torch_hard_only success_last=0.083`, while
+  `B_torch_encoder_first` and `E_torch_progress` stayed at `0.000`.
+  The earlier `uv pip` path remains documented as a partial-install risk.
 
 ## Acceptance For Issue #13
 
 - `gpu-worker-a` and `gpu-worker-c` complete strict CUDA smoke with `cu132`, or
-  each has a command-output blocker. Current state: `gpu-worker-a` passed;
-  `gpu-worker-c` has an install-path blocker.
+  each has a command-output blocker. Current state: both passed strict CUDA
+  smoke with `cu132`.
 - `gpu-worker-b` remains documented as driver-blocked unless a driver update is
   explicitly approved and verified separately.
 - Default `./scripts/verify.sh` and GitHub Actions remain green.

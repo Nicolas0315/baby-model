@@ -203,24 +203,22 @@ Updated: 2026-06-29 JST
     `A_torch_hard_only success_last=0.083`.
   - `gpu-worker-b` remains driver/wheel blocked for CUDA 13 and was not rerun
     as strict GPU in this turn.
-  - `gpu-worker-c` is driver-compatible for CUDA 13, but strict `cu132` did not
-    reach training. The original bounded attempt stalled during Torch install;
-    a resume failed `import torch` from a partial environment. A clean retry at
-    commit `5a803ac` confirmed execution from the extracted `/home` run
-    directory and installed MiniGrid, but still left a partial Torch
-    environment where `import torch` failed with
-    `ModuleNotFoundError: No module named 'torch.version'`. Host-level evidence
-    is kept outside this repository.
+  - `gpu-worker-c` completed strict CUDA smoke with `torch==2.12.1+cu132` after
+    switching Torch setup to `MINIGRID_TORCH_INSTALLER=pip`. Setup proved
+    `torch_cuda_available=True` before training; the smoke used `device=cuda`
+    and matched the worker-a table: `A_torch_hard_only success_last=0.083`,
+    `B_torch_encoder_first=0.000`, `E_torch_progress=0.000`. Host-level
+    evidence is kept outside this repository.
 
 ## Next
 
-- For issue #13, prewarm a validated `gpu-worker-c` CUDA 13 Torch environment
-  or switch the wheel install path, then rerun strict CUDA smoke; do not count
-  `gpu-worker-b` as GPU-proven until the driver/wheel compatibility path
-  changes.
+- Issue #13 can be closed once the pushed verifier is green and the GitHub
+  issue is updated. Open a separate follow-up only if the external
+  driver/wheel path for `gpu-worker-b` is approved.
 
 ## Not Yet Proven
 
-- Full-fleet GPU smoke for issue #12.
+- Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
+  compatibility and needs an explicit external state change before rerun.
 - Any robust GPU training result.
 - Full objective completion.
