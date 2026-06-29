@@ -724,19 +724,36 @@ Updated: 2026-06-29 JST
     `target_near_last=0.700`.
   - Treat v2.25 as positive single-seed CUDA replication evidence, not
     multi-seed stability proof.
+- Issue #50 v2.26 CUDA multi-seed sweep for the beta `0.1` combined objective
+  is complete:
+  - The sweep ran on `gpu-worker-c` at commit
+    `e722e6c1ed43e40a2ae5810022add8be1aa60066` with seeds
+    `3401,3402,3403`.
+  - Setup proved `torch==2.12.1+cu132`, `torch_cuda_available=True`,
+    `torch_cuda_device_count=1`, and `devices=cuda`.
+  - `ZR_torch_gotoobj_state_plus_target_visibility_b010` won two of three
+    seeds and led the aggregate table:
+    `mean_success_last=0.350`, `median_success_last=0.350`,
+    `mean_return_last=0.182`, `median_return_last=0.204`,
+    `target_visible_last=0.700`, `target_center_last=0.383`,
+    `target_near_last=0.483`.
+  - Treat `ZR` as the current strongest representation-driven AD/DA candidate
+    and the next baseline to beat.
 
 ## Next
 
-- Run a bounded multi-seed CUDA sweep for the v2.24 beta `0.1` combined
-  objective before treating it as a stable representation winner.
+- Start the next research branch from `ZR` as the current baseline: either a
+  tighter beta neighborhood around `0.1`, a true two-head implementation, or a
+  longer-horizon probe-gated run.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
-- A stable best representation-driven AD/DA winner across multiple CUDA seeds.
+- A broader stability claim beyond the bounded three-seed CUDA sweep.
 - A redesigned objective that beats the no-representation curriculum and the
   current best representation baselines under the mission-preservation probe.
   v2.23's single-head mission-conditioned target did not pass this gate, while
-  v2.24 beta `0.1` has passed one CPU seed and one matching CUDA seed.
+  v2.24 beta `0.1` passed CPU, CUDA replication, and bounded three-seed CUDA
+  gates.
 - Full objective completion.

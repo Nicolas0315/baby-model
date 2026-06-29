@@ -90,3 +90,43 @@ CUDA artifact:
 CUDA decision: `ZR` reproduced the CPU-positive direction on the same seed.
 This justifies a bounded multi-seed CUDA sweep, but still does not prove
 stability.
+
+## CUDA Multi-Seed Sweep
+
+Issue: https://github.com/Nicolas0315/baby-model/issues/50
+
+A three-seed CUDA sweep completed on `gpu-worker-c` at source commit
+`e722e6c1ed43e40a2ae5810022add8be1aa60066` with seeds `3401,3402,3403`.
+Setup proved:
+
+- `torch_version=2.12.1+cu132`
+- `torch_cuda_available=True`
+- `torch_cuda_device_count=1`
+- `devices=cuda`
+
+Host-level evidence is kept outside the repository at:
+
+`/Users/s30519/work/docs/research/baby-model/fleet-torch-adda-v39-sweep-2026-06-29.md`
+
+CUDA sweep artifact:
+
+`.tmp/verify-minigrid/torch-sweep/20260629T143646Z/summary.md`
+
+| condition | wins | mean_success_last | median_success_last | mean_return_last | median_return_last | target_visible_last | target_center_last | target_near_last |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ZK_torch_gotoobj_curriculum_no_repr_delay` | 1 | 0.167 | 0.150 | 0.081 | 0.063 | 0.500 | 0.183 | 0.300 |
+| `ZM_torch_gotoobj_state_plus_delta_matched_delay` | 0 | 0.133 | 0.100 | 0.062 | 0.050 | 0.450 | 0.200 | 0.233 |
+| `ZN_torch_gotoobj_target_visibility_matched_delay` | 0 | 0.167 | 0.100 | 0.108 | 0.083 | 0.450 | 0.217 | 0.233 |
+| `ZO_torch_gotoobj_state_plus_target_visibility_b030` | 0 | 0.100 | 0.100 | 0.059 | 0.059 | 0.467 | 0.150 | 0.200 |
+| `ZR_torch_gotoobj_state_plus_target_visibility_b010` | 2 | 0.350 | 0.350 | 0.182 | 0.204 | 0.700 | 0.383 | 0.483 |
+| `ZS_torch_gotoobj_state_plus_target_visibility_b050` | 0 | 0.250 | 0.250 | 0.127 | 0.097 | 0.500 | 0.300 | 0.267 |
+
+Per-seed winners:
+
+- `3401`: `ZR_torch_gotoobj_state_plus_target_visibility_b010`
+- `3402`: `ZR_torch_gotoobj_state_plus_target_visibility_b010`
+- `3403`: `ZK_torch_gotoobj_curriculum_no_repr_delay`
+
+Decision: `ZR` passed the bounded multi-seed CUDA rule and is now the strongest
+representation-driven candidate in this repo. This does not complete the full
+research objective; it creates the next baseline to beat.
