@@ -22,6 +22,7 @@ class TorchDeviceUnavailable(RuntimeError):
 
 
 TASK_SIGNAL_DIM = 16
+CONTROLLABILITY_DIM = 1
 ACTION_LEFT = 0
 ACTION_RIGHT = 1
 ACTION_FORWARD = 2
@@ -94,8 +95,8 @@ class TorchDQNAgent:
         self.target.eval()
         self.representation_predictor = None
         parameters = list(self.model.parameters())
-        if representation_objective in {"next_feature", "next_task_signal"}:
-            target_dim = config.feature_dim if representation_objective == "next_feature" else TASK_SIGNAL_DIM
+        if representation_objective in {"next_feature", "next_task_signal", "controllability"}:
+            target_dim = _representation_target_dim(representation_objective, config.feature_dim)
             self.representation_predictor = build_next_feature_predictor(
                 torch,
                 hidden_dim=config.hidden_dim,
@@ -181,7 +182,7 @@ class TorchDQNAgent:
     ) -> float | None:
         if self.representation_objective == "none":
             return None
-        if self.representation_objective not in {"next_feature", "next_task_signal", "action_prior"} or self.representation_predictor is None:
+        if self.representation_objective not in {"next_feature", "next_task_signal", "action_prior", "controllability"} or self.representation_predictor is None:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
         state = self._feature_tensor(features).unsqueeze(0)
@@ -427,7 +428,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         if intrinsic_target not in {"reward", "auxiliary"}:
             raise ValueError(f"invalid intrinsic_target for {name}")
         representation_objective = str(item.get("representation_objective", "none"))
-        if representation_objective not in {"none", "next_feature", "next_task_signal", "action_prior"}:
+        if representation_objective not in {"none", "next_feature", "next_task_signal", "action_prior", "controllability"}:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
         action_prior_weight = float(item.get("action_prior_weight", 0.0))
@@ -607,6 +608,7 @@ def run_minigrid_torch_condition(
 
                 representation_target = representation_target_for_objective(
                     condition=condition,
+                    features=features,
                     observation=observation,
                     next_observation=next_observation,
                     next_features=next_features,
@@ -847,6 +849,7 @@ def _run_minigrid_torch_stage(
 
                 representation_target = representation_target_for_objective(
                     condition=condition,
+                    features=features,
                     observation=observation,
                     next_observation=next_observation,
                     next_features=next_features,
@@ -973,8 +976,19 @@ def build_action_prior_predictor(torch: Any, hidden_dim: int, actions: int) -> A
     )
 
 
+def _representation_target_dim(representation_objective: str, feature_dim: int) -> int:
+    if representation_objective == "next_feature":
+        return feature_dim
+    if representation_objective == "next_task_signal":
+        return TASK_SIGNAL_DIM
+    if representation_objective == "controllability":
+        return CONTROLLABILITY_DIM
+    raise ValueError(f"unsupported representation objective: {representation_objective}")
+
+
 def representation_target_for_objective(
     condition: Condition,
+    features: SparseFeatures,
     observation: Any,
     next_observation: Any,
     next_features: SparseFeatures,
@@ -985,9 +999,16 @@ def representation_target_for_objective(
         return dense_feature_vector(next_features, feature_dim)
     if condition.representation_objective == "next_task_signal":
         return task_signal_vector(next_observation)
+    if condition.representation_objective == "controllability":
+        return controllability_target(features, next_features)
     if condition.representation_objective == "action_prior":
         return action_prior_label(observation, actions)
     return []
+
+
+def controllability_target(features: SparseFeatures, next_features: SparseFeatures) -> list[float]:
+    changed = feature_signature(features) != feature_signature(next_features)
+    return [1.0 if changed else 0.0]
 
 
 def action_prior_label(observation: Any, actions: int) -> int:

@@ -48,6 +48,7 @@ from baby_model.minigrid_torch import (
     TorchAgentConfig,
     TorchCurriculumStage,
     action_prior_label,
+    controllability_target,
     dense_feature_vector,
     parse_minigrid_torch_config,
     run_minigrid_torch_curriculum_condition,
@@ -882,6 +883,10 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(action_prior_label(observation_with_front([2, 0, 0]), actions=7), 0)
         self.assertEqual(action_prior_label(observation_with_front([8, 0, 0], mission="go to the goal"), actions=7), 2)
 
+    def test_minigrid_torch_controllability_target_is_dependency_free(self) -> None:
+        self.assertEqual(controllability_target({1: 1.0, 2: 0.0}, {1: 1.0}), [0.0])
+        self.assertEqual(controllability_target({1: 1.0}, {1: 1.0, 3: 1.0}), [1.0])
+
     def test_minigrid_torch_v14_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v14.json")
         parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1001)
@@ -940,6 +945,22 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.conditions[1].action_prior_weight, 0.0)
         self.assertEqual(parsed.conditions[2].representation_objective, "action_prior")
         self.assertEqual(parsed.conditions[2].action_prior_weight, 0.25)
+
+    def test_minigrid_torch_v17_controllability_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v17.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1301)
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "T_torch_controllability_delay",
+                "U_torch_controllability_aux_progress",
+            ],
+        )
+        self.assertEqual(parsed.conditions[1].representation_objective, "controllability")
+        self.assertEqual(parsed.conditions[1].representation_beta, 0.3)
+        self.assertEqual(parsed.conditions[2].intrinsic_target, "auxiliary")
 
     def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:
         class FakeTorch:

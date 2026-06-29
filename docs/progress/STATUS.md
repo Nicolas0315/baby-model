@@ -315,11 +315,21 @@ Updated: 2026-06-29 JST
   final-window success and median return of `0.000`, and each condition won one
   seed. Treat v1.6 as non-robust evidence; do not escalate the current
   action-prior design further without changing the signal or task family.
+- Issue #22 v1.7 controllability AD/DA signal is implemented:
+  - `configs/experiments/minigrid-torch-adda-v17.json`
+  - `docs/experiments/minigrid-torch-adda-v17.md`
+  - PyTorch DQN now supports a `controllability` representation objective that
+    predicts whether the chosen action changes the sparse observation signature.
+- Local v1.7 CPU smoke passed in the existing optional PyTorch venv with
+  `torch==2.12.1` and `device=cpu`. `T_torch_controllability_delay` beat
+  `A_torch_hard_only_long` on final-stage last-window success (`0.050` vs
+  `0.000`) and return (`0.048` vs `0.000`) with non-zero representation updates,
+  meeting the v1.7 CUDA escalation rule.
 
 ## Next
 
-- Open the next AD/DA redesign issue for a stronger v1.7 signal or task family,
-  using v1.6 as evidence that the current heuristic action-prior is not robust.
+- Run a bounded v1.7 CUDA smoke for `T_torch_controllability_delay` on
+  `gpu-worker-c` before treating the controllability signal as useful.
 
 ## Not Yet Proven
 
