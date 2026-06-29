@@ -46,7 +46,8 @@ Updated: 2026-06-29 JST
   - harder MiniGrid/BabyAI trained run: `https://github.com/Nicolas0315/baby-model/issues/7` closed
   - v0.4 MiniGrid curriculum to BabyAI Unlock: `https://github.com/Nicolas0315/baby-model/issues/8` closed
   - v0.5 function approximation pilot: `https://github.com/Nicolas0315/baby-model/issues/9` closed
-  - v0.6 multi-seed linear BabyAI Unlock sweep: `https://github.com/Nicolas0315/baby-model/issues/10`
+  - v0.6 multi-seed linear BabyAI Unlock sweep: `https://github.com/Nicolas0315/baby-model/issues/10` closed
+  - v0.7 optional neural encoder pilot: `https://github.com/Nicolas0315/baby-model/issues/11`
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -141,8 +142,7 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Decide whether to broaden the linear sweep or move to a stronger optional
-  neural encoder lane.
+- Track the stronger optional neural encoder lane in issue #11.
 
 ## Not Yet Proven
 
