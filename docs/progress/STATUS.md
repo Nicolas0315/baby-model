@@ -301,13 +301,17 @@ Updated: 2026-06-29 JST
   action-prior family did not beat `A_torch_hard_only_long` on final-window
   success; `S_torch_action_prior_policy_mix` had one all-window success
   (`success_all=0.021`) but `success_last=0.000` and `return_last=0.000`.
+- A bounded v1.6 CUDA smoke completed on `gpu-worker-c` at commit
+  `ff9ef00afb7c6d79b8f580db4cde8cc8c8cab0fc`. The run was executable on
+  `torch==2.12.1+cu132` and `device=cuda`. `R_torch_action_prior_delay` beat
+  the hard-only baseline on final-stage last-window success (`0.050` vs
+  `0.000`) and return (`0.044` vs `0.000`). This meets the v1.6 escalation
+  rule; run a multi-seed CUDA sweep before treating the result as robust.
 
 ## Next
 
-- Run a bounded v1.6 CUDA smoke for the corrected action-prior label on
-  `gpu-worker-c`. Escalate to a multi-seed CUDA sweep only if the corrected
-  action-prior family beats the hard-only baseline under the documented decision
-  rule.
+- Open and execute the v1.6 multi-seed CUDA sweep follow-up for
+  `R_torch_action_prior_delay`.
 
 ## Not Yet Proven
 

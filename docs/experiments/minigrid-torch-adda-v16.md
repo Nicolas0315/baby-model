@@ -81,4 +81,17 @@ action-prior label, the action-prior family did not beat the hard-only baseline
 on CPU. `S_torch_action_prior_policy_mix` recovered one all-window success, but
 not in the final window and not enough to meet the decision rule.
 
-Bounded CUDA smoke for the corrected action-prior label is pending.
+A bounded CUDA smoke for the corrected action-prior label completed on
+`gpu-worker-c` with `torch==2.12.1+cu132`, `torch_cuda_available=True`, and
+`device=cuda`.
+
+| condition | final_stage | prior | success_all | success_last | return_last | rep_loss | rep_updates | updates |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only_long` | `unlock_eval` | 0.000 | 0.000 | 0.000 | 0.000 | 0.0000 | 0 | 5745 |
+| `R_torch_action_prior_delay` | `unlock_eval` | 0.000 | 0.021 | 0.050 | 0.044 | 0.0455 | 7475 | 7222 |
+| `S_torch_action_prior_policy_mix` | `unlock_eval` | 0.250 | 0.000 | 0.000 | 0.000 | 0.0239 | 6975 | 6726 |
+
+CUDA conclusion: `R_torch_action_prior_delay` met the v1.6 escalation rule by
+beating the hard-only baseline on final-stage last-window success (`0.050` vs
+`0.000`) and return (`0.044` vs `0.000`). Escalate this condition family to a
+three-seed CUDA sweep before treating the result as robust.
