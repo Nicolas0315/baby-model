@@ -100,6 +100,11 @@ worker classes on 2026-06-29 via `git archive | ssh | tmux` at commit
 trained smoke table as local verification. Exact host-level evidence is kept
 outside this repository in local docs.
 
+The harder `BabyAI-Unlock-v0` extra config was replicated on all four
+configured worker classes on 2026-06-29 at commit
+`b89b50faa7fa50d805d5247372a0c5c5697a3e56`. Every worker produced the same
+extra table as local verification.
+
 ## Metrics Schema
 
 Future trained runs should preserve this top-level shape:

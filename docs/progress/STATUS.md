@@ -97,11 +97,16 @@ Updated: 2026-06-29 JST
   last-window success (`0.050`). `B_encoder_first` had higher all-window
   success (`0.050`) but no last-window success, and `E_progress_anneal` did not
   reach external reward.
+- Fleet hard-task replication completed on all four configured worker classes
+  at commit `b89b50faa7fa50d805d5247372a0c5c5697a3e56`; all workers produced
+  the same `BabyAI-Unlock-v0` extra table. Exact host-level evidence is kept
+  outside this repository in local docs.
 
 ## Next
 
-- Replicate the `BabyAI-Unlock-v0` hard config through fleet tmux while runtime
-  remains lightweight, then update issue #7.
+- Decide the next research branch: curriculum or function approximation. The
+  current tabular Q-learning setup does not yet support the Baby-AD/DA variant
+  on harder sparse BabyAI tasks.
 
 ## Not Yet Proven
 

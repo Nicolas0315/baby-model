@@ -36,6 +36,11 @@ MINIGRID_EXTRA_SEED=201 \
 ./scripts/verify_minigrid.sh
 ```
 
+Fleet replication used the same extra verifier path at commit
+`b89b50faa7fa50d805d5247372a0c5c5697a3e56`; all four configured worker classes
+produced the same table. Exact host-level evidence is kept outside this
+repository in local docs.
+
 ## Result
 
 | condition | success_all | success_last | return_last | mean_steps_success | intrinsic_last |
