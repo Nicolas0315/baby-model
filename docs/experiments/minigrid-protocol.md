@@ -146,6 +146,11 @@ The curriculum config was replicated on all four configured worker classes on
 2026-06-29 at commit `976591913b649e50b2455e0dbf44b39b8a4e1c9e`. Every worker
 produced the same final-stage table as local verification.
 
+The linear function-approximation config was replicated on all four configured
+worker classes on 2026-06-29 at commit
+`4077130a2c1d2dcca4dfa39e690f27a77edbf557`. Every worker produced the same
+linear table as local verification.
+
 ## Metrics Schema
 
 Future trained runs should preserve this top-level shape:

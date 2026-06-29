@@ -55,6 +55,10 @@ treated as a signal to replicate, not as a conclusion.
 
 ## Next
 
-Replicate through fleet tmux. If all workers match, the next question is
-whether the same effect holds across seeds or with a stronger optional neural
-encoder.
+The linear config was replicated on all four configured worker classes at
+commit `4077130a2c1d2dcca4dfa39e690f27a77edbf557`. Every worker produced the
+same result, with `B_linear_encoder_first` as the last-window winner. Exact
+host-level evidence is kept outside this repository in local docs.
+
+The next question is whether the same effect holds across seeds or with a
+stronger optional neural encoder.

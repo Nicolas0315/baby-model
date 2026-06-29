@@ -122,16 +122,16 @@ Updated: 2026-06-29 JST
 - Local linear result on `BabyAI-Unlock-v0`: `B_linear_encoder_first` won by
   last-window success (`0.050`). This is the first local hard-task run where an
   encoder-first variant retained last-window success.
+- Fleet linear replication completed on all four configured worker classes at
+  commit `4077130a2c1d2dcca4dfa39e690f27a77edbf557`; all workers produced the
+  same linear table. Exact host-level evidence is kept outside this repository
+  in local docs.
 
 ## Next
 
-- Replicate the linear function-approximation run through fleet tmux while
-  runtime remains lightweight.
-- If replicated, run a multi-seed linear sweep or a stronger optional neural
-  encoder lane.
+- Run a multi-seed linear sweep or a stronger optional neural encoder lane.
 
 ## Not Yet Proven
 
 - Any GPU training result.
-- Fleet replication of the linear function-approximation run.
 - Full objective completion.
