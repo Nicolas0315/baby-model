@@ -46,6 +46,7 @@ from baby_model.minigrid_torch import (
     dense_feature_vector,
     parse_minigrid_torch_config,
     select_torch_device,
+    task_signal_vector,
     torch_summary_markdown,
 )
 from baby_model.minigrid_torch_sweep import aggregate_torch_reports, torch_sweep_summary_markdown
@@ -843,6 +844,41 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(predictive.representation_objective, "next_feature")
         self.assertEqual(predictive.representation_beta, 0.10)
         self.assertEqual(predictive.decoder_delay_episodes, 4)
+        self.assertEqual(parsed.conditions[2].intrinsic_target, "auxiliary")
+
+    def test_minigrid_torch_task_signal_vector_is_dependency_free(self) -> None:
+        observation = {
+            "direction": 2,
+            "mission": "unlock the door with the key",
+            "image": [
+                [[4, 1, 2], [5, 0, 0]],
+                [[8, 0, 0], [2, 0, 0]],
+            ],
+        }
+        vector = task_signal_vector(observation)
+        self.assertEqual(len(vector), 16)
+        self.assertAlmostEqual(vector[0], 2 / 3)
+        self.assertEqual(vector[1:5], [1.0, 0.0, 1.0, 1.0])
+        self.assertAlmostEqual(vector[5], 0.25)
+        self.assertAlmostEqual(vector[6], 0.25)
+        self.assertAlmostEqual(vector[7], 0.25)
+        self.assertAlmostEqual(vector[13], 0.25)
+
+    def test_minigrid_torch_v14_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v14.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1001)
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "N_torch_task_signal_delay",
+                "O_torch_task_signal_aux_progress",
+            ],
+        )
+        predictive = parsed.conditions[1]
+        self.assertEqual(predictive.representation_objective, "next_task_signal")
+        self.assertEqual(predictive.representation_beta, 0.3)
         self.assertEqual(parsed.conditions[2].intrinsic_target, "auxiliary")
 
     def test_minigrid_torch_rejects_invalid_representation_objective(self) -> None:

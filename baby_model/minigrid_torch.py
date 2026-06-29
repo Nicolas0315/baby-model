@@ -21,6 +21,9 @@ class TorchDeviceUnavailable(RuntimeError):
     pass
 
 
+TASK_SIGNAL_DIM = 16
+
+
 @dataclass(frozen=True)
 class TorchAgentConfig:
     feature_dim: int
@@ -69,12 +72,13 @@ class TorchDQNAgent:
         self.target.eval()
         self.representation_predictor = None
         parameters = list(self.model.parameters())
-        if representation_objective == "next_feature":
+        if representation_objective in {"next_feature", "next_task_signal"}:
+            target_dim = config.feature_dim if representation_objective == "next_feature" else TASK_SIGNAL_DIM
             self.representation_predictor = build_next_feature_predictor(
                 torch,
                 hidden_dim=config.hidden_dim,
                 actions=actions,
-                feature_dim=config.feature_dim,
+                target_dim=target_dim,
             ).to(device)
             parameters.extend(self.representation_predictor.parameters())
         self.optimizer = torch.optim.Adam(parameters, lr=config.learning_rate)
@@ -129,14 +133,19 @@ class TorchDQNAgent:
         if self.updates % self.config.target_sync_updates == 0:
             self.target.load_state_dict(self.model.state_dict())
 
-    def update_representation(self, features: SparseFeatures, action: int, next_features: SparseFeatures) -> float | None:
+    def update_representation(
+        self,
+        features: SparseFeatures,
+        action: int,
+        target_vector: list[float],
+    ) -> float | None:
         if self.representation_objective == "none":
             return None
-        if self.representation_objective != "next_feature" or self.representation_predictor is None:
+        if self.representation_objective not in {"next_feature", "next_task_signal"} or self.representation_predictor is None:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
         state = self._feature_tensor(features).unsqueeze(0)
-        target = self._feature_tensor(next_features).unsqueeze(0)
+        target = self.torch.tensor([target_vector], dtype=self.torch.float32, device=self.device)
         hidden = self.model.encode(state)
         action_one_hot = self.torch.zeros((1, self.actions), dtype=self.torch.float32, device=self.device)
         action_one_hot[0, action] = 1.0
@@ -319,7 +328,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         if intrinsic_target not in {"reward", "auxiliary"}:
             raise ValueError(f"invalid intrinsic_target for {name}")
         representation_objective = str(item.get("representation_objective", "none"))
-        if representation_objective not in {"none", "next_feature"}:
+        if representation_objective not in {"none", "next_feature", "next_task_signal"}:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
         episodes = int(item.get("episodes", 0))
@@ -443,7 +452,11 @@ def run_minigrid_torch_condition(
                 total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
                 done = bool(terminated or truncated)
 
-                loss = agent.update_representation(features, action, next_features)
+                if condition.representation_objective == "next_feature":
+                    representation_target = dense_feature_vector(next_features, agent_config.feature_dim)
+                else:
+                    representation_target = task_signal_vector(next_observation)
+                loss = agent.update_representation(features, action, representation_target)
                 if loss is not None:
                     representation_loss += loss
                     representation_updates += 1
@@ -532,12 +545,67 @@ def build_q_network(torch: Any, feature_dim: int, hidden_dim: int, actions: int)
     return QNetwork()
 
 
-def build_next_feature_predictor(torch: Any, hidden_dim: int, actions: int, feature_dim: int) -> Any:
+def build_next_feature_predictor(torch: Any, hidden_dim: int, actions: int, target_dim: int) -> Any:
     return torch.nn.Sequential(
         torch.nn.Linear(hidden_dim + actions, hidden_dim),
         torch.nn.ReLU(),
-        torch.nn.Linear(hidden_dim, feature_dim),
+        torch.nn.Linear(hidden_dim, target_dim),
     )
+
+
+def task_signal_vector(observation: Any) -> list[float]:
+    if not isinstance(observation, dict):
+        return [0.0 for _ in range(TASK_SIGNAL_DIM)]
+    image = observation.get("image")
+    if hasattr(image, "tolist"):
+        image = image.tolist()
+    cells = _flat_image_cells(image)
+    cell_count = max(1, len(cells))
+    type_counts: dict[int, int] = {}
+    door_state_counts = {0: 0, 1: 0, 2: 0}
+    for cell in cells:
+        if len(cell) < 3:
+            continue
+        obj_type = int(cell[0])
+        state = int(cell[2])
+        type_counts[obj_type] = type_counts.get(obj_type, 0) + 1
+        if obj_type == 4 and state in door_state_counts:
+            door_state_counts[state] += 1
+
+    mission = str(observation.get("mission", "")).lower()
+    direction = float(observation.get("direction", 0))
+    norm = float(cell_count)
+    return [
+        min(1.0, max(0.0, direction / 3.0)),
+        1.0 if "unlock" in mission else 0.0,
+        1.0 if "open" in mission else 0.0,
+        1.0 if "key" in mission else 0.0,
+        1.0 if "door" in mission else 0.0,
+        type_counts.get(4, 0) / norm,
+        type_counts.get(5, 0) / norm,
+        type_counts.get(8, 0) / norm,
+        type_counts.get(6, 0) / norm,
+        type_counts.get(7, 0) / norm,
+        type_counts.get(2, 0) / norm,
+        door_state_counts[0] / norm,
+        door_state_counts[1] / norm,
+        door_state_counts[2] / norm,
+        1.0 if type_counts.get(5, 0) == 0 and "key" in mission else 0.0,
+        1.0 if type_counts.get(4, 0) == 0 and "door" in mission else 0.0,
+    ]
+
+
+def _flat_image_cells(image: Any) -> list[list[int]]:
+    if not isinstance(image, list):
+        return []
+    cells: list[list[int]] = []
+    for row in image:
+        if not isinstance(row, list):
+            continue
+        for cell in row:
+            if isinstance(cell, list):
+                cells.append(cell)
+    return cells
 
 
 def dense_feature_vector(features: SparseFeatures, feature_dim: int) -> list[float]:

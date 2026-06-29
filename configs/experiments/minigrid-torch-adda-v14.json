@@ -1,0 +1,50 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v1.4: predict task-relevant unlock signals on BabyAI Unlock",
+  "environment": {
+    "id": "BabyAI-Unlock-v0",
+    "max_steps": 120,
+    "quiet_env_output": true
+  },
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "auto"
+  },
+  "conditions": [
+    {
+      "name": "A_torch_hard_only_long",
+      "encoder_mode": "raw",
+      "episodes": 48,
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "N_torch_task_signal_delay",
+      "encoder_mode": "raw",
+      "episodes": 48,
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "next_task_signal",
+      "representation_beta": 0.3
+    },
+    {
+      "name": "O_torch_task_signal_aux_progress",
+      "encoder_mode": "raw",
+      "episodes": 48,
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.03,
+      "intrinsic_mode": "progress",
+      "intrinsic_target": "auxiliary",
+      "representation_objective": "next_task_signal",
+      "representation_beta": 0.3
+    }
+  ]
+}
