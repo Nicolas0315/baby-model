@@ -86,7 +86,9 @@ MINIGRID_TORCH_CPU_FALLBACK=1
   a partial environment and reached `torch` import, but failed with missing
   `libtorch_global_deps.so`. It remains an install-path blocker, not a driver
   blocker. Use `MINIGRID_ENV_CLEAR=1` for future strict GPU retries so partial
-  wheel installs are not trusted.
+  wheel installs are not trusted. The fleet launcher now starts tmux panes in
+  the extracted run directory and prepends an explicit `cd`/`pwd` to worker
+  jobs, making WSL execution paths auditable before dependency installation.
 
 ## Acceptance For Issue #13
 

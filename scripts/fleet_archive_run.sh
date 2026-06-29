@@ -240,10 +240,13 @@ rm -f "\$archive"
 cd "\$run_dir"
 echo run_id=$run_id_q
 echo commit=$(git -C "$ROOT" rev-parse HEAD)
+job_cmd=$job_q
+run_dir_q="\$(printf '%q' "\$run_dir")"
+tmux_job="cd \$run_dir_q && echo pwd=\\\$(pwd) && \$job_cmd"
 if tmux has-session -t $session_q 2>/dev/null; then
   echo session_exists=$session_q
 else
-  tmux new-session -d -s $session_q -n $mode_q $job_q
+  tmux new-session -d -s $session_q -n $mode_q -c "\$run_dir" "\$tmux_job"
   echo session_started=$session_q
 fi
 tmux list-panes -t $session_q -F '#{session_name}:#{window_index}.#{pane_index} pid=#{pane_pid} cmd=#{pane_current_command} cwd=#{pane_current_path}'

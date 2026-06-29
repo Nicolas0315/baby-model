@@ -207,8 +207,10 @@ Updated: 2026-06-29 JST
     reach training because wheel installation stalled inside the bounded smoke
     window. A resume attempt reached `torch` import but failed from a partial
     environment with missing `libtorch_global_deps.so`; future retries should
-    use `MINIGRID_ENV_CLEAR=1`. Host-level evidence is kept outside this
-    repository.
+    use `MINIGRID_ENV_CLEAR=1`. The fleet launcher now starts tmux panes in the
+    extracted run directory and prepends explicit `cd`/`pwd` logging so WSL
+    execution paths are auditable before dependency installation. Host-level
+    evidence is kept outside this repository.
 
 ## Next
 
