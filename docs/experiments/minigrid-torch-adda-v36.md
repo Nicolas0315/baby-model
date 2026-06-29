@@ -88,7 +88,23 @@ success (`0.400` vs `0.100`) and final-stage return (`0.274` vs `0.031`) with
 non-zero representation updates, satisfying the mission-preservation proxy. It
 also beat the state-plus-delta candidate on both metrics in this bounded smoke.
 
-Conclusion: this is positive CPU-first RL integration evidence for the
-semantic transition signal. It still does not prove CUDA or multi-seed
-stability; the next step should be a bounded CUDA replication lane before
-promoting the objective as a stable RL result.
+## CUDA Replication
+
+A bounded single-seed CUDA smoke completed on `gpu-worker-c` at source commit
+`8f628a562324fdcd7ea19209edf665a0fb027f0b` with `torch==2.12.1+cu132`,
+`torch_cuda_available=True`, and `device=cuda`.
+
+Summary artifact on the worker:
+
+`.tmp/verify-minigrid/torch/20260629T132251Z/summary.md`
+
+| condition | final_stage | success_all | success_last | return_last | rep_loss | rep_updates | updates |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ZK_torch_gotoobj_curriculum_no_repr_delay` | `goto_obj_eval` | 0.167 | 0.100 | 0.031 | 0.0000 | 0 | 2065 |
+| `ZM_torch_gotoobj_state_plus_delta_matched_delay` | `goto_obj_eval` | 0.083 | 0.100 | 0.066 | 0.0077 | 2334 | 2205 |
+| `ZN_torch_gotoobj_target_visibility_matched_delay` | `goto_obj_eval` | 0.375 | 0.400 | 0.274 | 0.0047 | 1997 | 1862 |
+
+Conclusion: v2.16 now has positive CPU-first RL integration evidence and a
+matching bounded CUDA replication on `gpu-worker-c`. It still does not prove
+multi-seed stability; the next step should be a CUDA multi-seed matched sweep
+before promoting the objective as a stable RL result.

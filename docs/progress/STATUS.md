@@ -601,12 +601,18 @@ Updated: 2026-06-29 JST
   - v2.16 uses final-stage external success/return as the mission-preservation
     proxy because the RL runner does not directly score mission-object/color
     probe accuracy.
-  - Treat v2.16 as positive CPU-first RL integration evidence, not yet CUDA or
+  - A bounded CUDA smoke on `gpu-worker-c` at commit
+    `8f628a562324fdcd7ea19209edf665a0fb027f0b` reproduced the same winner with
+    `torch==2.12.1+cu132`, `torch_cuda_available=True`, and `device=cuda`.
+  - CUDA `ZN` again beat the matched no-representation curriculum on
+    final-stage last-window success (`0.400` vs `0.100`) and return (`0.274`
+    vs `0.031`) with `1997` representation updates.
+  - Treat v2.16 as positive single-seed CUDA replication evidence, not yet
     multi-seed proof.
 
 ## Next
 
-- Run a bounded CUDA replication for the v2.16 semantic-transition RL
+- Run a CUDA multi-seed matched sweep for the v2.16 semantic-transition RL
   condition before promoting it as a stable RL result.
 
 ## Not Yet Proven
@@ -614,5 +620,5 @@ Updated: 2026-06-29 JST
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable representation-driven AD/DA winner across multiple CUDA seeds.
-- CUDA and multi-seed proof for the positive semantic-transition RL condition.
+- Multi-seed proof for the positive semantic-transition RL condition.
 - Full objective completion.
