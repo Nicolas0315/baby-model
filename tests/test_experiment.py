@@ -83,6 +83,21 @@ class ExperimentTest(unittest.TestCase):
         result = env.step(0)
         self.assertEqual(len(result.observation), 36)
 
+    def test_obstacle_grid_rejects_overfull_layout(self) -> None:
+        with self.assertRaises(ValueError):
+            BabyGrid(size=4, obstacle_count=14, toy_count=1)
+
+    def test_wall_collision_keeps_position_and_reports_blocked(self) -> None:
+        env = BabyGrid(size=4, max_steps=10, collision_penalty=-0.25)
+        env.agent = (1, 1)
+        env.goal = (3, 3)
+        env.walls = ((2, 1),)
+        env.toys = ()
+        result = env.step(1)
+        self.assertEqual(env.agent, (1, 1))
+        self.assertEqual(result.info["blocked"], 1)
+        self.assertEqual(result.reward, -0.25)
+
     def test_run_sweep_aggregates_conditions(self) -> None:
         config = {
             "environment": {"size": 5, "max_steps": 20, "obstacle_count": 3, "toy_count": 1},
@@ -108,6 +123,10 @@ class ExperimentTest(unittest.TestCase):
         report = run_sweep(config, parse_seeds("1,2"))
         self.assertEqual(len(report["aggregate"]), 2)
         self.assertIn(report["winner_by_mean_success_last_window"], {"base", "progress"})
+        self.assertEqual(report["seeds"], [1, 2])
+        for row in report["aggregate"]:
+            self.assertEqual(row["seeds"], [1, 2])
+            self.assertIn("condition_seeds", row)
 
 
 if __name__ == "__main__":

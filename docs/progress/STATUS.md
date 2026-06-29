@@ -59,7 +59,7 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Run the v0.2 beta sweep under local tmux and fleet worker tmux lanes.
+- Run the v0.2 beta sweep under fleet worker tmux lanes.
 - Open the next experiment issue for beta annealing or auxiliary prediction
   progress instead of direct Q-target reward shaping.
 

@@ -27,7 +27,14 @@ Retired or stale nodes are excluded.
    SESSION=baby-model ITERATIONS=5 ./scripts/launch_tmux_local.sh
    ```
 
-5. Pull back only metrics summaries, not secrets or shell history.
+5. For credential-free remote execution from the orchestrator, stream the
+   current commit as a git archive and start the worker job in tmux:
+
+   ```sh
+   MODE=both SEEDS=101,102,103,104,105 ./scripts/fleet_archive_run.sh mac:<host> wsl:<host>
+   ```
+
+6. Pull back only metrics summaries, not secrets or shell history.
 
 ## Private Host Mapping
 

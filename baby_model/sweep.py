@@ -22,16 +22,23 @@ def run_sweep(config: dict[str, Any], seeds: list[int]) -> dict[str, Any]:
     reports = [{"seed": seed, "report": run_suite(config=config, seed=seed)} for seed in seeds]
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for item in reports:
-        seed = item["seed"]
+        sweep_seed = item["seed"]
         for row in item["report"]["results"]:
-            grouped[row["name"]].append({"seed": seed, **row})
+            grouped[row["name"]].append(
+                {
+                    **row,
+                    "condition_seed": row["seed"],
+                    "sweep_seed": sweep_seed,
+                }
+            )
 
     aggregate = []
     for name, rows in sorted(grouped.items()):
         aggregate.append(
             {
                 "name": name,
-                "seeds": [row["seed"] for row in rows],
+                "seeds": [row["sweep_seed"] for row in rows],
+                "condition_seeds": [row["condition_seed"] for row in rows],
                 "wins": sum(1 for item in reports if item["report"]["winner_last_window"] == name),
                 "mean_success_rate_last_window": mean(row["success_rate_last_window"] for row in rows),
                 "mean_success_rate_all": mean(row["success_rate_all"] for row in rows),

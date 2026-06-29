@@ -30,7 +30,9 @@ Run command:
 SESSION=baby-model-sweep SEEDS=101,102,103,104,105 ./scripts/launch_tmux_sweep.sh
 ```
 
-Local tmux summary: `runs/sweeps/20260628T030149Z/summary.md`
+Local raw artifact on the current Mac:
+`runs/sweeps/20260628T030149Z/summary.md`. The `runs/` directory is
+gitignored, so the durable result is transcribed below.
 
 | condition | wins | mean_success_last | mean_success_all | mean_steps_success | intrinsic_last |
 | --- | ---: | ---: | ---: | ---: | ---: |

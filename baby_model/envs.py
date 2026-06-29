@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from random import Random
-from collections import deque
 from typing import Iterable
 
 
@@ -42,10 +42,14 @@ class BabyGrid:
     ) -> None:
         if size < 4:
             raise ValueError("size must be at least 4")
+        if max_steps < 1:
+            raise ValueError("max_steps must be positive")
         if obstacle_count < 0:
             raise ValueError("obstacle_count must be non-negative")
         if toy_count < 0:
             raise ValueError("toy_count must be non-negative")
+        if obstacle_count + toy_count > size * size - 2:
+            raise ValueError("obstacle_count + toy_count leaves no room for agent and goal")
         self.size = size
         self.max_steps = max_steps
         self.obstacle_count = obstacle_count
