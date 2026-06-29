@@ -19,6 +19,11 @@ from baby_model.experiment import (
     write_run,
 )
 from baby_model.envs import BabyGrid
+from baby_model.minigrid_curriculum import (
+    curriculum_summary_markdown,
+    parse_minigrid_curriculum_config,
+    run_minigrid_curriculum_suite,
+)
 from baby_model.minigrid_experiment import encode_observation, parse_minigrid_config, run_minigrid_suite
 from baby_model.minigrid_probe import observation_schema, summary_markdown
 from baby_model.sweep import parse_seeds, run_sweep
@@ -364,6 +369,93 @@ class ExperimentTest(unittest.TestCase):
                 sys.modules.pop("minigrid", None)
             else:
                 sys.modules["minigrid"] = previous_minigrid
+
+    def test_minigrid_curriculum_config_and_runner_are_dependency_free(self) -> None:
+        config = {
+            "stages": [
+                {"name": "warmup", "env_id": "FakeWarmup-v0", "max_steps": 1, "episodes": 2},
+                {"name": "eval", "env_id": "FakeEval-v0", "max_steps": 1, "episodes": 2},
+            ],
+            "conditions": [
+                {
+                    "name": "hard_only",
+                    "encoder_mode": "raw",
+                    "active_stages": ["eval"],
+                    "decoder_delay_episodes": 0,
+                    "intrinsic_beta": 0.0,
+                    "intrinsic_mode": "none",
+                },
+                {
+                    "name": "curriculum",
+                    "encoder_mode": "coarse",
+                    "active_stages": ["warmup", "eval"],
+                    "decoder_delay_episodes": 1,
+                    "intrinsic_beta": 0.0,
+                    "intrinsic_mode": "none",
+                },
+            ],
+        }
+        parsed = parse_minigrid_curriculum_config(config, seed=17)
+        self.assertEqual([stage.name for stage in parsed.stages], ["warmup", "eval"])
+        self.assertEqual(parsed.conditions[0].condition.episodes, 2)
+        self.assertEqual(parsed.conditions[1].condition.episodes, 4)
+
+        class FakeImage:
+            def tolist(self) -> list[list[list[int]]]:
+                return [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+
+        observation = {"image": FakeImage(), "direction": 0, "mission": "go"}
+        made_envs: list[str] = []
+
+        class FakeActionSpace:
+            n = 2
+
+            def seed(self, seed: int) -> None:
+                self.last_seed = seed
+
+        class FakeEnv:
+            def __init__(self, env_id: str) -> None:
+                self.env_id = env_id
+                self.action_space = FakeActionSpace()
+
+            def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
+                return observation, {}
+
+            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+                reward = 1.0 if self.env_id == "FakeEval-v0" else 0.0
+                return observation, reward, True, False, {}
+
+            def close(self) -> None:
+                pass
+
+        fake_gym = types.ModuleType("gymnasium")
+
+        def make_env(env_id: str) -> FakeEnv:
+            made_envs.append(env_id)
+            return FakeEnv(env_id)
+
+        fake_gym.make = make_env  # type: ignore[attr-defined]
+        fake_minigrid = types.ModuleType("minigrid")
+        previous_gym = sys.modules.get("gymnasium")
+        previous_minigrid = sys.modules.get("minigrid")
+        sys.modules["gymnasium"] = fake_gym
+        sys.modules["minigrid"] = fake_minigrid
+        try:
+            report = run_minigrid_curriculum_suite(config, seed=17)
+        finally:
+            if previous_gym is None:
+                sys.modules.pop("gymnasium", None)
+            else:
+                sys.modules["gymnasium"] = previous_gym
+            if previous_minigrid is None:
+                sys.modules.pop("minigrid", None)
+            else:
+                sys.modules["minigrid"] = previous_minigrid
+
+        self.assertEqual(made_envs, ["FakeEval-v0", "FakeWarmup-v0", "FakeEval-v0"])
+        self.assertIn(report["winner_final_last_window"], {"hard_only", "curriculum"})
+        self.assertEqual(report["results"][1]["final_stage"]["stage"], "eval")
+        self.assertIn("MiniGrid curriculum", curriculum_summary_markdown(report))
 
 
 if __name__ == "__main__":

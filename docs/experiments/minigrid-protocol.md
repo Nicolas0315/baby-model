@@ -37,6 +37,14 @@ MINIGRID_EXTRA_SEED=201 \
 ./scripts/verify_minigrid.sh
 ```
 
+Run the default probe and smoke plus a curriculum config:
+
+```sh
+MINIGRID_CURRICULUM_CONFIG=configs/experiments/minigrid-curriculum-unlock.json \
+MINIGRID_CURRICULUM_SEED=301 \
+./scripts/verify_minigrid.sh
+```
+
 ## Probe Environments
 
 The optional probe starts with:
@@ -91,6 +99,17 @@ Harder trained result on `BabyAI-Unlock-v0`, 60 episodes:
 
 The hard-task local result is recorded in
 `docs/experiments/minigrid-babyai-unlock.md`.
+
+Curriculum result on `BabyAI-Unlock-v0` final stage, 60 final-stage episodes:
+
+| condition | final_success_all | final_success_last | final_return_last | mean_steps_success |
+| --- | ---: | ---: | ---: | ---: |
+| `A_hard_only` | 0.017 | 0.050 | 0.039 | 143.00 |
+| `B_curriculum_encoder_first` | 0.017 | 0.000 | 0.000 | 45.00 |
+| `E_curriculum_progress` | 0.000 | 0.000 | 0.000 |  |
+
+The curriculum result is recorded in
+`docs/experiments/minigrid-curriculum-unlock.md`.
 
 ## Fleet Verification
 

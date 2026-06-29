@@ -1,0 +1,50 @@
+{
+  "hypothesis": "Baby-AD/DA MiniGrid curriculum to BabyAI Unlock",
+  "quiet_env_output": true,
+  "stages": [
+    {
+      "name": "empty_warmup",
+      "env_id": "MiniGrid-Empty-5x5-v0",
+      "max_steps": 80,
+      "episodes": 40
+    },
+    {
+      "name": "goto_warmup",
+      "env_id": "BabyAI-GoToRedBall-v0",
+      "max_steps": 80,
+      "episodes": 40
+    },
+    {
+      "name": "unlock_eval",
+      "env_id": "BabyAI-Unlock-v0",
+      "max_steps": 160,
+      "episodes": 60
+    }
+  ],
+  "conditions": [
+    {
+      "name": "A_hard_only",
+      "encoder_mode": "raw",
+      "active_stages": ["unlock_eval"],
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "B_curriculum_encoder_first",
+      "encoder_mode": "coarse",
+      "active_stages": ["empty_warmup", "goto_warmup", "unlock_eval"],
+      "decoder_delay_episodes": 40,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "E_curriculum_progress",
+      "encoder_mode": "coarse",
+      "active_stages": ["empty_warmup", "goto_warmup", "unlock_eval"],
+      "decoder_delay_episodes": 40,
+      "intrinsic_beta": 0.03,
+      "intrinsic_mode": "progress"
+    }
+  ]
+}

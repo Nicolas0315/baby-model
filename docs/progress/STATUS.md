@@ -44,6 +44,7 @@ Updated: 2026-06-29 JST
   - v0.2 progress-reward tuning/richer task: `https://github.com/Nicolas0315/baby-model/issues/5` closed
   - v0.3 annealed or auxiliary progress reward: `https://github.com/Nicolas0315/baby-model/issues/6` closed
   - harder MiniGrid/BabyAI trained run: `https://github.com/Nicolas0315/baby-model/issues/7` closed
+  - v0.4 MiniGrid curriculum to BabyAI Unlock: `https://github.com/Nicolas0315/baby-model/issues/8`
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -101,14 +102,24 @@ Updated: 2026-06-29 JST
   at commit `b89b50faa7fa50d805d5247372a0c5c5697a3e56`; all workers produced
   the same `BabyAI-Unlock-v0` extra table. Exact host-level evidence is kept
   outside this repository in local docs.
+- MiniGrid curriculum runner is implemented locally:
+  - `baby_model/minigrid_curriculum.py`
+  - `configs/experiments/minigrid-curriculum-unlock.json`
+  - optional verifier support via `MINIGRID_CURRICULUM_CONFIG`
+- Local curriculum result on `BabyAI-Unlock-v0` final stage: `A_hard_only`
+  still won by final-stage last-window success (`0.050`). The curriculum
+  conditions did not preserve final-stage success, so this is another negative
+  result for the current tabular implementation.
 
 ## Next
 
-- Decide the next research branch: curriculum or function approximation. The
-  current tabular Q-learning setup does not yet support the Baby-AD/DA variant
-  on harder sparse BabyAI tasks.
+- Replicate the curriculum run through fleet tmux while runtime remains
+  lightweight.
+- Open the next branch for function approximation or a stronger representation
+  model. More beta-only tuning in the same tabular setup is not promising.
 
 ## Not Yet Proven
 
 - Any GPU training result.
+- Fleet replication of the curriculum run.
 - Full objective completion.

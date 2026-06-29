@@ -64,5 +64,7 @@ host.
 - v0.3 sweep result: `docs/experiments/v03-sweep.md`
 - MiniGrid/BabyAI migration: `docs/experiments/minigrid-protocol.md`
 - BabyAI Unlock hard task: `docs/experiments/minigrid-babyai-unlock.md`
+- MiniGrid curriculum to BabyAI Unlock:
+  `docs/experiments/minigrid-curriculum-unlock.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`
