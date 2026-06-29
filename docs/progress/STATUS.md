@@ -651,17 +651,28 @@ Updated: 2026-06-29 JST
     `0.350` success_last; `0.376` vs `0.219` return_last).
   - Treat v2.20 as positive single-seed CUDA replication evidence, not yet
     multi-seed proof.
+- Issue #46 v2.21 CUDA multi-seed sweep for the combined objective is complete:
+  - The sweep ran on `gpu-worker-c` with seeds `3101,3102,3103`,
+    `torch==2.12.1+cu132`, and `devices=cuda`.
+  - `ZO_torch_gotoobj_state_plus_target_visibility_delay` won one seed, but
+    did not pass the multi-seed decision rule.
+  - `ZO` lost mean final-stage last-window success to both `ZM` and `ZN`
+    (`0.350` vs `0.450` and `0.417`) and lost mean return to both (`0.208` vs
+    `0.275` and `0.289`).
+  - Treat v2.21 as negative stability evidence for the simple combined target:
+    the positive single-seed CPU/CUDA result did not generalize across this
+    three-seed CUDA sweep.
 
 ## Next
 
-- Run a CUDA multi-seed sweep for the combined `state_plus_target_visibility`
-  objective before treating it as a stable representation winner.
+- Stop escalating the simple concatenation target. Add a direct
+  mission-preservation probe inside the RL runner or redesign the auxiliary
+  objective before spending more CUDA.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable best representation-driven AD/DA winner across multiple CUDA seeds.
-- Multi-seed proof for the combined `state_plus_target_visibility` objective.
 - Direct mission-preservation probe inside the RL runner.
 - Full objective completion.

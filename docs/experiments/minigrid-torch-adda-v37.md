@@ -103,3 +103,37 @@ no-representation curriculum, and ran non-zero representation updates.
 Conclusion: v2.20 is positive single-seed CUDA replication evidence for the
 combined `state_plus_target_visibility` objective. It still does not prove
 multi-seed stability; the next step should be a bounded CUDA multi-seed sweep.
+
+## CUDA Multi-Seed Sweep
+
+A bounded three-seed CUDA sweep completed on `gpu-worker-c` at source commit
+`41389b1a24b46ff7385c9fedeeb2ed9f2c3d3b5b` with `torch==2.12.1+cu132`,
+`torch_cuda_available=True`, and `devices=cuda`.
+
+Summary artifact on the worker:
+
+`.tmp/verify-minigrid/torch-sweep/20260629T135815Z/summary.md`
+
+Seeds: `3101,3102,3103`
+
+| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | median_return_last |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ZK_torch_gotoobj_curriculum_no_repr_delay` | 0 | 0.361 | 0.333 | 0.350 | 0.215 | 0.219 |
+| `ZM_torch_gotoobj_state_plus_delta_matched_delay` | 1 | 0.444 | 0.450 | 0.300 | 0.275 | 0.180 |
+| `ZN_torch_gotoobj_target_visibility_matched_delay` | 1 | 0.403 | 0.417 | 0.450 | 0.289 | 0.269 |
+| `ZO_torch_gotoobj_state_plus_target_visibility_delay` | 1 | 0.319 | 0.350 | 0.350 | 0.208 | 0.207 |
+
+Per-seed winners:
+
+- `3101`: `ZO_torch_gotoobj_state_plus_target_visibility_delay`
+- `3102`: `ZN_torch_gotoobj_target_visibility_matched_delay`
+- `3103`: `ZM_torch_gotoobj_state_plus_delta_matched_delay`
+
+Decision: v2.21 did not meet the multi-seed rule. `ZO` won one seed and tied
+or beat `ZK` on final-window success, but it lost mean final-window success and
+mean final-window return to both `ZM` and `ZN`.
+
+Conclusion: the combined objective has positive single-seed CPU/CUDA evidence,
+but the signal did not generalize across this three-seed CUDA sweep. The next
+lane should stop escalating the simple concatenation target and instead add a
+direct mission-preservation probe or redesign the auxiliary objective.
