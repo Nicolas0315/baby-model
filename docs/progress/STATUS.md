@@ -739,12 +739,26 @@ Updated: 2026-06-29 JST
     `target_near_last=0.483`.
   - Treat `ZR` as the current strongest representation-driven AD/DA candidate
     and the next baseline to beat.
+- Issue #51 v2.27 tight beta-neighborhood CPU gate is implemented:
+  - `configs/experiments/minigrid-torch-adda-v40.json`
+  - `docs/experiments/minigrid-torch-adda-v40.md`
+  - Tested `state_plus_target_visibility` beta values `0.05`, `0.075`, `0.1`,
+    `0.125`, and `0.15` against the `ZK` no-representation curriculum.
+  - Local CPU smoke on seed `3501` completed with `torch==2.12.1` and
+    `device=cpu`.
+  - `ZT_torch_gotoobj_state_plus_target_visibility_b005` won the CPU gate:
+    `success_last=0.650`, `return_last=0.472`,
+    `target_visible_last=0.850`, `target_center_last=0.650`,
+    `target_near_last=0.700`.
+  - `ZT` beat the current `ZR` beta `0.1` baseline on final-window success,
+    return, and all mission-preservation probe columns in this CPU smoke.
+  - This justifies bounded CUDA replication for beta `0.05`, not a baseline
+    replacement until CUDA evidence exists.
 
 ## Next
 
-- Start the next research branch from `ZR` as the current baseline: either a
-  tighter beta neighborhood around `0.1`, a true two-head implementation, or a
-  longer-horizon probe-gated run.
+- Run bounded CUDA replication for the v2.27 beta `0.05` candidate before
+  treating it as a replacement for `ZR`.
 
 ## Not Yet Proven
 
@@ -755,5 +769,5 @@ Updated: 2026-06-29 JST
   current best representation baselines under the mission-preservation probe.
   v2.23's single-head mission-conditioned target did not pass this gate, while
   v2.24 beta `0.1` passed CPU, CUDA replication, and bounded three-seed CUDA
-  gates.
+  gates. v2.27 beta `0.05` has only CPU evidence so far.
 - Full objective completion.
