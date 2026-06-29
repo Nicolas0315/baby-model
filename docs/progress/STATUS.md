@@ -397,11 +397,23 @@ Updated: 2026-06-29 JST
   (`success_all=0.021`), but both state-plus-delta conditions had final-stage
   last-window success and return of `0.000`. Treat v2.2 as weak but
   non-escalating target evidence.
+- Issue #28 v2.3 dense key-door ladder is implemented:
+  - `configs/experiments/minigrid-torch-adda-v23.json`
+  - `docs/experiments/minigrid-torch-adda-v23.md`
+  - The config evaluates `state_plus_delta` on a denser key-door ladder with
+    door navigation, door opening, DoorKey, UnlockLocal, and UnlockPickup stages
+    before final `BabyAI-Unlock-v0`.
+- Local v2.3 CPU smoke passed in the existing optional PyTorch venv with
+  `torch==2.12.1` and `device=cpu`, but did not meet the CUDA escalation rule.
+  `ZF_torch_dense_keydoor_state_plus_delta_delay` reached one all-window
+  final-stage success (`success_all=0.021`), but both dense conditions had
+  final-stage last-window success and return of `0.000`. Treat v2.3 as negative
+  ladder evidence: intermediate tasks are learnable, but they did not transfer
+  to stable final unlock success under the current PyTorch DQN setup.
 
 ## Next
 
-- Design a denser key-door ladder with more observable key pickup, locked-door,
-  open-door, and goal transitions before the final unlock stage.
+- Redesign around a task-family change or a non-DQN representation learner.
 
 ## Not Yet Proven
 

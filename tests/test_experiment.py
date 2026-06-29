@@ -1146,6 +1146,40 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.conditions[2].representation_beta, 0.3)
         self.assertEqual(parsed.conditions[3].intrinsic_target, "auxiliary")
 
+    def test_minigrid_torch_v23_dense_keydoor_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v23.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1901)
+        self.assertEqual(
+            [stage.name for stage in parsed.stages],
+            [
+                "empty_warmup",
+                "goto_warmup",
+                "goto_door_warmup",
+                "open_door_warmup",
+                "doorkey_warmup",
+                "unlock_local_warmup",
+                "unlock_pickup_warmup",
+                "unlock_eval",
+            ],
+        )
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "T_torch_controllability_delay",
+                "ZF_torch_dense_keydoor_state_plus_delta_delay",
+                "ZG_torch_dense_keydoor_state_plus_delta_aux_progress",
+            ],
+        )
+        active = dict(parsed.active_stages_by_condition)
+        self.assertEqual(active["A_torch_hard_only_long"], ("unlock_eval",))
+        self.assertEqual(active["T_torch_controllability_delay"], ("empty_warmup", "goto_warmup", "unlock_eval"))
+        self.assertIn("unlock_pickup_warmup", active["ZF_torch_dense_keydoor_state_plus_delta_delay"])
+        self.assertEqual(parsed.conditions[2].episodes, 164)
+        self.assertEqual(parsed.conditions[2].representation_objective, "state_plus_delta")
+        self.assertEqual(parsed.conditions[3].intrinsic_target, "auxiliary")
+
     def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:
         class FakeTorch:
             def manual_seed(self, seed: int) -> None:
