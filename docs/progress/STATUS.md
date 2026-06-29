@@ -843,12 +843,25 @@ Updated: 2026-06-30 JST
     target-near rate (`0.400` vs `0.250`).
   - This justifies bounded CUDA replication for `ZB`, not a baseline
     replacement until CUDA evidence exists.
+- Issue #58 v2.34 CUDA replication for visibility-first `ZB` is complete:
+  - `docs/experiments/minigrid-torch-adda-v45.md`
+  - The CUDA smoke ran on `rtx4090` / WSL Ubuntu at commit
+    `6fc5a5923eb3374bb8468a198120fd67677edb4e` with seed `3901`.
+  - Setup proved `NVIDIA GeForce RTX 4090`, driver `610.62`,
+    `torch==2.11.0+cu128`, `cuda_available=True`, and `device=cuda`.
+  - Remote artifact:
+    `~/work/baby-model-cuda-6fc5a59/.tmp/rtx4090-v58-zb-cuda/20260629T155900Z/summary.md`.
+  - CUDA reproduced the CPU gate: `ZB` again won final-window success
+    (`0.250`), return (`0.172`), target visibility (`0.650`), and
+    target-near rate (`0.400`) over same-seed `ZU`.
+  - Promote `ZB` to a bounded three-seed CUDA sweep before baseline
+    replacement.
 
 ## Next
 
-- Run bounded CUDA replication for
-  `ZB_torch_gotoobj_two_head_state010_visibility065`, then decide whether to
-  promote the visibility-first protocol beyond single-seed CPU evidence.
+- Run a bounded three-seed CUDA sweep for
+  `ZB_torch_gotoobj_two_head_state010_visibility065` against the current `ZU`
+  baseline.
 
 ## Not Yet Proven
 
@@ -865,5 +878,6 @@ Updated: 2026-06-30 JST
   underperformed the single combined `ZU` baseline on CPU. v2.32's diagnostics
   and anneal/gate variants also underperformed `ZU`, but identified state-head
   loss pressure as the likely two-head failure mode. v2.33 has only single-seed
-  CPU evidence for the visibility-first fix.
+  CPU evidence for the visibility-first fix, and v2.34 has same-seed CUDA
+  replication but not multi-seed stability.
 - Full objective completion.
