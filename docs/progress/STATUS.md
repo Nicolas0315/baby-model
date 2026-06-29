@@ -889,12 +889,29 @@ Updated: 2026-06-30 JST
     (`0.360`), but it won only one seed and trailed `ZU` on success and return.
   - Do not replace `ZU` with `ZB` or `ZD`, and do not escalate this narrowed
     two-head comparison to CUDA from the CPU gate alone.
+- Issue #61 v2.37 mission-preservation-first CPU precheck is complete:
+  - `configs/experiments/minigrid-torch-adda-v46.json`
+  - `docs/experiments/minigrid-torch-adda-v48.md`
+  - The local CPU sweep ran with seeds `4101,4102,4103,4104,4105` and
+    `torch==2.12.1`.
+  - Local artifact:
+    `.tmp/local-v61-mission-preservation/20260629T162559Z/summary.md`.
+  - `ZE_torch_gotoobj_state_plus_mission_target_b005` won four of five seeds
+    and beat `ZU` on mean final-window success (`0.290` vs `0.210`), median
+    success (`0.350` vs `0.250`), mean return (`0.177` vs `0.132`), median
+    return (`0.222` vs `0.177`), target-visible (`0.620` vs `0.470`),
+    target-center (`0.310` vs `0.240`), and target-near (`0.390` vs `0.270`).
+  - `ZF_torch_gotoobj_state_plus_mission_target_b0075` underperformed, so the
+    positive signal is the lighter beta `0.05` mission-conditioned combined
+    objective, not a matched-beta replacement.
+  - Promote `ZE` to bounded CUDA replication before any baseline replacement.
 
 ## Next
 
-- Start a mission-preservation-first refinement from the `ZU` baseline. The
-  next protocol should preserve the `ZD` target-visible/near advantage while
-  trying to retain or beat `ZU`'s final-window success and return.
+- Run a bounded CUDA replication for
+  `ZE_torch_gotoobj_state_plus_mission_target_b005` on the same v2.37 protocol.
+  If CUDA reproduces the same-seed direction, follow with a multi-seed CUDA
+  gate before replacing `ZU`.
 
 ## Not Yet Proven
 
@@ -915,5 +932,8 @@ Updated: 2026-06-30 JST
   replication. v2.35 has multi-seed CUDA evidence that the visibility-first
   family is promising but not stable enough for baseline replacement. v2.36
   confirmed on a five-seed CPU precheck that state-head anneal is the better
-  two-head variant, but still not better than `ZU` on success and return.
+  two-head variant, but still not better than `ZU` on success and return. v2.37
+  found a positive CPU signal for low-beta `state_plus_mission_target`, but it
+  still needs CUDA replication and multi-seed confirmation before baseline
+  replacement.
 - Full objective completion.
