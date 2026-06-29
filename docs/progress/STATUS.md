@@ -504,11 +504,30 @@ Updated: 2026-06-29 JST
     (`0.139` vs `0.150`).
   - Treat v2.10 as negative evidence for a plain next-signature-bucket
     predictive objective under the current random-policy dataset.
+- Issue #36 v2.11 scripted-policy non-DQN representation probe is implemented:
+  - `baby_model/minigrid_repr_probe.py`
+  - `configs/experiments/minigrid-repr-probe-v31.json`
+  - `docs/experiments/minigrid-repr-probe-v31.md`
+  - local CPU smoke collected `964` GoToObj-family scripted-policy transitions
+    after correcting MiniGrid image-axis handling to `image[x][y][channel]`.
+  - `predictive_changed` reached held-out `changed` accuracy `1.000`, but
+    held-out lift was only `0.083` because the scripted dataset made `changed`
+    highly imbalanced.
+  - The `changed` probe did not meet the v2.11 rule: `predictive_changed`
+    lift was `-0.010`, below the v2.10 random-policy external baseline
+    `0.209`.
+  - The scripted dataset still improved fixed `next_signature_bucket`
+    separability: `raw_current` lift rose to `0.646`, versus v2.10
+    random-policy `0.134`.
+  - Treat v2.11 as negative for the current scripted `changed` encoder, but
+    positive evidence that scripted collection produces a more structured
+    dataset for richer transition labels.
 
 ## Next
 
-- Design the next non-DQN probe around a more informative scripted-policy
-  dataset or a different transition label surface before returning to RL/CUDA.
+- Use the corrected scripted-policy dataset with a transition label that
+  benefits from the new data distribution, especially `next_signature_bucket`
+  or a semantic object/color transition label.
 
 ## Not Yet Proven
 
@@ -516,5 +535,5 @@ Updated: 2026-06-29 JST
   compatibility and needs an explicit external state change before rerun.
 - A stable representation-driven AD/DA winner across multiple CUDA seeds.
 - A non-DQN probe that improves beyond the current linear `changed` encoder.
-- A policy-generated dataset for the non-DQN representation probe.
+- Transfer of a scripted-policy representation signal back into RL/CUDA.
 - Full objective completion.

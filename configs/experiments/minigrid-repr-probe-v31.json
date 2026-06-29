@@ -1,0 +1,55 @@
+{
+  "hypothesis": "Baby-AD/DA v2.11: scripted-policy non-DQN representation probe on GoToObj transitions",
+  "dataset": {
+    "policy": "scripted_object",
+    "quiet_env_output": true,
+    "test_every": 5,
+    "signature_buckets": 16,
+    "envs": [
+      {
+        "name": "goto_red_ball",
+        "env_id": "BabyAI-GoToRedBall-v0",
+        "episodes": 6,
+        "max_steps": 80
+      },
+      {
+        "name": "goto_obj",
+        "env_id": "BabyAI-GoToObj-v0",
+        "episodes": 10,
+        "max_steps": 80
+      }
+    ]
+  },
+  "features": {
+    "feature_dim": 1024,
+    "encoder_mode": "raw",
+    "feature_sets": ["raw_current", "predictive_changed"]
+  },
+  "training": {
+    "predictive_encoders": [
+      {
+        "name": "predictive_changed",
+        "target_label": "changed",
+        "epochs": 5,
+        "learning_rate": 0.08,
+        "include_action": true,
+        "include_raw_passthrough": true,
+        "score_scale": 1.0,
+        "prediction_weight": 1.0
+      }
+    ]
+  },
+  "decision": {
+    "mode": "external_transition_baseline",
+    "labels": ["mission_object", "mission_color", "changed"],
+    "min_accuracy": 0.6,
+    "min_lift": 0.05,
+    "min_test_examples": 10,
+    "baseline_feature_set": "raw_current",
+    "candidate_feature_set": "predictive_changed",
+    "transition_label": "changed",
+    "transition_min_lift_delta": 0.01,
+    "external_transition_lift_baseline": 0.209,
+    "max_mission_accuracy_drop": 0.05
+  }
+}

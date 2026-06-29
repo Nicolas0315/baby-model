@@ -21,6 +21,11 @@ DEFAULT_FEATURE_SETS = ("raw_current", "affordance_current")
 SUPPORTED_LABELS = ("mission_object", "mission_color", "changed", "next_signature_bucket")
 OBJECT_WORDS = ("ball", "box", "key", "door", "goal")
 COLOR_WORDS = ("red", "green", "blue", "purple", "yellow", "grey", "gray")
+MINIGRID_OBJECT_TO_IDX = {"door": 4, "key": 5, "ball": 6, "box": 7, "goal": 8}
+MINIGRID_COLOR_TO_IDX = {"red": 0, "green": 1, "blue": 2, "purple": 3, "yellow": 4, "grey": 5, "gray": 5}
+SCRIPTED_ACTION_LEFT = 0
+SCRIPTED_ACTION_RIGHT = 1
+SCRIPTED_ACTION_FORWARD = 2
 
 
 @dataclass(frozen=True)
@@ -44,6 +49,7 @@ class ProbeDecisionConfig:
     transition_label: str
     changed_min_lift_delta: float
     transition_min_lift_delta: float
+    external_transition_lift_baseline: float
     max_mission_accuracy_drop: float
 
 
@@ -191,6 +197,7 @@ def run_minigrid_representation_probe(config: dict[str, Any], seed: int = 2301) 
                 "transition_label": parsed.decision.transition_label,
                 "changed_min_lift_delta": parsed.decision.changed_min_lift_delta,
                 "transition_min_lift_delta": parsed.decision.transition_min_lift_delta,
+                "external_transition_lift_baseline": parsed.decision.external_transition_lift_baseline,
                 "max_mission_accuracy_drop": parsed.decision.max_mission_accuracy_drop,
             },
         },
@@ -257,8 +264,8 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
     test_every = int(dataset.get("test_every", 5))
     signature_buckets = int(dataset.get("signature_buckets", 16))
     quiet_env_output = bool(dataset.get("quiet_env_output", True))
-    if policy != "random":
-        raise ValueError("dataset.policy must be random")
+    if policy not in {"random", "scripted_object"}:
+        raise ValueError("dataset.policy must be random or scripted_object")
     if test_every < 2:
         raise ValueError("dataset.test_every must be at least 2")
     if signature_buckets < 2:
@@ -283,14 +290,17 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
     if min_test_examples < 1:
         raise ValueError("decision.min_test_examples must be positive")
     mode = str(decision_cfg.get("mode", "absolute_all_labels"))
-    if mode not in {"absolute_all_labels", "relative_to_baseline", "relative_to_reference"}:
-        raise ValueError("decision.mode must be absolute_all_labels, relative_to_baseline, or relative_to_reference")
+    if mode not in {"absolute_all_labels", "relative_to_baseline", "relative_to_reference", "external_transition_baseline"}:
+        raise ValueError(
+            "decision.mode must be absolute_all_labels, relative_to_baseline, relative_to_reference, or external_transition_baseline"
+        )
     baseline_feature_set = str(decision_cfg.get("baseline_feature_set", "raw_current"))
     reference_feature_set = str(decision_cfg.get("reference_feature_set", "predictive_encoder"))
     candidate_feature_set = str(decision_cfg.get("candidate_feature_set", "predictive_encoder"))
     transition_label = str(decision_cfg.get("transition_label", "changed"))
     changed_min_lift_delta = float(decision_cfg.get("changed_min_lift_delta", 0.05))
     transition_min_lift_delta = float(decision_cfg.get("transition_min_lift_delta", 0.01))
+    external_transition_lift_baseline = float(decision_cfg.get("external_transition_lift_baseline", 0.0))
     max_mission_accuracy_drop = float(decision_cfg.get("max_mission_accuracy_drop", 0.05))
     if transition_label not in SUPPORTED_LABELS:
         raise ValueError(f"unsupported decision transition_label: {transition_label}")
@@ -298,6 +308,8 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
         raise ValueError("decision.changed_min_lift_delta out of range")
     if transition_min_lift_delta < 0.0 or transition_min_lift_delta > 1.0:
         raise ValueError("decision.transition_min_lift_delta out of range")
+    if external_transition_lift_baseline < -1.0 or external_transition_lift_baseline > 1.0:
+        raise ValueError("decision.external_transition_lift_baseline out of range")
     if max_mission_accuracy_drop < 0.0 or max_mission_accuracy_drop > 1.0:
         raise ValueError("decision.max_mission_accuracy_drop out of range")
     if mode == "relative_to_baseline":
@@ -306,6 +318,10 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
                 raise ValueError(f"decision feature set is not enabled: {feature_set}")
     if mode == "relative_to_reference":
         for feature_set in (baseline_feature_set, reference_feature_set, candidate_feature_set):
+            if feature_set not in feature_sets:
+                raise ValueError(f"decision feature set is not enabled: {feature_set}")
+    if mode == "external_transition_baseline":
+        for feature_set in (baseline_feature_set, candidate_feature_set):
             if feature_set not in feature_sets:
                 raise ValueError(f"decision feature set is not enabled: {feature_set}")
 
@@ -333,6 +349,7 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
             transition_label=transition_label,
             changed_min_lift_delta=changed_min_lift_delta,
             transition_min_lift_delta=transition_min_lift_delta,
+            external_transition_lift_baseline=external_transition_lift_baseline,
             max_mission_accuracy_drop=max_mission_accuracy_drop,
         ),
         predictive_encoder=predictive_encoder,
@@ -418,7 +435,14 @@ def collect_probe_transitions(gym: Any, config: MiniGridRepresentationProbeConfi
                 )
                 first_schema = observation_schema(observation)
                 for step in range(env_config.max_steps):
-                    action = int(env.action_space.sample())
+                    action = choose_probe_action(
+                        observation=observation,
+                        policy=config.policy,
+                        fallback_action_space=env.action_space,
+                        episode=episode,
+                        step=step,
+                        seed=seed + env_index,
+                    )
                     next_observation, reward, terminated, truncated, _info = _env_call(
                         env.step,
                         action,
@@ -455,6 +479,122 @@ def collect_probe_transitions(gym: Any, config: MiniGridRepresentationProbeConfi
         finally:
             env.close()
     return transitions
+
+
+def choose_probe_action(
+    observation: Any,
+    policy: str,
+    fallback_action_space: Any,
+    episode: int,
+    step: int,
+    seed: int,
+) -> int:
+    if policy == "random":
+        return int(fallback_action_space.sample())
+    if policy == "scripted_object":
+        return scripted_object_action(observation=observation, episode=episode, step=step, seed=seed)
+    raise ValueError(f"unsupported probe policy: {policy}")
+
+
+def scripted_object_action(observation: Any, episode: int, step: int, seed: int) -> int:
+    if not isinstance(observation, dict):
+        return deterministic_explore_action(episode=episode, step=step, seed=seed)
+    image = observation.get("image")
+    target = target_from_mission(str(observation.get("mission", "")))
+    target_cell = nearest_visible_target_cell(image=image, target=target)
+    if target_cell is None:
+        return deterministic_explore_action(episode=episode, step=step, seed=seed)
+    x, y, width, height = target_cell
+    center_x = width // 2
+    agent_y = height - 1
+    if x < center_x:
+        return SCRIPTED_ACTION_LEFT
+    if x > center_x:
+        return SCRIPTED_ACTION_RIGHT
+    if y < agent_y:
+        return SCRIPTED_ACTION_FORWARD
+    return deterministic_explore_action(episode=episode, step=step, seed=seed)
+
+
+def deterministic_explore_action(episode: int, step: int, seed: int) -> int:
+    pattern = (SCRIPTED_ACTION_FORWARD, SCRIPTED_ACTION_RIGHT, SCRIPTED_ACTION_FORWARD, SCRIPTED_ACTION_LEFT)
+    return pattern[(episode * 17 + step + seed) % len(pattern)]
+
+
+def target_from_mission(mission: str) -> dict[str, str]:
+    return {
+        "object": _first_matching_token(mission, OBJECT_WORDS),
+        "color": _first_matching_token(mission, COLOR_WORDS),
+    }
+
+
+def nearest_visible_target_cell(image: Any, target: dict[str, str]) -> tuple[int, int, int, int] | None:
+    columns = image_columns(image)
+    if not columns:
+        return None
+    width = len(columns)
+    height = len(columns[0]) if columns[0] else 0
+    if height == 0:
+        return None
+    target_object = target.get("object", "unknown")
+    target_color = target.get("color", "unknown")
+    target_object_idx = MINIGRID_OBJECT_TO_IDX.get(target_object)
+    target_color_idx = MINIGRID_COLOR_TO_IDX.get(target_color)
+    center_x = width // 2
+    agent_y = height - 1
+    candidates: list[tuple[int, int, int, int]] = []
+    for x, column in enumerate(columns):
+        for y, cell in enumerate(column):
+            object_idx, color_idx = cell_object_color(cell)
+            if object_idx is None:
+                continue
+            object_match = target_object_idx is not None and object_idx == target_object_idx
+            color_match = target_color_idx is not None and color_idx == target_color_idx
+            if target_object_idx is not None and target_color_idx is not None:
+                if not (object_match and color_match):
+                    continue
+                priority = 0
+            elif target_object_idx is not None:
+                if not object_match:
+                    continue
+                priority = 1
+            elif target_color_idx is not None:
+                if not color_match:
+                    continue
+                priority = 2
+            elif object_idx not in set(MINIGRID_OBJECT_TO_IDX.values()):
+                continue
+            else:
+                priority = 3
+            distance = abs(x - center_x) + abs(y - agent_y)
+            candidates.append((priority, distance, x, y))
+    if not candidates:
+        return None
+    _priority, _distance, x, y = min(candidates)
+    return x, y, width, height
+
+
+def image_columns(image: Any) -> list[list[Any]]:
+    if image is None:
+        return []
+    if hasattr(image, "tolist"):
+        image = image.tolist()
+    if not isinstance(image, list):
+        return []
+    if not image:
+        return []
+    first = image[0]
+    if isinstance(first, list) and first and isinstance(first[0], list):
+        return image
+    return []
+
+
+def cell_object_color(cell: Any) -> tuple[int | None, int | None]:
+    if hasattr(cell, "tolist"):
+        cell = cell.tolist()
+    if not isinstance(cell, (list, tuple)) or len(cell) < 2:
+        return None, None
+    return int(cell[0]), int(cell[1])
 
 
 def transition_probe_labels(
@@ -680,6 +820,8 @@ def evaluate_probe_decision(feature_reports: list[dict[str, Any]], decision: Pro
         return evaluate_relative_probe_decision(feature_reports, decision)
     if decision.mode == "relative_to_reference":
         return evaluate_reference_probe_decision(feature_reports, decision)
+    if decision.mode == "external_transition_baseline":
+        return evaluate_external_transition_decision(feature_reports, decision)
     candidates: list[dict[str, Any]] = []
     for report in feature_reports:
         label_metrics = [report["labels"][label] for label in decision.labels]
@@ -864,6 +1006,83 @@ def evaluate_reference_probe_decision(
             "candidate_feature_set": decision.candidate_feature_set,
             "transition_label": decision.transition_label,
             "transition_min_lift_delta": decision.transition_min_lift_delta,
+            "max_mission_accuracy_drop": decision.max_mission_accuracy_drop,
+        },
+    }
+
+
+def evaluate_external_transition_decision(
+    feature_reports: list[dict[str, Any]],
+    decision: ProbeDecisionConfig,
+) -> dict[str, Any]:
+    reports_by_feature_set = {report["feature_set"]: report for report in feature_reports}
+    baseline = reports_by_feature_set[decision.baseline_feature_set]
+    candidate = reports_by_feature_set[decision.candidate_feature_set]
+    required_labels = ("mission_object", "mission_color", decision.transition_label)
+    missing_labels = [
+        label
+        for label in required_labels
+        if label not in baseline["labels"] or label not in candidate["labels"]
+    ]
+    if missing_labels:
+        raise ValueError(f"missing external decision labels: {','.join(missing_labels)}")
+
+    comparisons: dict[str, dict[str, float | int]] = {}
+    enough_examples = True
+    for label in required_labels:
+        base_metrics = baseline["labels"][label]
+        candidate_metrics = candidate["labels"][label]
+        enough_examples = (
+            enough_examples
+            and base_metrics["test_examples"] >= decision.min_test_examples
+            and candidate_metrics["test_examples"] >= decision.min_test_examples
+        )
+        comparisons[label] = {
+            "baseline_accuracy": base_metrics["accuracy"],
+            "candidate_accuracy": candidate_metrics["accuracy"],
+            "accuracy_delta": candidate_metrics["accuracy"] - base_metrics["accuracy"],
+            "baseline_lift": base_metrics["lift"],
+            "candidate_lift": candidate_metrics["lift"],
+            "lift_delta": candidate_metrics["lift"] - base_metrics["lift"],
+            "external_lift_baseline": decision.external_transition_lift_baseline,
+            "candidate_lift_delta_vs_external": candidate_metrics["lift"] - decision.external_transition_lift_baseline,
+            "baseline_test_examples": base_metrics["test_examples"],
+            "candidate_test_examples": candidate_metrics["test_examples"],
+        }
+
+    transition = comparisons[decision.transition_label]
+    transition_passed = transition["candidate_lift_delta_vs_external"] >= decision.transition_min_lift_delta
+    mission_object_passed = comparisons["mission_object"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
+    mission_color_passed = comparisons["mission_color"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
+    passed = bool(enough_examples and transition_passed and mission_object_passed and mission_color_passed)
+    candidates = [
+        {
+            "feature_set": decision.baseline_feature_set,
+            "passed": False,
+            "mean_accuracy": mean(baseline["labels"][label]["accuracy"] for label in decision.labels),
+            "mean_lift": mean(baseline["labels"][label]["lift"] for label in decision.labels),
+        },
+        {
+            "feature_set": decision.candidate_feature_set,
+            "passed": passed,
+            "mean_accuracy": mean(candidate["labels"][label]["accuracy"] for label in decision.labels),
+            "mean_lift": mean(candidate["labels"][label]["lift"] for label in decision.labels),
+        },
+    ]
+    return {
+        "met": passed,
+        "best_feature_set": decision.candidate_feature_set if passed else decision.baseline_feature_set,
+        "candidates": candidates,
+        "comparisons": comparisons,
+        "rule": {
+            "mode": decision.mode,
+            "labels": list(decision.labels),
+            "min_test_examples": decision.min_test_examples,
+            "baseline_feature_set": decision.baseline_feature_set,
+            "candidate_feature_set": decision.candidate_feature_set,
+            "transition_label": decision.transition_label,
+            "transition_min_lift_delta": decision.transition_min_lift_delta,
+            "external_transition_lift_baseline": decision.external_transition_lift_baseline,
             "max_mission_accuracy_drop": decision.max_mission_accuracy_drop,
         },
     }

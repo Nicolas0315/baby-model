@@ -48,6 +48,7 @@ from baby_model.minigrid_repr_probe import (
     evaluate_probe_decision,
     evaluate_feature_set,
     parse_minigrid_representation_probe_config,
+    scripted_object_action,
     train_predictive_encoder,
     representation_probe_summary_markdown,
     transition_probe_labels,
@@ -1406,6 +1407,16 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.decision.transition_label, "next_signature_bucket")
         self.assertEqual(parsed.decision.transition_min_lift_delta, 0.01)
 
+    def test_minigrid_repr_probe_v31_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-repr-probe-v31.json")
+        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        self.assertEqual(parsed.policy, "scripted_object")
+        self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_changed"))
+        self.assertEqual(parsed.predictive_encoders[0].name, "predictive_changed")
+        self.assertEqual(parsed.decision.mode, "external_transition_baseline")
+        self.assertEqual(parsed.decision.transition_label, "changed")
+        self.assertEqual(parsed.decision.external_transition_lift_baseline, 0.209)
+
     def test_minigrid_repr_relative_decision_is_dependency_free(self) -> None:
         config = parse_minigrid_representation_probe_config(
             {
@@ -1523,6 +1534,33 @@ class ExperimentTest(unittest.TestCase):
         self.assertFalse(result_for(candidate_color_accuracy=0.74)["met"])
         self.assertFalse(result_for(candidate_test_examples=9)["met"])
 
+    def test_minigrid_repr_scripted_policy_is_dependency_free(self) -> None:
+        empty = [0, 0, 0]
+        red_ball = [6, 0, 0]
+        image_left = [[list(empty) for _y in range(7)] for _x in range(7)]
+        image_left[1][5] = red_ball
+        image_center = [[list(empty) for _y in range(7)] for _x in range(7)]
+        image_center[3][5] = red_ball
+        self.assertEqual(
+            scripted_object_action(
+                {"mission": "go to the red ball", "image": image_left},
+                episode=0,
+                step=0,
+                seed=0,
+            ),
+            0,
+        )
+        self.assertEqual(
+            scripted_object_action(
+                {"mission": "go to the red ball", "image": image_center},
+                episode=0,
+                step=0,
+                seed=0,
+            ),
+            2,
+        )
+        self.assertIn(scripted_object_action({"mission": "go to the blue key", "image": image_left}, 1, 2, 3), {0, 1, 2})
+
     def test_minigrid_repr_reference_decision_is_dependency_free(self) -> None:
         config = parse_minigrid_representation_probe_config(
             {
@@ -1593,6 +1631,68 @@ class ExperimentTest(unittest.TestCase):
                 {"feature_set": "raw_current", "labels": base_labels},
                 {"feature_set": "predictive_changed", "labels": reference_labels},
                 {"feature_set": "predictive_next_signature", "labels": candidate_labels},
+            ],
+            config.decision,
+        )
+        self.assertFalse(failed["met"])
+
+    def test_minigrid_repr_external_decision_is_dependency_free(self) -> None:
+        config = parse_minigrid_representation_probe_config(
+            {
+                "dataset": {
+                    "policy": "scripted_object",
+                    "test_every": 3,
+                    "signature_buckets": 4,
+                    "envs": [{"name": "fake", "env_id": "Fake-v0", "episodes": 1, "max_steps": 1}],
+                },
+                "features": {
+                    "feature_dim": 128,
+                    "encoder_mode": "raw",
+                    "feature_sets": ["raw_current", "predictive_changed"],
+                },
+                "training": {"predictive_encoders": [{"name": "predictive_changed", "target_label": "changed"}]},
+                "decision": {
+                    "mode": "external_transition_baseline",
+                    "labels": ["mission_object", "mission_color", "changed"],
+                    "baseline_feature_set": "raw_current",
+                    "candidate_feature_set": "predictive_changed",
+                    "transition_label": "changed",
+                    "transition_min_lift_delta": 0.01,
+                    "external_transition_lift_baseline": 0.20,
+                    "max_mission_accuracy_drop": 0.05,
+                    "min_test_examples": 10,
+                },
+            }
+        )
+        base_labels = {
+            "mission_object": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
+            "mission_color": {"accuracy": 0.70, "majority_baseline": 0.50, "lift": 0.20, "test_examples": 20},
+            "changed": {"accuracy": 0.62, "majority_baseline": 0.50, "lift": 0.12, "test_examples": 20},
+        }
+        candidate_labels = {
+            "mission_object": {"accuracy": 0.77, "majority_baseline": 0.50, "lift": 0.27, "test_examples": 20},
+            "mission_color": {"accuracy": 0.66, "majority_baseline": 0.50, "lift": 0.16, "test_examples": 20},
+            "changed": {"accuracy": 0.72, "majority_baseline": 0.50, "lift": 0.22, "test_examples": 20},
+        }
+        result = evaluate_probe_decision(
+            [
+                {"feature_set": "raw_current", "labels": base_labels},
+                {"feature_set": "predictive_changed", "labels": candidate_labels},
+            ],
+            config.decision,
+        )
+        self.assertTrue(result["met"])
+
+        candidate_labels["mission_color"] = {
+            "accuracy": 0.64,
+            "majority_baseline": 0.50,
+            "lift": 0.14,
+            "test_examples": 20,
+        }
+        failed = evaluate_probe_decision(
+            [
+                {"feature_set": "raw_current", "labels": base_labels},
+                {"feature_set": "predictive_changed", "labels": candidate_labels},
             ],
             config.decision,
         )
