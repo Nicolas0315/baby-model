@@ -98,3 +98,34 @@ no-representation curriculum was still `winner_last_window`, so the v2.5 lift
 is mostly a GoToObj task-family/curriculum effect under this bounded smoke.
 `ZM_torch_gotoobj_state_plus_delta_matched_delay` remains the best
 representation candidate by return, but it is not a stable success winner yet.
+
+## Three-Seed CUDA Sweep
+
+Issue: https://github.com/Nicolas0315/baby-model/issues/32
+
+A three-seed CUDA sweep completed on `gpu-worker-c` with
+`torch==2.12.1+cu132`, `torch_cuda_available=True`, and `device=cuda`.
+
+Seeds: `2201,2202,2203`
+
+| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | median_return_last |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `A_torch_gotoobj_hard_only` | 0 | 0.306 | 0.367 | 0.300 | 0.215 | 0.209 |
+| `ZK_torch_gotoobj_curriculum_no_repr_delay` | 1 | 0.479 | 0.517 | 0.650 | 0.348 | 0.366 |
+| `ZL_torch_gotoobj_controllability_matched_delay` | 2 | 0.444 | 0.533 | 0.450 | 0.365 | 0.329 |
+| `ZM_torch_gotoobj_state_plus_delta_matched_delay` | 0 | 0.438 | 0.533 | 0.500 | 0.365 | 0.334 |
+
+Per-seed winners:
+
+- `2201`: `ZK_torch_gotoobj_curriculum_no_repr_delay`
+- `2202`: `ZL_torch_gotoobj_controllability_matched_delay`
+- `2203`: `ZL_torch_gotoobj_controllability_matched_delay`
+
+Sweep conclusion: no representation condition met the #32 decision rule.
+`ZM_torch_gotoobj_state_plus_delta_matched_delay` narrowly beat `ZK` on mean
+return (`0.365` vs `0.348`), but lost median final-window success (`0.500` vs
+`0.650`). `ZL_torch_gotoobj_controllability_matched_delay` won two seeds and
+had the best mean final-window success, but also lost median success to the
+matched no-representation curriculum. Treat the GoToObj curriculum effect as
+dominant and move to a non-DQN representation probe before spending more GPU on
+the current DQN auxiliary-head family.

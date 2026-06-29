@@ -453,15 +453,29 @@ Updated: 2026-06-29 JST
   - Treat v2.6 as evidence that the GoToObj curriculum explains most of the
     success lift, while state-plus-delta remains the best representation
     candidate by return.
+- Issue #32 v2.7 multi-seed matched GoToObj sweep is complete:
+  - CUDA sweep ran on `gpu-worker-c` with seeds `2201,2202,2203`,
+    `torch==2.12.1+cu132`, and `device=cuda`.
+  - `ZL_torch_gotoobj_controllability_matched_delay` won by mean final-stage
+    last-window success (`0.533`) and seed wins (`2`).
+    `ZL_torch_gotoobj_controllability_matched_delay` and
+    `ZM_torch_gotoobj_state_plus_delta_matched_delay` both rounded to
+    `0.365` mean return, above `ZK_torch_gotoobj_curriculum_no_repr_delay`
+    at `0.348`.
+  - Neither representation condition met the #32 decision rule because both
+    lost median final-window success to `ZK_torch_gotoobj_curriculum_no_repr_delay`
+    (`ZK` `0.650`, `ZL` `0.450`, `ZM` `0.500`).
+  - Treat the GoToObj curriculum effect as dominant under the current DQN
+    auxiliary-head family.
 
 ## Next
 
-- Run a multi-seed matched GoToObj sweep before spending more design effort on
-  state-plus-delta or moving to a non-DQN representation probe.
+- Move to a non-DQN representation probe before spending more GPU on the
+  current DQN auxiliary-head family.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
-- A stable single-condition AD/DA winner across multiple CUDA seeds.
+- A stable representation-driven AD/DA winner across multiple CUDA seeds.
 - Full objective completion.
