@@ -1808,6 +1808,37 @@ class ExperimentTest(unittest.TestCase):
             self.assertEqual(condition.episodes, 42)
             self.assertEqual(condition.decoder_delay_episodes, 4)
 
+    def test_minigrid_torch_v47_long_mission_preservation_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v47.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=4201,
+        )
+        self.assertEqual(
+            [(stage.name, stage.episodes) for stage in parsed.stages],
+            [("empty_warmup", 12), ("goto_red_ball_warmup", 24), ("goto_obj_eval", 48)],
+        )
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay_long",
+                "ZU_torch_gotoobj_state_plus_target_visibility_b0075_long",
+                "ZE_torch_gotoobj_state_plus_mission_target_b005_long",
+                "ZF_torch_gotoobj_state_plus_mission_target_b0075_long",
+            ],
+        )
+        no_repr, baseline, mission_light, mission_matched = parsed.conditions
+        self.assertEqual(no_repr.representation_objective, "none")
+        self.assertEqual(baseline.representation_objective, "state_plus_target_visibility")
+        self.assertEqual(baseline.representation_beta, 0.075)
+        self.assertEqual(mission_light.representation_objective, "state_plus_mission_target")
+        self.assertEqual(mission_light.representation_beta, 0.05)
+        self.assertEqual(mission_matched.representation_objective, "state_plus_mission_target")
+        self.assertEqual(mission_matched.representation_beta, 0.075)
+        for condition in parsed.conditions:
+            self.assertEqual(condition.episodes, 84)
+            self.assertEqual(condition.decoder_delay_episodes, 8)
+
     def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")
         parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))

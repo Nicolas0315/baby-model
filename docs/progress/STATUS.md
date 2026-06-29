@@ -951,13 +951,29 @@ Updated: 2026-06-30 JST
     return (`0.177` vs `0.132`), target-visible (`0.620` vs `0.470`),
     target-center (`0.310` vs `0.240`), and target-near (`0.390` vs `0.270`).
   - Keep `ZE` as the current strongest representation-driven baseline.
+- Issue #65 v2.41 longer-horizon check for `ZE` has a CPU result:
+  - `configs/experiments/minigrid-torch-adda-v47.json`
+  - `docs/experiments/minigrid-torch-adda-v52.md`
+  - The local CPU sweep ran with seeds `4201,4202,4203` and `torch==2.12.1`.
+  - Local artifact:
+    `.tmp/local-v65-ze-long/20260629T170916Z/summary.md`.
+  - `ZE_torch_gotoobj_state_plus_mission_target_b005_long` beat `ZU_long` on
+    mean final-window success (`0.400` vs `0.300`), mean return (`0.239` vs
+    `0.201`), target-visible (`0.633` vs `0.533`), target-center (`0.433` vs
+    `0.300`), and target-near (`0.450` vs `0.317`).
+  - However, `ZK_torch_gotoobj_curriculum_no_repr_delay_long` won two of three
+    seeds and led the aggregate success (`0.433`), return (`0.277`),
+    target-visible (`0.667`), target-center (`0.483`), and target-near
+    (`0.483`) columns.
+  - Do not treat `ZE` as a universal baseline from short-protocol evidence
+    alone; the longer horizon exposes a no-representation curriculum challenge.
 
 ## Next
 
-- Run a longer-horizon check with
-  `ZE_torch_gotoobj_state_plus_mission_target_b005` as the baseline to beat.
-  The next gate should test whether the `ZE` edge survives beyond the current
-  short `6+12+24` curriculum.
+- Investigate why low-beta mission-target representation helps the short
+  protocol but loses to no-representation under the longer horizon. Candidate
+  next gates: lower beta, stopped representation updates after warmup, or a
+  handoff schedule that reduces representation pressure during long evaluation.
 
 ## Not Yet Proven
 
@@ -987,5 +1003,5 @@ Updated: 2026-06-30 JST
   current strongest representation-driven candidate, but broader confirmation
   is still needed before calling the overall research objective complete. v2.40
   extended the same protocol to five CUDA seeds and preserved the `ZE` edge;
-  the remaining gap is longer-horizon confirmation.
+  v2.41 then showed that the longer horizon favors `ZK_long` over `ZE_long`.
 - Full objective completion.
