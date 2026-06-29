@@ -623,17 +623,34 @@ Updated: 2026-06-29 JST
     (`2` vs `1`).
   - Treat v2.18 as positive representation-vs-no-repr multi-seed CUDA evidence,
     not proof that semantic transition is the stable best representation target.
+- Issue #44 v2.19 combined state-plus-semantic objective is implemented:
+  - `baby_model/minigrid_torch.py`
+  - `configs/experiments/minigrid-torch-adda-v37.json`
+  - `docs/experiments/minigrid-torch-adda-v37.md`
+  - Added `state_plus_target_visibility`, a 107-dimensional representation
+    target concatenating `state_plus_delta` and `target_visibility_transition`.
+  - Local CPU smoke on the bounded GoToObj matched curriculum selected
+    `ZO_torch_gotoobj_state_plus_target_visibility_delay` as
+    `winner_last_window`.
+  - `ZO` beat `ZM` and `ZN` on final-stage last-window success (`0.600` vs
+    `0.300` and `0.100`) and return (`0.376` vs `0.157` and `0.062`) with
+    `1760` representation updates.
+  - `ZO` also beat the matched no-representation curriculum (`0.600` vs
+    `0.350` success_last; `0.376` vs `0.219` return_last).
+  - Treat v2.19 as positive CPU-first evidence for combining state-plus-delta
+    and semantic target-visibility signals, not yet CUDA or multi-seed proof.
 
 ## Next
 
-- Test whether `state_plus_delta` and `target_visibility_transition` are
-  complementary, or add a direct mission-preservation probe to separate reward
-  return from mission-signal retention.
+- Run a bounded CUDA replication for the v2.19 combined
+  `state_plus_target_visibility` objective before multi-seed escalation.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable best representation-driven AD/DA winner across multiple CUDA seeds.
+- CUDA and multi-seed proof for the combined `state_plus_target_visibility`
+  objective.
 - Direct mission-preservation probe inside the RL runner.
 - Full objective completion.

@@ -73,6 +73,7 @@ from baby_model.minigrid_torch import (
     run_minigrid_torch_curriculum_condition,
     select_torch_device,
     state_plus_delta_vector,
+    state_plus_target_visibility_vector,
     subgoal_progress_vector,
     target_visibility_relation,
     target_visibility_transition_vector,
@@ -1014,6 +1015,22 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(vector[32:48], transition)
         self.assertEqual(vector[48:], subgoal)
 
+    def test_minigrid_torch_state_plus_target_visibility_vector_is_dependency_free(self) -> None:
+        before = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        after = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        before[0][0] = [5, 0, 0]
+        after[3][5] = [6, 0, 0]
+        before_observation = {"direction": 0, "mission": "go to the red ball", "image": before}
+        after_observation = {"direction": 1, "mission": "go to the red ball", "image": after}
+        state_delta = state_plus_delta_vector(before_observation, after_observation)
+        target_visibility = target_visibility_transition_vector(before_observation, after_observation)
+        vector = state_plus_target_visibility_vector(before_observation, after_observation)
+
+        self.assertEqual(len(vector), 107)
+        self.assertEqual(vector[:58], state_delta)
+        self.assertEqual(vector[58:], target_visibility)
+        self.assertEqual(sum(vector[58:]), 1.0)
+
     def test_minigrid_torch_v14_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v14.json")
         parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1001)
@@ -1332,6 +1349,31 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.conditions[0].representation_objective, "none")
         self.assertEqual(parsed.conditions[1].representation_objective, "state_plus_delta")
         self.assertEqual(parsed.conditions[2].representation_objective, "target_visibility_transition")
+        for condition in parsed.conditions:
+            self.assertEqual(condition.episodes, 42)
+            self.assertEqual(condition.decoder_delay_episodes, 4)
+
+    def test_minigrid_torch_v37_combined_semantic_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v37.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=3101,
+        )
+        self.assertEqual(parsed.agent.device, "cpu")
+        self.assertEqual(parsed.env_id, "BabyAI-GoToObj-v0")
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay",
+                "ZM_torch_gotoobj_state_plus_delta_matched_delay",
+                "ZN_torch_gotoobj_target_visibility_matched_delay",
+                "ZO_torch_gotoobj_state_plus_target_visibility_delay",
+            ],
+        )
+        self.assertEqual(parsed.conditions[0].representation_objective, "none")
+        self.assertEqual(parsed.conditions[1].representation_objective, "state_plus_delta")
+        self.assertEqual(parsed.conditions[2].representation_objective, "target_visibility_transition")
+        self.assertEqual(parsed.conditions[3].representation_objective, "state_plus_target_visibility")
         for condition in parsed.conditions:
             self.assertEqual(condition.episodes, 42)
             self.assertEqual(condition.decoder_delay_episodes, 4)

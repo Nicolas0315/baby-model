@@ -29,6 +29,7 @@ SUBGOAL_PROGRESS_DIM = 10
 TARGET_VISIBILITY_RELATIONS = ("absent", "left_near", "left_far", "center_near", "center_far", "right_near", "right_far")
 TARGET_VISIBILITY_TRANSITION_DIM = len(TARGET_VISIBILITY_RELATIONS) * len(TARGET_VISIBILITY_RELATIONS)
 STATE_PLUS_DELTA_DIM = AFFORDANCE_PROGRESS_DIM + AFFORDANCE_PROGRESS_DIM + TRANSITION_GROUP_DIM + SUBGOAL_PROGRESS_DIM
+STATE_PLUS_TARGET_VISIBILITY_DIM = STATE_PLUS_DELTA_DIM + TARGET_VISIBILITY_TRANSITION_DIM
 ACTION_LEFT = 0
 ACTION_RIGHT = 1
 ACTION_FORWARD = 2
@@ -116,6 +117,7 @@ class TorchDQNAgent:
             "target_visibility_transition",
             "subgoal_progress",
             "state_plus_delta",
+            "state_plus_target_visibility",
         }:
             target_dim = _representation_target_dim(representation_objective, config.feature_dim)
             self.representation_predictor = build_next_feature_predictor(
@@ -221,6 +223,7 @@ class TorchDQNAgent:
             "target_visibility_transition",
             "subgoal_progress",
             "state_plus_delta",
+            "state_plus_target_visibility",
         } or self.representation_predictor is None:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
@@ -487,6 +490,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             "target_visibility_transition",
             "subgoal_progress",
             "state_plus_delta",
+            "state_plus_target_visibility",
         }:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
@@ -1072,6 +1076,8 @@ def _representation_target_dim(representation_objective: str, feature_dim: int) 
         return SUBGOAL_PROGRESS_DIM
     if representation_objective == "state_plus_delta":
         return STATE_PLUS_DELTA_DIM
+    if representation_objective == "state_plus_target_visibility":
+        return STATE_PLUS_TARGET_VISIBILITY_DIM
     raise ValueError(f"unsupported representation objective: {representation_objective}")
 
 
@@ -1100,6 +1106,8 @@ def representation_target_for_objective(
         return subgoal_progress_vector(observation, next_observation)
     if condition.representation_objective == "state_plus_delta":
         return state_plus_delta_vector(observation, next_observation)
+    if condition.representation_objective == "state_plus_target_visibility":
+        return state_plus_target_visibility_vector(observation, next_observation)
     if condition.representation_objective == "action_prior":
         return action_prior_label(observation, actions)
     return []
@@ -1301,6 +1309,13 @@ def state_plus_delta_vector(observation: Any, next_observation: Any) -> list[flo
     transition_delta = transition_group_vector(observation, next_observation)
     subgoal_delta = subgoal_progress_vector(observation, next_observation)
     return current_state + next_state + transition_delta + subgoal_delta
+
+
+def state_plus_target_visibility_vector(observation: Any, next_observation: Any) -> list[float]:
+    return state_plus_delta_vector(observation, next_observation) + target_visibility_transition_vector(
+        observation,
+        next_observation,
+    )
 
 
 def _subgoal_snapshot(observation: Any) -> dict[str, Any]:
