@@ -37,7 +37,7 @@ Updated: 2026-06-29 JST
 - GitHub Actions `verify` succeeded for commit
   `764de19117cae1cad927a305c3bbc074a889e00a` on 2026-06-29.
 - GitHub issues:
-  - Fleet worker protocol: `https://github.com/Nicolas0315/baby-model/issues/1`
+  - Fleet worker protocol: `https://github.com/Nicolas0315/baby-model/issues/1` closed
   - MiniGrid/BabyAI migration: `https://github.com/Nicolas0315/baby-model/issues/2`
   - CI billing/spending-limit blocker: `https://github.com/Nicolas0315/baby-model/issues/3` resolved
   - v0.1 prediction-improvement reward: `https://github.com/Nicolas0315/baby-model/issues/4` closed
