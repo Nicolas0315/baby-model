@@ -44,7 +44,7 @@ Updated: 2026-06-29 JST
   - v0.2 progress-reward tuning/richer task: `https://github.com/Nicolas0315/baby-model/issues/5` closed
   - v0.3 annealed or auxiliary progress reward: `https://github.com/Nicolas0315/baby-model/issues/6` closed
   - harder MiniGrid/BabyAI trained run: `https://github.com/Nicolas0315/baby-model/issues/7` closed
-  - v0.4 MiniGrid curriculum to BabyAI Unlock: `https://github.com/Nicolas0315/baby-model/issues/8`
+  - v0.4 MiniGrid curriculum to BabyAI Unlock: `https://github.com/Nicolas0315/baby-model/issues/8` closed
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
