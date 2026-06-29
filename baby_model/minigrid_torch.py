@@ -26,6 +26,8 @@ CONTROLLABILITY_DIM = 1
 AFFORDANCE_PROGRESS_DIM = 16
 TRANSITION_GROUP_DIM = 16
 SUBGOAL_PROGRESS_DIM = 10
+TARGET_VISIBILITY_RELATIONS = ("absent", "left_near", "left_far", "center_near", "center_far", "right_near", "right_far")
+TARGET_VISIBILITY_TRANSITION_DIM = len(TARGET_VISIBILITY_RELATIONS) * len(TARGET_VISIBILITY_RELATIONS)
 STATE_PLUS_DELTA_DIM = AFFORDANCE_PROGRESS_DIM + AFFORDANCE_PROGRESS_DIM + TRANSITION_GROUP_DIM + SUBGOAL_PROGRESS_DIM
 ACTION_LEFT = 0
 ACTION_RIGHT = 1
@@ -36,7 +38,12 @@ OBJECT_WALL = 2
 OBJECT_DOOR = 4
 OBJECT_KEY = 5
 OBJECT_BALL = 6
+OBJECT_BOX = 7
 OBJECT_GOAL = 8
+OBJECT_WORDS = ("ball", "box", "key", "door", "goal")
+COLOR_WORDS = ("red", "green", "blue", "purple", "yellow", "grey", "gray")
+MINIGRID_OBJECT_TO_IDX = {"door": OBJECT_DOOR, "key": OBJECT_KEY, "ball": OBJECT_BALL, "box": OBJECT_BOX, "goal": OBJECT_GOAL}
+MINIGRID_COLOR_TO_IDX = {"red": 0, "green": 1, "blue": 2, "purple": 3, "yellow": 4, "grey": 5, "gray": 5}
 VIEW_FORWARD_X = 3
 VIEW_FORWARD_Y = 5
 
@@ -106,6 +113,7 @@ class TorchDQNAgent:
             "controllability",
             "affordance_progress",
             "transition_group",
+            "target_visibility_transition",
             "subgoal_progress",
             "state_plus_delta",
         }:
@@ -210,6 +218,7 @@ class TorchDQNAgent:
             "controllability",
             "affordance_progress",
             "transition_group",
+            "target_visibility_transition",
             "subgoal_progress",
             "state_plus_delta",
         } or self.representation_predictor is None:
@@ -475,6 +484,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             "controllability",
             "affordance_progress",
             "transition_group",
+            "target_visibility_transition",
             "subgoal_progress",
             "state_plus_delta",
         }:
@@ -1056,6 +1066,8 @@ def _representation_target_dim(representation_objective: str, feature_dim: int) 
         return AFFORDANCE_PROGRESS_DIM
     if representation_objective == "transition_group":
         return TRANSITION_GROUP_DIM
+    if representation_objective == "target_visibility_transition":
+        return TARGET_VISIBILITY_TRANSITION_DIM
     if representation_objective == "subgoal_progress":
         return SUBGOAL_PROGRESS_DIM
     if representation_objective == "state_plus_delta":
@@ -1082,6 +1094,8 @@ def representation_target_for_objective(
         return affordance_progress_vector(next_observation)
     if condition.representation_objective == "transition_group":
         return transition_group_vector(observation, next_observation)
+    if condition.representation_objective == "target_visibility_transition":
+        return target_visibility_transition_vector(observation, next_observation)
     if condition.representation_objective == "subgoal_progress":
         return subgoal_progress_vector(observation, next_observation)
     if condition.representation_objective == "state_plus_delta":
@@ -1151,6 +1165,91 @@ def transition_group_vector(observation: Any, next_observation: Any) -> list[flo
     if len(before) != len(after):
         raise ValueError("affordance vectors must have matching lengths")
     return [1.0 if old != new else 0.0 for old, new in zip(before, after, strict=True)]
+
+
+def target_visibility_transition_vector(observation: Any, next_observation: Any) -> list[float]:
+    before = target_visibility_relation(observation)
+    after = target_visibility_relation(next_observation)
+    index = TARGET_VISIBILITY_RELATIONS.index(before) * len(TARGET_VISIBILITY_RELATIONS)
+    index += TARGET_VISIBILITY_RELATIONS.index(after)
+    return [1.0 if item == index else 0.0 for item in range(TARGET_VISIBILITY_TRANSITION_DIM)]
+
+
+def target_visibility_relation(observation: Any) -> str:
+    if not isinstance(observation, dict):
+        return "absent"
+    target = _target_from_mission(str(observation.get("mission", "")))
+    target_cell = _nearest_visible_target_cell(observation.get("image"), target)
+    if target_cell is None:
+        return "absent"
+    x, y, width, height = target_cell
+    center_x = width // 2
+    agent_y = height - 1
+    if x < center_x:
+        side = "left"
+    elif x > center_x:
+        side = "right"
+    else:
+        side = "center"
+    distance = abs(x - center_x) + abs(y - agent_y)
+    depth = "near" if distance <= 2 else "far"
+    return f"{side}_{depth}"
+
+
+def _target_from_mission(mission: str) -> dict[str, str]:
+    return {
+        "object": _first_matching_token(mission, OBJECT_WORDS),
+        "color": _first_matching_token(mission, COLOR_WORDS),
+    }
+
+
+def _nearest_visible_target_cell(image: Any, target: dict[str, str]) -> tuple[int, int, int, int] | None:
+    if hasattr(image, "tolist"):
+        image = image.tolist()
+    if not isinstance(image, list) or not image:
+        return None
+    width = len(image)
+    first_column = image[0]
+    if not isinstance(first_column, list) or not first_column:
+        return None
+    height = len(first_column)
+    target_object_idx = MINIGRID_OBJECT_TO_IDX.get(target.get("object", "unknown"))
+    target_color_idx = MINIGRID_COLOR_TO_IDX.get(target.get("color", "unknown"))
+    center_x = width // 2
+    agent_y = height - 1
+    candidates: list[tuple[int, int, int, int]] = []
+    for x, column in enumerate(image):
+        if not isinstance(column, list):
+            continue
+        for y, cell in enumerate(column):
+            if not isinstance(cell, list) or len(cell) < 2:
+                continue
+            object_idx = int(cell[0])
+            color_idx = int(cell[1])
+            object_match = target_object_idx is not None and object_idx == target_object_idx
+            color_match = target_color_idx is not None and color_idx == target_color_idx
+            if target_object_idx is not None and target_color_idx is not None:
+                if not (object_match and color_match):
+                    continue
+                priority = 0
+            elif target_object_idx is not None:
+                if not object_match:
+                    continue
+                priority = 1
+            elif target_color_idx is not None:
+                if not color_match:
+                    continue
+                priority = 2
+            elif object_idx not in set(MINIGRID_OBJECT_TO_IDX.values()):
+                continue
+            else:
+                priority = 3
+            distance = abs(x - center_x) + abs(y - agent_y)
+            candidates.append((priority, distance, x, y))
+    if not candidates:
+        return None
+    _priority, _distance, x, y = min(candidates)
+    return x, y, width, height
 
 
 def subgoal_progress_vector(observation: Any, next_observation: Any) -> list[float]:
@@ -1356,6 +1455,28 @@ def _available_action(preferred: int, actions: int) -> int:
     if ACTION_FORWARD < actions:
         return ACTION_FORWARD
     return actions - 1
+
+
+def _first_matching_token(text: str, candidates: tuple[str, ...]) -> str:
+    tokens = _tokens(text)
+    for candidate in candidates:
+        if candidate in tokens:
+            return "grey" if candidate == "gray" else candidate
+    return "unknown"
+
+
+def _tokens(text: str) -> set[str]:
+    current: list[str] = []
+    tokens: set[str] = set()
+    for char in text.lower():
+        if char.isalnum():
+            current.append(char)
+        elif current:
+            tokens.add("".join(current))
+            current = []
+    if current:
+        tokens.add("".join(current))
+    return tokens
 
 
 def _turn_action(observation: dict[str, Any], actions: int) -> int:

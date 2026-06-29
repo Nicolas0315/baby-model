@@ -74,6 +74,8 @@ from baby_model.minigrid_torch import (
     select_torch_device,
     state_plus_delta_vector,
     subgoal_progress_vector,
+    target_visibility_relation,
+    target_visibility_transition_vector,
     task_signal_vector,
     torch_summary_markdown,
     transition_group_vector,
@@ -940,6 +942,30 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(vector[11:14], [1.0, 0.0, 1.0])
         self.assertEqual(vector[15], 1.0)
 
+    def test_minigrid_torch_target_visibility_vector_is_dependency_free(self) -> None:
+        before = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        after = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        after[3][5] = [6, 0, 0]
+        before_observation = {"direction": 0, "mission": "go to the red ball", "image": before}
+        after_observation = {"direction": 0, "mission": "go to the red ball", "image": after}
+        vector = target_visibility_transition_vector(before_observation, after_observation)
+        self.assertEqual(len(vector), 49)
+        self.assertEqual(sum(vector), 1.0)
+        self.assertEqual(target_visibility_relation(before_observation), "absent")
+        self.assertEqual(target_visibility_relation(after_observation), "center_near")
+        self.assertEqual(vector[3], 1.0)
+
+        left_far = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        right_near = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        left_far[0][0] = [7, 2, 0]
+        right_near[5][6] = [7, 2, 0]
+        left_observation = {"direction": 0, "mission": "go to the blue box", "image": left_far}
+        right_observation = {"direction": 0, "mission": "go to the blue box", "image": right_near}
+        relation_vector = target_visibility_transition_vector(left_observation, right_observation)
+        self.assertEqual(target_visibility_relation(left_observation), "left_far")
+        self.assertEqual(target_visibility_relation(right_observation), "right_near")
+        self.assertEqual(relation_vector[2 * 7 + 5], 1.0)
+
     def test_minigrid_torch_subgoal_progress_vector_is_dependency_free(self) -> None:
         before = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
         after = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
@@ -1286,6 +1312,29 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.conditions[1].representation_objective, "none")
         self.assertEqual(parsed.conditions[2].representation_objective, "controllability")
         self.assertEqual(parsed.conditions[3].representation_objective, "state_plus_delta")
+
+    def test_minigrid_torch_v36_semantic_rl_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v36.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=3001,
+        )
+        self.assertEqual(parsed.agent.device, "cpu")
+        self.assertEqual(parsed.env_id, "BabyAI-GoToObj-v0")
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay",
+                "ZM_torch_gotoobj_state_plus_delta_matched_delay",
+                "ZN_torch_gotoobj_target_visibility_matched_delay",
+            ],
+        )
+        self.assertEqual(parsed.conditions[0].representation_objective, "none")
+        self.assertEqual(parsed.conditions[1].representation_objective, "state_plus_delta")
+        self.assertEqual(parsed.conditions[2].representation_objective, "target_visibility_transition")
+        for condition in parsed.conditions:
+            self.assertEqual(condition.episodes, 42)
+            self.assertEqual(condition.decoder_delay_episodes, 4)
 
     def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")

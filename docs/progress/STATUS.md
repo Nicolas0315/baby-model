@@ -584,18 +584,35 @@ Updated: 2026-06-29 JST
     the sweep's `10` example gate.
   - Treat v2.15 as positive non-DQN evidence that the semantic transition label
     captures a stable representation signal under scripted-policy collection.
+- Issue #41 v2.16 semantic transition signal RL integration design is
+  implemented:
+  - `baby_model/minigrid_torch.py`
+  - `configs/experiments/minigrid-torch-adda-v36.json`
+  - `docs/experiments/minigrid-torch-adda-v36.md`
+  - Added `target_visibility_transition` as a PyTorch RL auxiliary
+    representation objective using a 49-way before/after target-relation
+    one-hot vector.
+  - Local CPU smoke on the bounded GoToObj matched curriculum selected
+    `ZN_torch_gotoobj_target_visibility_matched_delay` as
+    `winner_last_window`.
+  - `ZN` beat the matched no-representation curriculum on final-stage
+    last-window success (`0.400` vs `0.100`) and return (`0.274` vs `0.031`)
+    with `1997` representation updates.
+  - v2.16 uses final-stage external success/return as the mission-preservation
+    proxy because the RL runner does not directly score mission-object/color
+    probe accuracy.
+  - Treat v2.16 as positive CPU-first RL integration evidence, not yet CUDA or
+    multi-seed proof.
 
 ## Next
 
-- Design a bounded RL/CUDA integration test that uses the positive
-  `target_visibility_transition` signal without claiming transfer before a
-  real RL run proves it.
+- Run a bounded CUDA replication for the v2.16 semantic-transition RL
+  condition before promoting it as a stable RL result.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable representation-driven AD/DA winner across multiple CUDA seeds.
-- Transfer of the positive semantic scripted-policy signal into an RL/CUDA
-  condition.
+- CUDA and multi-seed proof for the positive semantic-transition RL condition.
 - Full objective completion.
