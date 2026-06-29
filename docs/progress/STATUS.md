@@ -754,11 +754,24 @@ Updated: 2026-06-29 JST
     return, and all mission-preservation probe columns in this CPU smoke.
   - This justifies bounded CUDA replication for beta `0.05`, not a baseline
     replacement until CUDA evidence exists.
+- Issue #52 v2.28 CUDA replication for the beta `0.05` combined objective is
+  complete:
+  - A bounded CUDA smoke ran on `gpu-worker-c` at commit
+    `ebfcab3299cfe48e0d989ec168c31b80d56465d9`.
+  - Setup proved `torch==2.12.1+cu132`, `torch_cuda_available=True`,
+    `torch_cuda_device_count=1`, and `device=cuda`.
+  - CUDA reproduced the same seed-`3501` table as the CPU gate.
+  - `ZT_torch_gotoobj_state_plus_target_visibility_b005` again won:
+    `success_last=0.650`, `return_last=0.472`,
+    `target_visible_last=0.850`, `target_center_last=0.650`,
+    `target_near_last=0.700`.
+  - Treat v2.28 as positive single-seed CUDA replication evidence, not
+    multi-seed stability proof.
 
 ## Next
 
-- Run bounded CUDA replication for the v2.27 beta `0.05` candidate before
-  treating it as a replacement for `ZR`.
+- Run a bounded multi-seed CUDA sweep for the v2.27 beta `0.05` candidate
+  before treating it as a replacement for `ZR`.
 
 ## Not Yet Proven
 
@@ -769,5 +782,5 @@ Updated: 2026-06-29 JST
   current best representation baselines under the mission-preservation probe.
   v2.23's single-head mission-conditioned target did not pass this gate, while
   v2.24 beta `0.1` passed CPU, CUDA replication, and bounded three-seed CUDA
-  gates. v2.27 beta `0.05` has only CPU evidence so far.
+  gates. v2.27 beta `0.05` has CPU and single-seed CUDA evidence so far.
 - Full objective completion.
