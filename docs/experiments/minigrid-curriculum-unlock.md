@@ -53,3 +53,10 @@ The useful conclusion is that the next branch should add function
 approximation or a stronger representation model. More hand-tuning of the same
 tabular Q-learning plus progress reward is unlikely to resolve the harder
 sparse task.
+
+## Fleet Replication
+
+The curriculum config was replicated on all four configured worker classes at
+commit `976591913b649e50b2455e0dbf44b39b8a4e1c9e`. Every worker produced the
+same final-stage table, with `A_hard_only` as the final last-window winner.
+Exact host-level evidence is kept outside this repository in local docs.

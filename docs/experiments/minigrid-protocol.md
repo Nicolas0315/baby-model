@@ -124,6 +124,10 @@ configured worker classes on 2026-06-29 at commit
 `b89b50faa7fa50d805d5247372a0c5c5697a3e56`. Every worker produced the same
 extra table as local verification.
 
+The curriculum config was replicated on all four configured worker classes on
+2026-06-29 at commit `976591913b649e50b2455e0dbf44b39b8a4e1c9e`. Every worker
+produced the same final-stage table as local verification.
+
 ## Metrics Schema
 
 Future trained runs should preserve this top-level shape:

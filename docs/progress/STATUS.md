@@ -110,16 +110,17 @@ Updated: 2026-06-29 JST
   still won by final-stage last-window success (`0.050`). The curriculum
   conditions did not preserve final-stage success, so this is another negative
   result for the current tabular implementation.
+- Fleet curriculum replication completed on all four configured worker classes
+  at commit `976591913b649e50b2455e0dbf44b39b8a4e1c9e`; all workers produced
+  the same final-stage table. Exact host-level evidence is kept outside this
+  repository in local docs.
 
 ## Next
 
-- Replicate the curriculum run through fleet tmux while runtime remains
-  lightweight.
 - Open the next branch for function approximation or a stronger representation
   model. More beta-only tuning in the same tabular setup is not promising.
 
 ## Not Yet Proven
 
 - Any GPU training result.
-- Fleet replication of the curriculum run.
 - Full objective completion.
