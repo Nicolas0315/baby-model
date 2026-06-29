@@ -1455,6 +1455,34 @@ class ExperimentTest(unittest.TestCase):
             self.assertEqual(condition.episodes, 42)
             self.assertEqual(condition.decoder_delay_episodes, 4)
 
+    def test_minigrid_torch_v39_combined_beta_sweep_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v39.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=3401,
+        )
+        self.assertEqual(parsed.agent.device, "cpu")
+        self.assertEqual(parsed.env_id, "BabyAI-GoToObj-v0")
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay",
+                "ZM_torch_gotoobj_state_plus_delta_matched_delay",
+                "ZN_torch_gotoobj_target_visibility_matched_delay",
+                "ZR_torch_gotoobj_state_plus_target_visibility_b010",
+                "ZO_torch_gotoobj_state_plus_target_visibility_b030",
+                "ZS_torch_gotoobj_state_plus_target_visibility_b050",
+            ],
+        )
+        beta_by_name = {condition.name: condition.representation_beta for condition in parsed.conditions}
+        self.assertEqual(beta_by_name["ZR_torch_gotoobj_state_plus_target_visibility_b010"], 0.1)
+        self.assertEqual(beta_by_name["ZO_torch_gotoobj_state_plus_target_visibility_b030"], 0.3)
+        self.assertEqual(beta_by_name["ZS_torch_gotoobj_state_plus_target_visibility_b050"], 0.5)
+        for condition in parsed.conditions[3:]:
+            self.assertEqual(condition.representation_objective, "state_plus_target_visibility")
+            self.assertEqual(condition.episodes, 42)
+            self.assertEqual(condition.decoder_delay_episodes, 4)
+
     def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")
         parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))

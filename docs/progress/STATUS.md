@@ -697,12 +697,25 @@ Updated: 2026-06-29 JST
     `ZQ_torch_gotoobj_state_plus_mission_target_delay` both had
     `success_last=0.000` and `return_last=0.000`.
   - Do not escalate v2.23 to CUDA from this result.
+- Issue #48 v2.24 state-plus-target-visibility beta sweep passed a CPU gate:
+  - `configs/experiments/minigrid-torch-adda-v39.json`
+  - `docs/experiments/minigrid-torch-adda-v39.md`
+  - Tested the combined `state_plus_target_visibility` objective at
+    `representation_beta` values `0.1`, `0.3`, and `0.5`, while retaining
+    `ZK`, `ZM`, and `ZN` baselines.
+  - Local CPU smoke on seed `3401` completed with `torch==2.12.1` and
+    `device=cpu`.
+  - `ZR_torch_gotoobj_state_plus_target_visibility_b010` won the CPU gate:
+    `success_last=0.450`, `return_last=0.247`,
+    `target_visible_last=0.900`, `target_center_last=0.550`,
+    `target_near_last=0.700`.
+  - This is enough to justify bounded CUDA replication for the beta `0.1`
+    combined objective, not enough to claim stability.
 
 ## Next
 
-- Continue issue #48 with a true two-head auxiliary objective or a small
-  loss-weight sweep, using the mission-preservation probe as the CPU gate
-  before spending more CUDA.
+- Open and run a bounded CUDA replication for the v2.24 beta `0.1`
+  combined objective before any multi-seed CUDA sweep.
 
 ## Not Yet Proven
 
@@ -711,5 +724,6 @@ Updated: 2026-06-29 JST
 - A stable best representation-driven AD/DA winner across multiple CUDA seeds.
 - A redesigned objective that beats the no-representation curriculum and the
   current best representation baselines under the mission-preservation probe.
-  v2.23's single-head mission-conditioned target did not pass this gate.
+  v2.23's single-head mission-conditioned target did not pass this gate, while
+  v2.24 beta `0.1` passed only a single CPU seed so far.
 - Full objective completion.
