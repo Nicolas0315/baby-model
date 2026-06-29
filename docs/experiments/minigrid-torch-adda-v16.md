@@ -81,4 +81,17 @@ beating the hard-only baseline on final-stage last-window success. Treat this
 as a positive smoke signal only; require bounded CUDA smoke before escalating to
 a multi-seed GPU sweep.
 
-Bounded CUDA smoke is pending.
+A bounded CUDA smoke completed on `gpu-worker-c` with `torch==2.12.1+cu132`,
+`torch_cuda_available=True`, and `device=cuda`.
+
+| condition | final_stage | prior | success_all | success_last | return_last | rep_loss | rep_updates | updates |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only_long` | `unlock_eval` | 0.000 | 0.000 | 0.000 | 0.000 | 0.0000 | 0 | 5745 |
+| `R_torch_action_prior_delay` | `unlock_eval` | 0.000 | 0.000 | 0.000 | 0.000 | 0.0293 | 7242 | 6989 |
+| `S_torch_action_prior_policy_mix` | `unlock_eval` | 0.250 | 0.000 | 0.000 | 0.000 | 0.0219 | 7216 | 6967 |
+
+CUDA conclusion: the action-prior family was executable, but it did not beat the
+hard-only baseline. All conditions had `success_last=0.000` and
+`return_last=0.000`. Do not run a multi-seed GPU sweep for v1.6; use this as
+evidence that this heuristic action-prior signal is not strong enough by itself
+on the sparse unlock task.
