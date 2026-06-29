@@ -5,6 +5,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 .venv-minigrid/
+.venv-minigrid-torch/
 .local/
 .tmp/
 runs/*

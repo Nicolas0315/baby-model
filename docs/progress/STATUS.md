@@ -150,13 +150,27 @@ Updated: 2026-06-29 JST
   commit `c08b295014ec24489585b6a3798b9834c6c1597e`; all workers produced the
   same neural table as local verification. Exact host-level evidence is kept
   outside this repository in local docs.
+- PyTorch was selected as the optional deep-learning/GPU framework for issue
+  #12 from current official docs. The runner/config/verifier hook are
+  implemented without adding project dependencies:
+  - `baby_model/minigrid_torch.py`
+  - `configs/experiments/minigrid-torch-unlock-smoke.json`
+  - optional verifier support via `MINIGRID_TORCH_CONFIG`
+  - docs in `docs/experiments/minigrid-torch-lane.md`
+- Local optional PyTorch CPU smoke passed in an isolated venv with
+  `torch==2.12.1` and `minigrid==3.1.0`. On `BabyAI-Unlock-v0`,
+  `A_torch_hard_only` won by last-window success (`0.083`), while
+  `B_torch_encoder_first` and `E_torch_progress` had `success_last=0.000`.
+- Local optional PyTorch `auto` smoke selected MPS on the current Mac and
+  completed, but all three conditions had `success_last=0.000`.
 
 ## Next
 
-- Start issue #12 by selecting an optional deep-learning framework from current
-  official docs, while keeping the default verifier dependency-free.
+- Launch a bounded issue #12 fleet/GPU PyTorch smoke and keep host-level
+  evidence outside this repository.
 
 ## Not Yet Proven
 
-- Any GPU training result.
+- Fleet PyTorch/GPU smoke for issue #12.
+- Any robust GPU training result.
 - Full objective completion.

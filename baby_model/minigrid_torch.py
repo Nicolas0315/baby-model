@@ -1,0 +1,538 @@
+from __future__ import annotations
+
+import argparse
+import json
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from random import Random
+from statistics import mean
+from typing import Any
+
+from baby_model.agents import EpisodeMetrics, TransitionSurprise
+from baby_model.experiment import Condition
+from baby_model.minigrid_experiment import _env_call, _intrinsic_signal
+from baby_model.minigrid_linear import SparseFeatures, feature_signature, linear_features
+from baby_model.minigrid_probe import observation_schema
+
+
+class TorchDeviceUnavailable(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class TorchAgentConfig:
+    feature_dim: int
+    hidden_dim: int
+    learning_rate: float
+    gamma: float
+    epsilon: float
+    batch_size: int
+    replay_capacity: int
+    target_sync_updates: int
+    device: str
+
+
+@dataclass(frozen=True)
+class MiniGridTorchConfig:
+    env_id: str
+    max_steps: int
+    quiet_env_output: bool
+    agent: TorchAgentConfig
+    conditions: tuple[Condition, ...]
+
+
+class TorchDQNAgent:
+    def __init__(
+        self,
+        torch: Any,
+        actions: int,
+        config: TorchAgentConfig,
+        device: Any,
+        seed: int,
+        epsilon: float | None = None,
+    ) -> None:
+        self.torch = torch
+        self.actions = actions
+        self.config = config
+        self.device = device
+        self.epsilon = config.epsilon if epsilon is None else epsilon
+        self.rng = Random(seed)
+        self.model = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(device)
+        self.target = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(device)
+        self.target.load_state_dict(self.model.state_dict())
+        self.target.eval()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.learning_rate)
+        self.loss_fn = torch.nn.MSELoss()
+        self.replay: deque[tuple[SparseFeatures, int, float, SparseFeatures, bool]] = deque(maxlen=config.replay_capacity)
+        self.updates = 0
+
+    def action_values(self, features: SparseFeatures) -> dict[int, float]:
+        values = self._q_values(features)
+        return {action: values[action] for action in range(self.actions)}
+
+    def choose(
+        self,
+        features: SparseFeatures,
+        force_random: bool = False,
+        action_bonus: dict[int, float] | None = None,
+        bonus_weight: float = 1.0,
+    ) -> int:
+        if force_random or self.rng.random() < self.epsilon:
+            return self.rng.randrange(self.actions)
+        base_values = self._q_values(features)
+        values = [
+            base_values[action] + bonus_weight * (0.0 if action_bonus is None else action_bonus.get(action, 0.0))
+            for action in range(self.actions)
+        ]
+        best_value = max(values)
+        best_actions = [action for action, value in enumerate(values) if value == best_value]
+        return self.rng.choice(best_actions)
+
+    def update(self, features: SparseFeatures, action: int, reward: float, next_features: SparseFeatures, done: bool) -> None:
+        self.replay.append((features, action, reward, next_features, done))
+        if len(self.replay) < self.config.batch_size:
+            return
+
+        batch = self.rng.sample(list(self.replay), self.config.batch_size)
+        states = self._batch_tensor([item[0] for item in batch])
+        actions = self.torch.tensor([item[1] for item in batch], dtype=self.torch.long, device=self.device)
+        rewards = self.torch.tensor([item[2] for item in batch], dtype=self.torch.float32, device=self.device)
+        next_states = self._batch_tensor([item[3] for item in batch])
+        dones = self.torch.tensor([1.0 if item[4] else 0.0 for item in batch], dtype=self.torch.float32, device=self.device)
+
+        q_values = self.model(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+        with self.torch.no_grad():
+            next_q_values = self.target(next_states).max(dim=1).values
+            targets = rewards + (1.0 - dones) * self.config.gamma * next_q_values
+
+        loss = self.loss_fn(q_values, targets)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        self.updates += 1
+        if self.updates % self.config.target_sync_updates == 0:
+            self.target.load_state_dict(self.model.state_dict())
+
+    def parameter_count(self) -> int:
+        return sum(int(parameter.numel()) for parameter in self.model.parameters())
+
+    def _q_values(self, features: SparseFeatures) -> list[float]:
+        with self.torch.no_grad():
+            tensor = self._feature_tensor(features).unsqueeze(0)
+            return list(self.model(tensor).detach().cpu().tolist()[0])
+
+    def _feature_tensor(self, features: SparseFeatures) -> Any:
+        return self.torch.tensor(dense_feature_vector(features, self.config.feature_dim), dtype=self.torch.float32, device=self.device)
+
+    def _batch_tensor(self, batch_features: list[SparseFeatures]) -> Any:
+        return self.torch.tensor(
+            [dense_feature_vector(features, self.config.feature_dim) for features in batch_features],
+            dtype=self.torch.float32,
+            device=self.device,
+        )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="baby-model-minigrid-torch")
+    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-torch-unlock-smoke.json"))
+    parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid-torch"))
+    parser.add_argument("--seed", type=int, default=601)
+    parser.add_argument("--device", default=None)
+    args = parser.parse_args()
+
+    try:
+        config = json.loads(args.config.read_text(encoding="utf-8"))
+        if args.device is not None:
+            config.setdefault("agent", {})["device"] = args.device
+        report = run_minigrid_torch_suite(config, seed=args.seed)
+    except ImportError as exc:
+        print(f"missing optional dependency: {exc}")
+        print("install with: python3 -m pip install minigrid torch")
+        return 2
+    except TorchDeviceUnavailable as exc:
+        print(f"torch device unavailable: {exc}")
+        return 2
+
+    run_dir = write_minigrid_torch_run(report, args.output_dir)
+    print(f"minigrid_torch_run_dir={run_dir}")
+    print(f"torch_device={report['framework']['device']}")
+    print(f"winner_last_window={report['winner_last_window']}")
+    return 0
+
+
+def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[str, Any]:
+    parsed = parse_minigrid_torch_config(config=config, seed=seed)
+    try:
+        import gymnasium as gym
+        import minigrid  # noqa: F401
+        import torch
+    except ImportError as exc:
+        raise ImportError("gymnasium/minigrid/torch") from exc
+
+    torch.manual_seed(seed)
+    device = select_torch_device(torch, parsed.agent.device)
+    results = [
+        run_minigrid_torch_condition(
+            gym=gym,
+            torch=torch,
+            env_id=parsed.env_id,
+            condition=condition,
+            max_steps=parsed.max_steps,
+            agent_config=parsed.agent,
+            device=device,
+            quiet_env_output=parsed.quiet_env_output,
+        )
+        for condition in parsed.conditions
+    ]
+    return {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "hypothesis": str(config.get("hypothesis", "Baby-AD/DA MiniGrid PyTorch DQN")),
+        "env_id": parsed.env_id,
+        "max_steps": parsed.max_steps,
+        "framework": {
+            "name": "pytorch",
+            "version": str(getattr(torch, "__version__", "unknown")),
+            "device": str(device),
+            "cuda_available": bool(torch.cuda.is_available()),
+            "mps_available": torch_mps_available(torch),
+        },
+        "agent": {
+            "type": "torch_dqn",
+            "feature_dim": parsed.agent.feature_dim,
+            "hidden_dim": parsed.agent.hidden_dim,
+            "learning_rate": parsed.agent.learning_rate,
+            "gamma": parsed.agent.gamma,
+            "epsilon": parsed.agent.epsilon,
+            "batch_size": parsed.agent.batch_size,
+            "replay_capacity": parsed.agent.replay_capacity,
+            "target_sync_updates": parsed.agent.target_sync_updates,
+        },
+        "results": results,
+        "winner_last_window": max(results, key=lambda row: row["success_rate_last_window"])["name"],
+    }
+
+
+def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> MiniGridTorchConfig:
+    env_cfg = config.get("environment", {})
+    if not isinstance(env_cfg, dict):
+        raise ValueError("environment must be an object")
+    env_id = str(env_cfg.get("id", "BabyAI-Unlock-v0"))
+    max_steps = int(env_cfg.get("max_steps", 160))
+    if max_steps < 1:
+        raise ValueError("environment.max_steps must be positive")
+    quiet_env_output = bool(env_cfg.get("quiet_env_output", True))
+
+    agent_cfg = config.get("agent", {})
+    if not isinstance(agent_cfg, dict):
+        raise ValueError("agent must be an object")
+    feature_dim = int(agent_cfg.get("feature_dim", 1024))
+    hidden_dim = int(agent_cfg.get("hidden_dim", 64))
+    learning_rate = float(agent_cfg.get("learning_rate", 0.001))
+    gamma = float(agent_cfg.get("gamma", 0.92))
+    epsilon = float(agent_cfg.get("epsilon", 0.2))
+    batch_size = int(agent_cfg.get("batch_size", 16))
+    replay_capacity = int(agent_cfg.get("replay_capacity", 512))
+    target_sync_updates = int(agent_cfg.get("target_sync_updates", 25))
+    device = str(agent_cfg.get("device", "auto"))
+    if feature_dim < 16:
+        raise ValueError("agent.feature_dim must be at least 16")
+    if hidden_dim < 2 or hidden_dim > 2048:
+        raise ValueError("agent.hidden_dim out of range")
+    if learning_rate <= 0.0:
+        raise ValueError("agent.learning_rate must be positive")
+    if gamma < 0.0 or gamma > 1.0:
+        raise ValueError("agent.gamma out of range")
+    if epsilon < 0.0 or epsilon > 1.0:
+        raise ValueError("agent.epsilon out of range")
+    if batch_size < 1:
+        raise ValueError("agent.batch_size must be positive")
+    if replay_capacity < batch_size:
+        raise ValueError("agent.replay_capacity must be at least batch_size")
+    if target_sync_updates < 1:
+        raise ValueError("agent.target_sync_updates must be positive")
+    if not (device in {"auto", "cpu", "cuda", "mps"} or (device.startswith("cuda:") and device[5:].isdigit())):
+        raise ValueError("agent.device must be auto, cpu, cuda, cuda:N, or mps")
+
+    condition_cfgs = config.get("conditions", [])
+    if not isinstance(condition_cfgs, list) or not condition_cfgs:
+        raise ValueError("conditions must be a non-empty list")
+    names: set[str] = set()
+    conditions: list[Condition] = []
+    for i, item in enumerate(condition_cfgs):
+        if not isinstance(item, dict):
+            raise ValueError("each condition must be an object")
+        name = str(item.get("name", ""))
+        if not name:
+            raise ValueError("condition.name is required")
+        if name in names:
+            raise ValueError(f"duplicate condition.name: {name}")
+        names.add(name)
+        encoder_mode = str(item.get("encoder_mode", "raw"))
+        if encoder_mode not in {"raw", "coarse"}:
+            raise ValueError(f"invalid encoder_mode for {name}")
+        intrinsic_mode = str(item.get("intrinsic_mode", "none"))
+        if intrinsic_mode not in {"none", "surprise", "progress"}:
+            raise ValueError(f"invalid intrinsic_mode for {name}")
+        intrinsic_target = str(item.get("intrinsic_target", "reward"))
+        if intrinsic_target not in {"reward", "auxiliary"}:
+            raise ValueError(f"invalid intrinsic_target for {name}")
+        episodes = int(item.get("episodes", 0))
+        delay = int(item.get("decoder_delay_episodes", 0))
+        beta = float(item.get("intrinsic_beta", 0.0))
+        if episodes < 1:
+            raise ValueError(f"episodes must be positive for {name}")
+        if delay < 0 or delay > episodes:
+            raise ValueError(f"decoder_delay_episodes out of range for {name}")
+        if beta < 0:
+            raise ValueError(f"intrinsic_beta must be non-negative for {name}")
+        conditions.append(
+            Condition(
+                name=name,
+                encoder_mode=encoder_mode,
+                episodes=episodes,
+                decoder_delay_episodes=delay,
+                intrinsic_beta=beta,
+                intrinsic_mode=intrinsic_mode,
+                seed=seed + i,
+                intrinsic_target=intrinsic_target,
+            )
+        )
+    return MiniGridTorchConfig(
+        env_id=env_id,
+        max_steps=max_steps,
+        quiet_env_output=quiet_env_output,
+        agent=TorchAgentConfig(
+            feature_dim=feature_dim,
+            hidden_dim=hidden_dim,
+            learning_rate=learning_rate,
+            gamma=gamma,
+            epsilon=epsilon,
+            batch_size=batch_size,
+            replay_capacity=replay_capacity,
+            target_sync_updates=target_sync_updates,
+            device=device,
+        ),
+        conditions=tuple(conditions),
+    )
+
+
+def run_minigrid_torch_condition(
+    gym: Any,
+    torch: Any,
+    env_id: str,
+    condition: Condition,
+    max_steps: int,
+    agent_config: TorchAgentConfig,
+    device: Any,
+    quiet_env_output: bool = True,
+) -> dict[str, Any]:
+    env = gym.make(env_id)
+    try:
+        actions = int(env.action_space.n)
+        if hasattr(env.action_space, "seed"):
+            env.action_space.seed(condition.seed)
+        torch.manual_seed(condition.seed)
+        agent = TorchDQNAgent(torch=torch, actions=actions, config=agent_config, device=device, seed=condition.seed)
+        auxiliary_agent = TorchDQNAgent(
+            torch=torch,
+            actions=actions,
+            config=agent_config,
+            device=device,
+            seed=condition.seed + 100_003,
+            epsilon=0.0,
+        )
+        transition = TransitionSurprise()
+        episodes: list[EpisodeMetrics] = []
+        first_schema: dict[str, Any] | None = None
+
+        for episode in range(condition.episodes):
+            observation, _info = _env_call(
+                env.reset,
+                quiet=quiet_env_output,
+                seed=condition.seed * 1000 + episode,
+            )
+            if first_schema is None:
+                first_schema = observation_schema(observation)
+            features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+            feature_key = feature_signature(features)
+            visited = {feature_key}
+            external_return = 0.0
+            intrinsic_return = 0.0
+            success = False
+            steps = 0
+
+            for _ in range(max_steps):
+                force_random = episode < condition.decoder_delay_episodes
+                action_bonus = None
+                if condition.intrinsic_target == "auxiliary" and not force_random:
+                    action_bonus = auxiliary_agent.action_values(features)
+                action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
+                next_observation, reward, terminated, truncated, _info = _env_call(
+                    env.step,
+                    action,
+                    quiet=quiet_env_output,
+                )
+                next_features = linear_features(next_observation, condition.encoder_mode, agent_config.feature_dim)
+                next_feature_key = feature_signature(next_features)
+                intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature_key, action, next_feature_key)
+                intrinsic = condition.intrinsic_beta * intrinsic_signal
+                total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
+                done = bool(terminated or truncated)
+
+                if not force_random:
+                    agent.update(features, action, total_reward, next_features, done)
+                    if condition.intrinsic_target == "auxiliary":
+                        auxiliary_agent.update(features, action, intrinsic, next_features, done)
+                transition.update(feature_key, action, next_feature_key)
+
+                external_return += float(reward)
+                intrinsic_return += intrinsic
+                steps += 1
+                visited.add(next_feature_key)
+                features = next_features
+                feature_key = next_feature_key
+                if float(reward) > 0.0:
+                    success = True
+                if done:
+                    break
+
+            episodes.append(
+                EpisodeMetrics(
+                    success=success,
+                    steps=steps,
+                    external_return=external_return,
+                    intrinsic_return=intrinsic_return,
+                    unique_features=len(visited),
+                )
+            )
+
+        last_window = episodes[-20:] if len(episodes) >= 20 else episodes
+        successful_steps = [item.steps for item in episodes if item.success]
+        return {
+            "name": condition.name,
+            "env_id": env_id,
+            "agent_type": "torch_dqn",
+            "feature_dim": agent_config.feature_dim,
+            "hidden_dim": agent_config.hidden_dim,
+            "encoder_mode": condition.encoder_mode,
+            "episodes": condition.episodes,
+            "decoder_delay_episodes": condition.decoder_delay_episodes,
+            "intrinsic_beta": condition.intrinsic_beta,
+            "intrinsic_mode": condition.intrinsic_mode,
+            "intrinsic_target": condition.intrinsic_target,
+            "seed": condition.seed,
+            "observation_schema": first_schema or {},
+            "success_rate_all": mean(1.0 if item.success else 0.0 for item in episodes),
+            "success_rate_last_window": mean(1.0 if item.success else 0.0 for item in last_window),
+            "mean_steps_success": mean(successful_steps) if successful_steps else None,
+            "mean_return_last_window": mean(item.external_return for item in last_window),
+            "mean_intrinsic_return_last_window": mean(item.intrinsic_return for item in last_window),
+            "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
+            "parameter_count": agent.parameter_count(),
+            "updates": agent.updates,
+        }
+    finally:
+        env.close()
+
+
+def build_q_network(torch: Any, feature_dim: int, hidden_dim: int, actions: int) -> Any:
+    class QNetwork(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.net = torch.nn.Sequential(
+                torch.nn.Linear(feature_dim, hidden_dim),
+                torch.nn.ReLU(),
+                torch.nn.Linear(hidden_dim, actions),
+            )
+
+        def forward(self, x: Any) -> Any:
+            return self.net(x)
+
+    return QNetwork()
+
+
+def dense_feature_vector(features: SparseFeatures, feature_dim: int) -> list[float]:
+    vector = [0.0 for _ in range(feature_dim)]
+    for index, value in features.items():
+        if index < 0 or index >= feature_dim:
+            raise ValueError(f"feature index out of range: {index}")
+        vector[index] = float(value)
+    return vector
+
+
+def select_torch_device(torch: Any, preference: str = "auto") -> Any:
+    if preference == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if torch_mps_available(torch):
+            return torch.device("mps")
+        return torch.device("cpu")
+    if preference in {"cuda"} or preference.startswith("cuda:"):
+        if not torch.cuda.is_available():
+            raise TorchDeviceUnavailable(f"{preference} requested but torch.cuda.is_available() is false")
+        return torch.device(preference)
+    if preference == "mps":
+        if not torch_mps_available(torch):
+            raise TorchDeviceUnavailable("mps requested but torch.backends.mps.is_available() is false")
+        return torch.device("mps")
+    if preference == "cpu":
+        return torch.device("cpu")
+    raise ValueError(f"unsupported torch device preference: {preference}")
+
+
+def torch_mps_available(torch: Any) -> bool:
+    backends = getattr(torch, "backends", None)
+    mps = getattr(backends, "mps", None)
+    checker = getattr(mps, "is_available", None)
+    return bool(checker()) if callable(checker) else False
+
+
+def write_minigrid_torch_run(report: dict[str, Any], output_dir: Path) -> Path:
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = output_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=False)
+    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "summary.md").write_text(torch_summary_markdown(report), encoding="utf-8")
+    latest_path = output_dir / "latest"
+    if latest_path.exists() or latest_path.is_symlink():
+        latest_path.unlink()
+    latest_path.symlink_to(run_dir.name)
+    return run_dir
+
+
+def torch_summary_markdown(report: dict[str, Any]) -> str:
+    framework = report["framework"]
+    lines = [
+        "# baby-model MiniGrid PyTorch DQN summary",
+        "",
+        f"- created_at: `{report['created_at']}`",
+        f"- hypothesis: `{report['hypothesis']}`",
+        f"- env_id: `{report['env_id']}`",
+        f"- torch_version: `{framework['version']}`",
+        f"- device: `{framework['device']}`",
+        f"- winner_last_window: `{report['winner_last_window']}`",
+        "",
+        "| condition | success_all | success_last | return_last | mean_steps_success | updates | parameters |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in report["results"]:
+        mean_steps = row["mean_steps_success"]
+        lines.append(
+            "| {name} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {updates} | {params} |".format(
+                name=row["name"],
+                all=row["success_rate_all"],
+                last=row["success_rate_last_window"],
+                ret=row["mean_return_last_window"],
+                steps="" if mean_steps is None else f"{mean_steps:.2f}",
+                updates=row["updates"],
+                params=row["parameter_count"],
+            )
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -40,6 +40,12 @@ from baby_model.minigrid_neural import (
     run_minigrid_neural_suite,
 )
 from baby_model.minigrid_probe import observation_schema, summary_markdown
+from baby_model.minigrid_torch import (
+    dense_feature_vector,
+    parse_minigrid_torch_config,
+    select_torch_device,
+    torch_summary_markdown,
+)
 from baby_model.sweep import parse_seeds, run_sweep
 
 
@@ -698,6 +704,86 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(report["winner_last_window"], "neural")
         self.assertGreater(report["results"][0]["nonzero_parameters"], 0)
         self.assertIn("neural encoder", neural_summary_markdown(report))
+
+    def test_minigrid_torch_config_helpers_are_dependency_free(self) -> None:
+        config = {
+            "environment": {"id": "BabyAI-Unlock-v0", "max_steps": 3},
+            "agent": {
+                "feature_dim": 32,
+                "hidden_dim": 8,
+                "learning_rate": 0.001,
+                "gamma": 0.9,
+                "epsilon": 0.0,
+                "batch_size": 2,
+                "replay_capacity": 8,
+                "target_sync_updates": 3,
+                "device": "auto",
+            },
+            "conditions": [
+                {
+                    "name": "torch",
+                    "encoder_mode": "raw",
+                    "episodes": 2,
+                    "decoder_delay_episodes": 1,
+                    "intrinsic_beta": 0.0,
+                    "intrinsic_mode": "none",
+                }
+            ],
+        }
+        parsed = parse_minigrid_torch_config(config, seed=41)
+        self.assertEqual(parsed.agent.feature_dim, 32)
+        self.assertEqual(parsed.conditions[0].seed, 41)
+
+        vector = dense_feature_vector({0: 1.0, 3: 0.5}, 5)
+        self.assertEqual(vector, [1.0, 0.0, 0.0, 0.5, 0.0])
+
+        class FakeCuda:
+            def __init__(self, available: bool) -> None:
+                self.available = available
+
+            def is_available(self) -> bool:
+                return self.available
+
+        class FakeMps:
+            def __init__(self, available: bool) -> None:
+                self.available = available
+
+            def is_available(self) -> bool:
+                return self.available
+
+        class FakeTorch:
+            def __init__(self, cuda_available: bool, mps_available: bool) -> None:
+                self.cuda = FakeCuda(cuda_available)
+                self.backends = types.SimpleNamespace(mps=FakeMps(mps_available))
+
+            def device(self, name: str) -> str:
+                return f"device:{name}"
+
+        self.assertEqual(select_torch_device(FakeTorch(cuda_available=True, mps_available=True), "auto"), "device:cuda")
+        self.assertEqual(select_torch_device(FakeTorch(cuda_available=False, mps_available=True), "auto"), "device:mps")
+        self.assertEqual(select_torch_device(FakeTorch(cuda_available=False, mps_available=False), "auto"), "device:cpu")
+
+        summary = torch_summary_markdown(
+            {
+                "created_at": "2026-06-29T00:00:00+00:00",
+                "hypothesis": "torch dqn",
+                "env_id": "BabyAI-Unlock-v0",
+                "framework": {"version": "fake", "device": "cpu"},
+                "winner_last_window": "torch",
+                "results": [
+                    {
+                        "name": "torch",
+                        "success_rate_all": 0.0,
+                        "success_rate_last_window": 0.0,
+                        "mean_return_last_window": 0.0,
+                        "mean_steps_success": None,
+                        "updates": 1,
+                        "parameter_count": 10,
+                    }
+                ],
+            }
+        )
+        self.assertIn("PyTorch DQN", summary)
 
 
 if __name__ == "__main__":

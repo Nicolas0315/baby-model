@@ -15,6 +15,10 @@ MINIGRID_LINEAR_SWEEP_CONFIG="${MINIGRID_LINEAR_SWEEP_CONFIG:-}"
 MINIGRID_LINEAR_SWEEP_SEEDS="${MINIGRID_LINEAR_SWEEP_SEEDS:-401,402,403}"
 MINIGRID_NEURAL_CONFIG="${MINIGRID_NEURAL_CONFIG:-}"
 MINIGRID_NEURAL_SEED="${MINIGRID_NEURAL_SEED:-501}"
+MINIGRID_TORCH_CONFIG="${MINIGRID_TORCH_CONFIG:-}"
+MINIGRID_TORCH_SEED="${MINIGRID_TORCH_SEED:-601}"
+MINIGRID_TORCH_DEVICE="${MINIGRID_TORCH_DEVICE:-auto}"
+MINIGRID_TORCH_INDEX_URL="${MINIGRID_TORCH_INDEX_URL:-}"
 RUN_ID="${RUN_ID:-baby-model-fleet-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT" rev-parse --short HEAD)}"
 SESSION="${SESSION:-$RUN_ID}"
 
@@ -28,6 +32,7 @@ Usage:
   MODE=minigrid MINIGRID_LINEAR_CONFIG=configs/experiments/minigrid-linear-unlock.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   MODE=minigrid MINIGRID_LINEAR_SWEEP_CONFIG=configs/experiments/minigrid-linear-unlock.json MINIGRID_LINEAR_SWEEP_SEEDS=401,402,403 ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   MODE=minigrid MINIGRID_NEURAL_CONFIG=configs/experiments/minigrid-neural-unlock.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
+  MODE=minigrid MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json MINIGRID_TORCH_DEVICE=auto ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   BABY_MODEL_FLEET_HOSTS="mac:host-a wsl:host-b" ./scripts/fleet_archive_run.sh
 
 MODE values:
@@ -103,6 +108,26 @@ if [[ ! "$MINIGRID_NEURAL_SEED" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
+if [[ -n "$MINIGRID_TORCH_CONFIG" && ! "$MINIGRID_TORCH_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
+  echo "invalid MINIGRID_TORCH_CONFIG: $MINIGRID_TORCH_CONFIG" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_TORCH_SEED" =~ ^[0-9]+$ ]]; then
+  echo "invalid MINIGRID_TORCH_SEED: $MINIGRID_TORCH_SEED" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_TORCH_DEVICE" =~ ^(auto|cpu|cuda|cuda:[0-9]+|mps)$ ]]; then
+  echo "invalid MINIGRID_TORCH_DEVICE: $MINIGRID_TORCH_DEVICE" >&2
+  exit 2
+fi
+
+if [[ -n "$MINIGRID_TORCH_INDEX_URL" && ! "$MINIGRID_TORCH_INDEX_URL" =~ ^https://download\.pytorch\.org/whl/[A-Za-z0-9._/-]+$ ]]; then
+  echo "invalid MINIGRID_TORCH_INDEX_URL: $MINIGRID_TORCH_INDEX_URL" >&2
+  exit 2
+fi
+
 if [[ ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "invalid RUN_ID: $RUN_ID" >&2
   exit 2
@@ -148,7 +173,17 @@ case "$MODE" in
     if [[ -n "$MINIGRID_NEURAL_CONFIG" ]]; then
       MINIGRID_ENV="${MINIGRID_ENV}MINIGRID_NEURAL_CONFIG=$(printf '%q' "$MINIGRID_NEURAL_CONFIG") MINIGRID_NEURAL_SEED=$(printf '%q' "$MINIGRID_NEURAL_SEED") "
     fi
-    JOB_CMD="if command -v uv >/dev/null 2>&1; then ${MINIGRID_ENV}uv run --with minigrid bash scripts/verify_minigrid.sh; else python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; fi; status=\$?; echo exit=\$status; exec bash"
+    if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
+      MINIGRID_ENV="${MINIGRID_ENV}MINIGRID_TORCH_CONFIG=$(printf '%q' "$MINIGRID_TORCH_CONFIG") MINIGRID_TORCH_SEED=$(printf '%q' "$MINIGRID_TORCH_SEED") MINIGRID_TORCH_DEVICE=$(printf '%q' "$MINIGRID_TORCH_DEVICE") "
+      if [[ -n "$MINIGRID_TORCH_INDEX_URL" ]]; then
+        TORCH_INSTALL="python -m pip install --index-url $(printf '%q' "$MINIGRID_TORCH_INDEX_URL") torch"
+      else
+        TORCH_INSTALL="python -m pip install torch"
+      fi
+      JOB_CMD="python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && $TORCH_INSTALL && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; status=\$?; echo exit=\$status; exec bash"
+    else
+      JOB_CMD="if command -v uv >/dev/null 2>&1; then ${MINIGRID_ENV}uv run --with minigrid bash scripts/verify_minigrid.sh; else python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; fi; status=\$?; echo exit=\$status; exec bash"
+    fi
     ;;
   both)
     JOB_CMD="./scripts/verify.sh && CONFIG=$CONFIG SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"

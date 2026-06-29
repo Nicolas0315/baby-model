@@ -1,0 +1,45 @@
+{
+  "hypothesis": "Baby-AD/DA MiniGrid PyTorch DQN smoke on BabyAI Unlock",
+  "environment": {
+    "id": "BabyAI-Unlock-v0",
+    "max_steps": 120,
+    "quiet_env_output": true
+  },
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 8,
+    "replay_capacity": 256,
+    "target_sync_updates": 20,
+    "device": "auto"
+  },
+  "conditions": [
+    {
+      "name": "A_torch_hard_only",
+      "encoder_mode": "raw",
+      "episodes": 12,
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "B_torch_encoder_first",
+      "encoder_mode": "raw",
+      "episodes": 12,
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "E_torch_progress",
+      "encoder_mode": "raw",
+      "episodes": 12,
+      "decoder_delay_episodes": 4,
+      "intrinsic_beta": 0.03,
+      "intrinsic_mode": "progress"
+    }
+  ]
+}

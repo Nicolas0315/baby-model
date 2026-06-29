@@ -9,6 +9,7 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 python3 -m baby_model.cli verify-config configs/experiments/v0-smoke.json
 python3 -m baby_model.cli verify-config configs/experiments/v02-sweep.json
 python3 -m baby_model.cli verify-config configs/experiments/v03-sweep.json
+python3 -m json.tool configs/experiments/minigrid-torch-unlock-smoke.json >/dev/null
 VERIFY_RUN_DIR=".tmp/verify-run"
 case "$VERIFY_RUN_DIR" in
   .tmp/verify-run) rm -rf -- "$VERIFY_RUN_DIR" ;;

@@ -69,6 +69,15 @@ MINIGRID_NEURAL_SEED=501 \
 ./scripts/verify_minigrid.sh
 ```
 
+Run the default probe and smoke plus an optional PyTorch DQN smoke:
+
+```sh
+MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
+MINIGRID_TORCH_SEED=601 \
+MINIGRID_TORCH_DEVICE=auto \
+./scripts/verify_minigrid.sh
+```
+
 ## Probe Environments
 
 The optional probe starts with:
@@ -167,6 +176,16 @@ Neural encoder result on `BabyAI-Unlock-v0`, 60 episodes:
 The neural pilot is recorded in
 `docs/experiments/minigrid-neural-unlock.md`.
 
+PyTorch DQN CPU smoke on `BabyAI-Unlock-v0`, 12 episodes:
+
+| condition | success_all | success_last | return_last | mean_steps_success |
+| --- | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only` | 0.083 | 0.083 | 0.079 | 32.00 |
+| `B_torch_encoder_first` | 0.000 | 0.000 | 0.000 |  |
+| `E_torch_progress` | 0.000 | 0.000 | 0.000 |  |
+
+The PyTorch lane is recorded in `docs/experiments/minigrid-torch-lane.md`.
+
 ## Fleet Verification
 
 The optional verifier and trained smoke were replicated on all four configured
@@ -198,6 +217,10 @@ The neural encoder config was replicated on all four configured worker classes
 on 2026-06-29 at commit `c08b295014ec24489585b6a3798b9834c6c1597e`. Every
 worker produced the same neural table as local verification.
 
+The optional PyTorch lane is documented in
+`docs/experiments/minigrid-torch-lane.md`. It is not included in default
+verification and is not yet fleet proven.
+
 ## Metrics Schema
 
 Future trained runs should preserve this top-level shape:
@@ -221,6 +244,8 @@ Before GPU or long fleet jobs:
 
 - `./scripts/verify.sh` still passes without optional dependencies.
 - `./scripts/verify_minigrid.sh` passes in a local optional venv.
+- Optional PyTorch runs happen only after an isolated environment has `torch`
+  and `minigrid` installed.
 - A MiniGrid config compares `A_end_to_end`, `B_encoder_first`, and at least one
   intrinsic variant on the same sparse-reward environment.
 - A local tmux run writes summaries under `runs/`.

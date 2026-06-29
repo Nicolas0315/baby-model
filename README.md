@@ -43,6 +43,16 @@ Optional MiniGrid/BabyAI probe:
 This requires the optional `minigrid` dependency; setup details are in
 `docs/experiments/minigrid-protocol.md`.
 
+Optional PyTorch DQN smoke:
+
+```sh
+MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
+./scripts/verify_minigrid.sh
+```
+
+This additionally requires optional `torch`; setup details are in
+`docs/experiments/minigrid-torch-lane.md`.
+
 ## Fleet Loop
 
 Start read-only:
@@ -71,5 +81,6 @@ host.
 - MiniGrid linear multi-seed sweep:
   `docs/experiments/minigrid-linear-sweep.md`
 - MiniGrid neural encoder: `docs/experiments/minigrid-neural-unlock.md`
+- MiniGrid PyTorch DQN lane: `docs/experiments/minigrid-torch-lane.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`
