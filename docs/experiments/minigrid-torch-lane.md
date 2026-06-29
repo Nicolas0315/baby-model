@@ -136,8 +136,45 @@ smoke only, not a scientific conclusion.
 ## Current State
 
 The runner/config/verifier hook and local CPU/MPS smoke are implemented. The
-next proof step is a bounded fleet/GPU run with host-level evidence kept
-outside this repository.
+bounded fleet run is partially proven, with host-level evidence kept outside
+this repository.
+
+## Fleet Verification
+
+Retrieved: 2026-06-29 JST
+
+Source commit: `c009eda8ceea8b0e96f62ce24df2e4f00ea67e80`
+
+The optional PyTorch lane was replicated via `git archive | ssh | tmux` without
+adding PyTorch to the default project dependencies.
+
+Proven worker coverage:
+
+- Current Mac CPU smoke: `torch==2.12.1`, `device=cpu`, winner
+  `A_torch_hard_only`.
+- Current Mac backend smoke: `device=mps`, completed as a backend check.
+- One remote macOS worker: `torch==2.12.1`, `device=mps`, winner
+  `A_torch_hard_only`.
+- One remote Windows/WSL worker: `torch==2.12.1+cu126`, `device=cuda`, winner
+  `A_torch_hard_only`.
+- One additional remote Windows/WSL worker: CUDA was blocked by driver/wheel
+  support, but CPU fallback completed with `torch==2.12.1+cu132`,
+  `device=cpu`, winner `A_torch_hard_only`.
+
+The completed remote CPU/MPS/CUDA smoke summaries all matched the local CPU
+table: `A_torch_hard_only` reached `success_last=0.083`, while
+`B_torch_encoder_first` and `E_torch_progress` stayed at `0.000`.
+
+Remaining blockers:
+
+- Full-fleet PyTorch coverage is not complete.
+- One newer-GPU worker needs a compatible driver/wheel combination before CUDA
+  can be treated as proven.
+- One Windows/WSL worker did not complete dependency installation before the
+  clean stop point, so it has no PyTorch training summary.
+
+This is enough to prove the optional runner and device-selection path, but not
+enough to claim a robust GPU training result.
 
 ## Rollback
 

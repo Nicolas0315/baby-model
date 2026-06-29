@@ -163,14 +163,24 @@ Updated: 2026-06-29 JST
   `B_torch_encoder_first` and `E_torch_progress` had `success_last=0.000`.
 - Local optional PyTorch `auto` smoke selected MPS on the current Mac and
   completed, but all three conditions had `success_last=0.000`.
+- Bounded issue #12 PyTorch fleet smoke is partially proven at commit
+  `c009eda8ceea8b0e96f62ce24df2e4f00ea67e80`:
+  - one remote macOS worker completed on MPS;
+  - one remote Windows/WSL worker completed on CUDA;
+  - one additional remote Windows/WSL worker completed only as CPU fallback
+    after CUDA driver/wheel mismatch;
+  - one Windows/WSL worker did not complete dependency installation before the
+    clean stop point.
+  Exact host-level evidence is kept outside this repository in local docs.
 
 ## Next
 
-- Launch a bounded issue #12 fleet/GPU PyTorch smoke and keep host-level
-  evidence outside this repository.
+- Rerun issue #12 only after choosing a compatible driver/wheel path for the
+  newer-GPU worker and a cleaner dependency install path for the remaining
+  Windows/WSL worker.
 
 ## Not Yet Proven
 
-- Fleet PyTorch/GPU smoke for issue #12.
+- Full-fleet PyTorch/GPU smoke for issue #12.
 - Any robust GPU training result.
 - Full objective completion.

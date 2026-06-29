@@ -217,9 +217,12 @@ The neural encoder config was replicated on all four configured worker classes
 on 2026-06-29 at commit `c08b295014ec24489585b6a3798b9834c6c1597e`. Every
 worker produced the same neural table as local verification.
 
-The optional PyTorch lane is documented in
-`docs/experiments/minigrid-torch-lane.md`. It is not included in default
-verification and is not yet fleet proven.
+The optional PyTorch lane was partially replicated on 2026-06-29 at commit
+`c009eda8ceea8b0e96f62ce24df2e4f00ea67e80`. Local CPU, local MPS backend, one
+remote macOS MPS worker, one remote Windows/WSL CUDA worker, and one remote
+Windows/WSL CPU fallback completed. Another Windows/WSL worker did not complete
+dependency installation before the clean stop point. The lane remains optional
+and is documented in `docs/experiments/minigrid-torch-lane.md`.
 
 ## Metrics Schema
 
