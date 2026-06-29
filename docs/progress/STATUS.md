@@ -54,7 +54,8 @@ Updated: 2026-06-29 JST
   - v1.1 revise PyTorch AD/DA conditions: `https://github.com/Nicolas0315/baby-model/issues/15` closed
   - v1.2 longer-window PyTorch AD/DA training design: `https://github.com/Nicolas0315/baby-model/issues/16` closed
   - v1.3 predictive representation objective: `https://github.com/Nicolas0315/baby-model/issues/17` closed
-  - v1.4 predictive target and curriculum redesign: `https://github.com/Nicolas0315/baby-model/issues/18` open
+  - v1.4 predictive target and curriculum redesign: `https://github.com/Nicolas0315/baby-model/issues/18` closed
+  - v1.5 curriculum-backed PyTorch AD/DA training: `https://github.com/Nicolas0315/baby-model/issues/19` open
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -273,8 +274,8 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Close issue #18 after push and green CI, then open the next experiment issue
-  around a curriculum-backed PyTorch AD/DA design.
+- Execute issue #19 by adding a curriculum-backed PyTorch AD/DA design, then
+  run local and bounded CUDA smoke.
 
 ## Not Yet Proven
 
