@@ -1011,12 +1011,28 @@ Updated: 2026-06-30 JST
     target-near (`0.567`).
   - Treat `ZI` as the current strongest long-horizon representation-driven
     baseline candidate.
+- Issue #69 v2.45 five-seed CUDA extension for long-horizon `ZI` AD-stop is
+  complete:
+  - `docs/experiments/minigrid-torch-adda-v56.md`
+  - The CUDA sweep ran on `rtx4090` / WSL Ubuntu at source commit
+    `42421c68e4d22183adb1f4ec928ad872cc962ef9` with seeds
+    `4301,4302,4303,4304,4305`.
+  - Setup used `NVIDIA GeForce RTX 4090`, driver `610.62`,
+    `torch==2.11.0+cu128`, and `device=cuda`.
+  - Remote artifact:
+    `~/work/baby-model-cuda-42421c6/.tmp/rtx4090-v69-zi-cuda-5seed/20260629T182133Z/summary.md`.
+  - `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` won three
+    of five seeds and led aggregate final-window success (`0.530`), return
+    (`0.386`), target-visible (`0.690`), target-center (`0.540`), and
+    target-near (`0.580`).
+  - Treat `ZI` as the current strongest long-horizon representation-driven
+    baseline.
 
 ## Next
 
-- Broaden confirmation for
-  `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` with a
-  five-seed CUDA extension before calling the long-horizon branch stable.
+- Validate `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` on a
+  new axis, preferably another CUDA-capable worker or a longer horizon, before
+  calling the long-horizon branch stable beyond this worker/protocol.
 
 ## Not Yet Proven
 
@@ -1048,7 +1064,8 @@ Updated: 2026-06-30 JST
   extended the same protocol to five CUDA seeds and preserved the `ZE` edge;
   v2.41 then showed that the longer horizon favors `ZK_long` over `ZE_long`.
   v2.42 found a CPU-positive fix by stopping representation updates after the
-  AD-only phase. v2.43 replicated that direction on CUDA seed `4301`, but
-  multi-seed CUDA confirmation is still missing. v2.44 passed a bounded
-  three-seed CUDA gate for `ZI`, but five-seed confirmation is still missing.
+  AD-only phase. v2.43 replicated that direction on CUDA seed `4301`, v2.44
+  passed a bounded three-seed CUDA gate for `ZI`, and v2.45 preserved the edge
+  in a five-seed CUDA extension. The remaining gap is cross-axis validation
+  beyond the same worker and long-horizon protocol.
 - Full objective completion.
