@@ -921,13 +921,28 @@ Updated: 2026-06-30 JST
     `0.350`).
   - `ZE` trailed `ZU` on final-window return (`0.157` vs `0.202`), so this is
     a CUDA replication signal, not a baseline replacement.
+- Issue #63 v2.39 CUDA multi-seed gate for low-beta mission target `ZE` is
+  complete:
+  - `docs/experiments/minigrid-torch-adda-v50.md`
+  - The CUDA sweep ran on `rtx4090` / WSL Ubuntu at source commit
+    `03d58b7ddbfd843414ebd9e57617b60c5346ba9f` with seeds `4101,4102,4103`.
+  - Setup used `NVIDIA GeForce RTX 4090`, driver `610.62`,
+    `torch==2.11.0+cu128`, and `device=cuda`.
+  - Remote artifact:
+    `~/work/baby-model-cuda-03d58b7/.tmp/rtx4090-v63-ze-cuda-sweep/20260629T165215Z/summary.md`.
+  - `ZE_torch_gotoobj_state_plus_mission_target_b005` won all three seeds and
+    beat `ZU` on aggregate final-window success (`0.333` vs `0.150`), return
+    (`0.209` vs `0.096`), target-visible (`0.633` vs `0.433`), target-center
+    (`0.367` vs `0.167`), and target-near (`0.450` vs `0.200`).
+  - Treat `ZE` as the current strongest representation-driven baseline
+    candidate.
 
 ## Next
 
-- Run a multi-seed CUDA gate for
-  `ZE_torch_gotoobj_state_plus_mission_target_b005` against `ZU`, `ZF`, and
-  `ZD`. Replacement requires multi-seed success and mission-probe gains without
-  an unacceptable return regression.
+- Broaden confirmation around
+  `ZE_torch_gotoobj_state_plus_mission_target_b005`: either extend the CUDA
+  sweep to five seeds or run a longer-horizon check with `ZE` as the baseline
+  to beat.
 
 ## Not Yet Proven
 
@@ -953,5 +968,7 @@ Updated: 2026-06-30 JST
   still needs CUDA replication and multi-seed confirmation before baseline
   replacement. v2.38 reproduced the success and mission-probe direction on
   CUDA seed `4101`, but return still lagged `ZU`, so multi-seed CUDA is the
-  next gate.
+  next gate. v2.39 passed that bounded three-seed CUDA gate and makes `ZE` the
+  current strongest representation-driven candidate, but broader confirmation
+  is still needed before calling the overall research objective complete.
 - Full objective completion.
