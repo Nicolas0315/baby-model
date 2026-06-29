@@ -222,11 +222,22 @@ Updated: 2026-06-29 JST
   `mean_success_last=0.028`; `B_torch_encoder_first` and `E_torch_progress`
   stayed at `0.000`. This is a robust negative result for the current PyTorch
   AD/DA variants.
+- Issue #15 v1.1 AD/DA condition set is implemented:
+  - `configs/experiments/minigrid-torch-adda-v11.json`
+  - `docs/experiments/minigrid-torch-adda-v11.md`
+  The design shortens decoder delay and moves prediction progress into an
+  auxiliary action-selection head instead of the main reward target.
+- A bounded v1.1 CUDA smoke completed on `gpu-worker-c` at commit
+  `3fe12c716fe125577414b9a57da7709f31ed312c`. The run was executable on
+  `torch==2.12.1+cu132` and `device=cuda`, but all four conditions had
+  `success_last=0.000`; this is negative evidence for escalating v1.1 to a
+  multi-seed sweep.
 
 ## Next
 
-- Execute issue #15 by changing the PyTorch AD/DA condition design, not just
-  rerunning the current negative sweep.
+- Close issue #15 after push and green CI, then open the next issue around a
+  more substantial AD/DA change such as a longer learning window or a separate
+  predictive representation objective.
 
 ## Not Yet Proven
 

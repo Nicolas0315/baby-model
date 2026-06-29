@@ -66,3 +66,25 @@ Treat a revised AD/DA condition as promising only if it beats
 `A_torch_hard_only` on mean last-window success or win count in a three-seed
 CUDA sweep. Otherwise, record it as negative evidence and change the condition
 design again.
+
+## Current Result
+
+Source commit: `3fe12c716fe125577414b9a57da7709f31ed312c`
+
+A bounded CUDA smoke completed on `gpu-worker-c` with
+`torch==2.12.1+cu132` and `device=cuda`.
+
+Summary artifact:
+
+`/home/ogosh/work/baby-model-fleet/debug-pip-20260629T041337Z-d2a1c60/.tmp/verify-minigrid/torch/20260629T045933Z/summary.md`
+
+| condition | success_all | success_last | return_last | updates |
+| --- | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only` | 0.000 | 0.000 | 0.000 | 1433 |
+| `F_torch_short_delay` | 0.000 | 0.000 | 0.000 | 1193 |
+| `G_torch_aux_progress_short` | 0.000 | 0.000 | 0.000 | 1193 |
+| `H_torch_aux_progress_coarse` | 0.000 | 0.000 | 0.000 | 1193 |
+
+Conclusion: the v1.1 condition set is executable on CUDA, but the smoke is not
+promising. The auxiliary-progress design should not be escalated to a multi-seed
+GPU sweep without another condition change.
