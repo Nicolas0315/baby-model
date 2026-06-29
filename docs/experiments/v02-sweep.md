@@ -49,6 +49,14 @@ Larger beta values over-weight intrinsic return and reduce sparse-goal success.
 The next experiment should either anneal beta or make intrinsic reward a
 gating/auxiliary update signal instead of adding it directly to the Q target.
 
+## Fleet Replication
+
+The same sweep was replicated on all four configured worker classes on
+2026-06-29 via `git archive | ssh | tmux` at commit
+`6b822baadff77cab6086584450507923d14437b1`. Every worker produced the same
+aggregate winner, `B_encoder_first`. Exact host-level evidence is kept outside
+this repository in local docs.
+
 ## Verification
 
 ```sh

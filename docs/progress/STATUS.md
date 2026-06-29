@@ -41,7 +41,8 @@ Updated: 2026-06-29 JST
   - MiniGrid/BabyAI migration: `https://github.com/Nicolas0315/baby-model/issues/2`
   - CI billing/spending-limit blocker: `https://github.com/Nicolas0315/baby-model/issues/3` resolved
   - v0.1 prediction-improvement reward: `https://github.com/Nicolas0315/baby-model/issues/4` closed
-  - v0.2 progress-reward tuning/richer task: `https://github.com/Nicolas0315/baby-model/issues/5`
+  - v0.2 progress-reward tuning/richer task: `https://github.com/Nicolas0315/baby-model/issues/5` closed
+  - v0.3 annealed or auxiliary progress reward: `https://github.com/Nicolas0315/baby-model/issues/6`
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -56,16 +57,18 @@ Updated: 2026-06-29 JST
 - v0.2 result: `B_encoder_first` still won all five seeds by last-window
   success. The smallest tested progress beta, `0.05`, was closest; larger beta
   values over-weighted intrinsic reward and reduced sparse-goal success.
+- Fleet v0.2 sweep completed on all four configured worker classes using
+  `git archive | ssh | tmux`; all workers produced the same aggregate winner,
+  `B_encoder_first`. Exact host-level evidence is kept outside this repository
+  in local docs.
 
 ## Next
 
-- Run the v0.2 beta sweep under fleet worker tmux lanes.
-- Open the next experiment issue for beta annealing or auxiliary prediction
-  progress instead of direct Q-target reward shaping.
+- Implement issue #6 for annealed, gated, or auxiliary prediction-progress
+  learning.
 
 ## Not Yet Proven
 
-- Remote checkout and remote tmux worker loops.
 - MiniGrid/BabyAI dependency install.
 - Any GPU training result.
 - Full objective completion.
