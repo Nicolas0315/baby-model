@@ -555,12 +555,26 @@ Updated: 2026-06-29 JST
   - Treat hashed next-signature prediction as the wrong next diagnostic for
     this non-DQN lane. The next probe should add a semantic object/color
     transition label on the corrected scripted-policy dataset.
+- Issue #39 v2.14 semantic object-color transition label probe is implemented:
+  - `baby_model/minigrid_repr_probe.py`
+  - `configs/experiments/minigrid-repr-probe-v34.json`
+  - `docs/experiments/minigrid-repr-probe-v34.md`
+  - local CPU smoke collected `905` GoToObj-family scripted-policy transitions.
+  - Added `target_visibility_transition`, an interpretable semantic label such
+    as `absent->center_near`, derived from the mission target object/color and
+    corrected MiniGrid `image[x][y][channel]` relation to the agent.
+  - `predictive_target_visibility` reached held-out semantic-label accuracy
+    `0.663` and lift `0.376`.
+  - Downstream probe preserved mission-object and mission-color accuracy, and
+    improved `target_visibility_transition` lift from `0.387` to `0.392`, but
+    the lift delta was only `0.0055`, below the documented `0.010` threshold.
+  - Treat v2.14 as a negative near-miss. The semantic target is learnable and
+    directionally useful, but not yet strong enough to return to RL/CUDA.
 
 ## Next
 
-- Add a semantic object/color transition label on the corrected scripted-policy
-  dataset and test whether it yields a representation signal beyond
-  `raw_current` without erasing mission-object or mission-color information.
+- Run a small multi-seed semantic probe or refine the semantic relation buckets
+  before returning the non-DQN signal to the RL/CUDA lane.
 
 ## Not Yet Proven
 

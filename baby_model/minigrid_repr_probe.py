@@ -18,7 +18,13 @@ from baby_model.minigrid_torch import affordance_progress_vector, controllabilit
 
 DEFAULT_LABELS = ("mission_object", "mission_color", "changed")
 DEFAULT_FEATURE_SETS = ("raw_current", "affordance_current")
-SUPPORTED_LABELS = ("mission_object", "mission_color", "changed", "next_signature_bucket")
+SUPPORTED_LABELS = (
+    "mission_object",
+    "mission_color",
+    "changed",
+    "next_signature_bucket",
+    "target_visibility_transition",
+)
 OBJECT_WORDS = ("ball", "box", "key", "door", "goal")
 COLOR_WORDS = ("red", "green", "blue", "purple", "yellow", "grey", "gray")
 MINIGRID_OBJECT_TO_IDX = {"door": 4, "key": 5, "ball": 6, "box": 7, "goal": 8}
@@ -611,7 +617,33 @@ def transition_probe_labels(
         "mission_color": _first_matching_token(mission, COLOR_WORDS),
         "changed": "changed" if changed else "same",
         "next_signature_bucket": f"bucket:{_signature_bucket(next_features, signature_buckets)}",
+        "target_visibility_transition": target_visibility_transition_label(observation, next_observation),
     }
+
+
+def target_visibility_transition_label(observation: Any, next_observation: Any) -> str:
+    return f"{target_relation_label(observation)}->{target_relation_label(next_observation)}"
+
+
+def target_relation_label(observation: Any) -> str:
+    if not isinstance(observation, dict):
+        return "absent"
+    target = target_from_mission(str(observation.get("mission", "")))
+    target_cell = nearest_visible_target_cell(image=observation.get("image"), target=target)
+    if target_cell is None:
+        return "absent"
+    x, y, width, height = target_cell
+    center_x = width // 2
+    agent_y = height - 1
+    if x < center_x:
+        side = "left"
+    elif x > center_x:
+        side = "right"
+    else:
+        side = "center"
+    distance = abs(x - center_x) + abs(y - agent_y)
+    depth = "near" if distance <= 2 else "far"
+    return f"{side}_{depth}"
 
 
 def vector_to_sparse_features(vector: list[float]) -> SparseFeatures:
@@ -634,7 +666,7 @@ def evaluate_feature_set(
     ]
     labels_by_name: dict[str, list[str]] = {
         label_name: [str(transition["labels"][label_name]) for transition in transitions]
-        for label_name in ("mission_object", "mission_color", "changed", "next_signature_bucket")
+        for label_name in config.decision.labels
     }
     label_reports = {
         label_name: centroid_probe_metrics(

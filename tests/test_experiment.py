@@ -49,6 +49,7 @@ from baby_model.minigrid_repr_probe import (
     evaluate_feature_set,
     parse_minigrid_representation_probe_config,
     scripted_object_action,
+    target_relation_label,
     train_predictive_encoder,
     representation_probe_summary_markdown,
     transition_probe_labels,
@@ -1326,12 +1327,32 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(labels["mission_color"], "yellow")
         self.assertEqual(labels["changed"], "changed")
         self.assertTrue(labels["next_signature_bucket"].startswith("bucket:"))
+        self.assertEqual(labels["target_visibility_transition"], "absent->absent")
 
         self.assertEqual(vector_to_sparse_features([0.0, 1.0, 0.5]), {1: 1.0, 2: 0.5})
         examples = [{0: 1.0}, {0: 0.9}, {1: 1.0}, {1: 0.9}, {0: 1.0}, {1: 1.0}]
         metrics = centroid_probe_metrics(examples, ["a", "a", "b", "b", "a", "b"], test_every=3)
         self.assertEqual(metrics["test_examples"], 2)
         self.assertGreaterEqual(metrics["accuracy"], metrics["majority_baseline"])
+
+    def test_minigrid_repr_target_visibility_transition_is_dependency_free(self) -> None:
+        empty = [0, 0, 0]
+        red_ball = [6, 0, 0]
+        before_image = [[list(empty) for _y in range(7)] for _x in range(7)]
+        after_image = [[list(empty) for _y in range(7)] for _x in range(7)]
+        after_image[3][5] = red_ball
+        before = {"mission": "go to the red ball", "image": before_image}
+        after = {"mission": "go to the red ball", "image": after_image}
+        self.assertEqual(target_relation_label(before), "absent")
+        self.assertEqual(target_relation_label(after), "center_near")
+        labels = transition_probe_labels(
+            observation=before,
+            next_observation=after,
+            features={1: 1.0},
+            next_features={1: 1.0, 2: 1.0},
+            signature_buckets=8,
+        )
+        self.assertEqual(labels["target_visibility_transition"], "absent->center_near")
 
     def test_minigrid_repr_predictive_encoder_is_dependency_free(self) -> None:
         config = parse_minigrid_representation_probe_config(
@@ -1378,6 +1399,7 @@ class ExperimentTest(unittest.TestCase):
                         "mission_color": "red" if index < 6 else "blue",
                         "changed": "changed" if is_changed else "same",
                         "next_signature_bucket": f"bucket:{index % 4}",
+                        "target_visibility_transition": "absent->center_near" if is_changed else "absent->absent",
                     },
                 }
             )
@@ -1393,6 +1415,39 @@ class ExperimentTest(unittest.TestCase):
         )
         self.assertIn("changed", report["labels"])
         self.assertGreaterEqual(report["labels"]["changed"]["accuracy"], report["labels"]["changed"]["majority_baseline"])
+
+    def test_minigrid_repr_feature_eval_uses_config_labels_only(self) -> None:
+        config = parse_minigrid_representation_probe_config(
+            {
+                "dataset": {
+                    "policy": "random",
+                    "test_every": 3,
+                    "signature_buckets": 4,
+                    "envs": [{"name": "fake", "env_id": "Fake-v0", "episodes": 1, "max_steps": 6}],
+                },
+                "features": {"feature_dim": 128, "encoder_mode": "raw", "feature_sets": ["raw_current"]},
+                "decision": {
+                    "mode": "absolute_all_labels",
+                    "labels": ["mission_object", "mission_color", "changed"],
+                    "min_test_examples": 1,
+                },
+            }
+        )
+        transitions = [
+            {
+                "features": {index: 1.0},
+                "affordance_features": {},
+                "labels": {
+                    "mission_object": "ball",
+                    "mission_color": "red",
+                    "changed": "changed" if index % 2 else "same",
+                    "next_signature_bucket": f"bucket:{index % 4}",
+                },
+            }
+            for index in range(6)
+        ]
+        report = evaluate_feature_set(transitions, feature_set="raw_current", config=config)
+        self.assertEqual(set(report["labels"]), {"mission_object", "mission_color", "changed"})
 
     def test_minigrid_repr_probe_v30_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v30.json")
@@ -1453,6 +1508,23 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.decision.reference_feature_set, "predictive_next_signature")
         self.assertEqual(parsed.decision.candidate_feature_set, "predictive_next_signature_pure")
         self.assertEqual(parsed.decision.transition_label, "next_signature_bucket")
+        self.assertEqual(parsed.decision.transition_min_lift_delta, 0.01)
+        self.assertEqual(parsed.decision.max_mission_accuracy_drop, 0.05)
+        self.assertEqual(parsed.decision.min_test_examples, 10)
+
+    def test_minigrid_repr_probe_v34_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-repr-probe-v34.json")
+        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        self.assertEqual(parsed.policy, "scripted_object")
+        self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_target_visibility"))
+        self.assertEqual(parsed.predictive_encoders[0].name, "predictive_target_visibility")
+        self.assertEqual(parsed.predictive_encoders[0].target_label, "target_visibility_transition")
+        self.assertTrue(parsed.predictive_encoders[0].include_raw_passthrough)
+        self.assertEqual(parsed.decision.mode, "relative_to_baseline")
+        self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "target_visibility_transition"))
+        self.assertEqual(parsed.decision.baseline_feature_set, "raw_current")
+        self.assertEqual(parsed.decision.candidate_feature_set, "predictive_target_visibility")
+        self.assertEqual(parsed.decision.transition_label, "target_visibility_transition")
         self.assertEqual(parsed.decision.transition_min_lift_delta, 0.01)
         self.assertEqual(parsed.decision.max_mission_accuracy_drop, 0.05)
         self.assertEqual(parsed.decision.min_test_examples, 10)
