@@ -24,6 +24,7 @@ class TorchDeviceUnavailable(RuntimeError):
 TASK_SIGNAL_DIM = 16
 CONTROLLABILITY_DIM = 1
 AFFORDANCE_PROGRESS_DIM = 16
+TRANSITION_GROUP_DIM = 16
 ACTION_LEFT = 0
 ACTION_RIGHT = 1
 ACTION_FORWARD = 2
@@ -96,7 +97,13 @@ class TorchDQNAgent:
         self.target.eval()
         self.representation_predictor = None
         parameters = list(self.model.parameters())
-        if representation_objective in {"next_feature", "next_task_signal", "controllability", "affordance_progress"}:
+        if representation_objective in {
+            "next_feature",
+            "next_task_signal",
+            "controllability",
+            "affordance_progress",
+            "transition_group",
+        }:
             target_dim = _representation_target_dim(representation_objective, config.feature_dim)
             self.representation_predictor = build_next_feature_predictor(
                 torch,
@@ -183,7 +190,14 @@ class TorchDQNAgent:
     ) -> float | None:
         if self.representation_objective == "none":
             return None
-        if self.representation_objective not in {"next_feature", "next_task_signal", "action_prior", "controllability", "affordance_progress"} or self.representation_predictor is None:
+        if self.representation_objective not in {
+            "next_feature",
+            "next_task_signal",
+            "action_prior",
+            "controllability",
+            "affordance_progress",
+            "transition_group",
+        } or self.representation_predictor is None:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
         state = self._feature_tensor(features).unsqueeze(0)
@@ -429,7 +443,15 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         if intrinsic_target not in {"reward", "auxiliary"}:
             raise ValueError(f"invalid intrinsic_target for {name}")
         representation_objective = str(item.get("representation_objective", "none"))
-        if representation_objective not in {"none", "next_feature", "next_task_signal", "action_prior", "controllability", "affordance_progress"}:
+        if representation_objective not in {
+            "none",
+            "next_feature",
+            "next_task_signal",
+            "action_prior",
+            "controllability",
+            "affordance_progress",
+            "transition_group",
+        }:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
         action_prior_weight = float(item.get("action_prior_weight", 0.0))
@@ -986,6 +1008,8 @@ def _representation_target_dim(representation_objective: str, feature_dim: int) 
         return CONTROLLABILITY_DIM
     if representation_objective == "affordance_progress":
         return AFFORDANCE_PROGRESS_DIM
+    if representation_objective == "transition_group":
+        return TRANSITION_GROUP_DIM
     raise ValueError(f"unsupported representation objective: {representation_objective}")
 
 
@@ -1006,6 +1030,8 @@ def representation_target_for_objective(
         return controllability_target(features, next_features)
     if condition.representation_objective == "affordance_progress":
         return affordance_progress_vector(next_observation)
+    if condition.representation_objective == "transition_group":
+        return transition_group_vector(observation, next_observation)
     if condition.representation_objective == "action_prior":
         return action_prior_label(observation, actions)
     return []
@@ -1063,6 +1089,14 @@ def affordance_progress_vector(observation: Any) -> list[float]:
         or (mission_mentions_door and type_counts.get(OBJECT_DOOR, 0) == 0)
         else 0.0,
     ]
+
+
+def transition_group_vector(observation: Any, next_observation: Any) -> list[float]:
+    before = affordance_progress_vector(observation)
+    after = affordance_progress_vector(next_observation)
+    if len(before) != len(after):
+        raise ValueError("affordance vectors must have matching lengths")
+    return [1.0 if old != new else 0.0 for old, new in zip(before, after, strict=True)]
 
 
 def action_prior_label(observation: Any, actions: int) -> int:

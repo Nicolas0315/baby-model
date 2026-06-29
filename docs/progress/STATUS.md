@@ -360,12 +360,23 @@ Updated: 2026-06-29 JST
   last-window success (`0.050`) and return (`0.045`), while both
   affordance-progress conditions stayed at `0.000` success and return. Treat
   v1.9 as negative evidence for this affordance-progress target.
+- Issue #25 v2.0 transition-group representation target is implemented:
+  - `configs/experiments/minigrid-torch-adda-v20.json`
+  - `docs/experiments/minigrid-torch-adda-v20.md`
+  - PyTorch DQN now supports a `transition_group` representation objective that
+    predicts which semantic affordance-progress groups changed from current to
+    next observation after an action.
+- Local v2.0 CPU smoke passed in the existing optional PyTorch venv with
+  `torch==2.12.1` and `device=cpu`, but did not meet the CUDA escalation rule.
+  Both transition-group conditions tied the baselines on final-stage
+  last-window success (`0.000`) and did not improve final-stage return
+  (`0.000`). Treat v2.0 as negative evidence for a plain transition change-mask
+  target.
 
 ## Next
 
-- Open the next design issue for a transition-group or explicit subgoal-progress
-  representation target. v1.9 suggests next-observation affordance bits alone
-  are not enough.
+- Open the next design issue for an explicit subgoal-progress or richer
+  state-plus-delta representation target.
 
 ## Not Yet Proven
 
