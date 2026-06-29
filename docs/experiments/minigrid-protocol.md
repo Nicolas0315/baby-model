@@ -170,6 +170,11 @@ worker classes on 2026-06-29 at commit
 `4077130a2c1d2dcca4dfa39e690f27a77edbf557`. Every worker produced the same
 linear table as local verification.
 
+The multi-seed linear sweep was replicated on all four configured worker
+classes on 2026-06-29 at commit
+`69f111719c9829128b78a8a0a5a97367dc6c19db`. Every worker produced the same
+aggregate table as local verification.
+
 ## Metrics Schema
 
 Future trained runs should preserve this top-level shape:

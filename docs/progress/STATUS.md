@@ -134,14 +134,17 @@ Updated: 2026-06-29 JST
   by win count (`2/3`) after tying `B_linear_encoder_first` on mean and median
   last-window success (`0.050`). The issue #9 single-seed positive signal is
   therefore not yet robust enough to treat as a conclusion.
+- Fleet multi-seed linear sweep replication completed on all four configured
+  worker classes at commit `69f111719c9829128b78a8a0a5a97367dc6c19db`; all
+  workers produced the same aggregate table. Exact host-level evidence is kept
+  outside this repository in local docs.
 
 ## Next
 
-- Replicate the multi-seed linear sweep through fleet tmux while runtime
-  remains lightweight.
+- Decide whether to broaden the linear sweep or move to a stronger optional
+  neural encoder lane.
 
 ## Not Yet Proven
 
 - Any GPU training result.
-- Fleet replication of the multi-seed linear sweep.
 - Full objective completion.

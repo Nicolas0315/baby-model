@@ -55,3 +55,10 @@ but it won only one of three seeds. The progress variant remained weak.
 The next step should either broaden this sweep or move to a stronger optional
 representation model. This result does not justify claiming that linear
 function approximation alone solves the Baby-AD/DA hard-task problem.
+
+## Fleet Replication
+
+The multi-seed linear sweep was replicated on all four configured worker
+classes at commit `69f111719c9829128b78a8a0a5a97367dc6c19db`. Every worker
+produced the same aggregate table and per-seed winners. Exact host-level
+evidence is kept outside this repository in local docs.
