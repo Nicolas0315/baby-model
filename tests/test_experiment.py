@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import sys
 import tempfile
 import types
@@ -786,6 +787,24 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         self.assertIn("PyTorch DQN", summary)
+
+    def test_minigrid_torch_v11_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v11.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=601)
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only",
+                "F_torch_short_delay",
+                "G_torch_aux_progress_short",
+                "H_torch_aux_progress_coarse",
+            ],
+        )
+        aux = parsed.conditions[2]
+        self.assertEqual(aux.decoder_delay_episodes, 2)
+        self.assertEqual(aux.intrinsic_mode, "progress")
+        self.assertEqual(aux.intrinsic_target, "auxiliary")
 
     def test_minigrid_torch_sweep_aggregate_is_dependency_free(self) -> None:
         runs = [
