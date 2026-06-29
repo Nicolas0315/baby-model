@@ -38,11 +38,12 @@ Updated: 2026-06-29 JST
   `764de19117cae1cad927a305c3bbc074a889e00a` on 2026-06-29.
 - GitHub issues:
   - Fleet worker protocol: `https://github.com/Nicolas0315/baby-model/issues/1` closed
-  - MiniGrid/BabyAI migration: `https://github.com/Nicolas0315/baby-model/issues/2`
+  - MiniGrid/BabyAI migration: `https://github.com/Nicolas0315/baby-model/issues/2` closed
   - CI billing/spending-limit blocker: `https://github.com/Nicolas0315/baby-model/issues/3` resolved
   - v0.1 prediction-improvement reward: `https://github.com/Nicolas0315/baby-model/issues/4` closed
   - v0.2 progress-reward tuning/richer task: `https://github.com/Nicolas0315/baby-model/issues/5` closed
   - v0.3 annealed or auxiliary progress reward: `https://github.com/Nicolas0315/baby-model/issues/6` closed
+  - harder MiniGrid/BabyAI trained run: `https://github.com/Nicolas0315/baby-model/issues/7`
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -91,7 +92,7 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Add a harder MiniGrid/BabyAI trained config for issue #2, starting with
+- Add a harder MiniGrid/BabyAI trained config for issue #7, starting with
   `MiniGrid-DoorKey-8x8-v0` or a BabyAI task.
 
 ## Not Yet Proven
