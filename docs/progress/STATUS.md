@@ -55,7 +55,8 @@ Updated: 2026-06-29 JST
   - v1.2 longer-window PyTorch AD/DA training design: `https://github.com/Nicolas0315/baby-model/issues/16` closed
   - v1.3 predictive representation objective: `https://github.com/Nicolas0315/baby-model/issues/17` closed
   - v1.4 predictive target and curriculum redesign: `https://github.com/Nicolas0315/baby-model/issues/18` closed
-  - v1.5 curriculum-backed PyTorch AD/DA training: `https://github.com/Nicolas0315/baby-model/issues/19` open
+  - v1.5 curriculum-backed PyTorch AD/DA training: `https://github.com/Nicolas0315/baby-model/issues/19` closed
+  - v1.6 redesign AD/DA signal beyond curriculum task-signal: `https://github.com/Nicolas0315/baby-model/issues/20` open
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -292,8 +293,8 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Close issue #19 after push/green CI, then open the next issue for a v1.6
-  AD/DA redesign beyond this curriculum-backed task-signal condition family.
+- Execute issue #20 by designing a v1.6 AD/DA signal family beyond the current
+  curriculum-backed task-signal condition family.
 
 ## Not Yet Proven
 
