@@ -767,11 +767,28 @@ Updated: 2026-06-29 JST
     `target_near_last=0.700`.
   - Treat v2.28 as positive single-seed CUDA replication evidence, not
     multi-seed stability proof.
+- Issue #53 v2.29 CUDA multi-seed sweep for the beta-neighborhood candidates
+  is complete:
+  - The sweep ran on `gpu-worker-c` at commit
+    `3a9b729050600246c85c9bbd73013a0c46425754` with seeds
+    `3501,3502,3503`.
+  - Setup proved `torch==2.12.1+cu132`, `torch_cuda_available=True`,
+    `torch_cuda_device_count=1`, and `devices=cuda`.
+  - `ZT_torch_gotoobj_state_plus_target_visibility_b005` beat the prior `ZR`
+    baseline, but `ZU_torch_gotoobj_state_plus_target_visibility_b0075` was the
+    actual multi-seed winner.
+  - `ZU` won two of three seeds and led the aggregate table:
+    `mean_success_last=0.550`, `median_success_last=0.550`,
+    `mean_return_last=0.372`, `median_return_last=0.360`,
+    `target_visible_last=0.700`, `target_center_last=0.567`,
+    `target_near_last=0.583`.
+  - Treat `ZU` beta `0.075` as the current strongest beta-neighborhood
+    candidate and the next baseline to beat.
 
 ## Next
 
-- Run a bounded multi-seed CUDA sweep for the v2.27 beta `0.05` candidate
-  before treating it as a replacement for `ZR`.
+- Start the next branch from `ZU` beta `0.075`: either a true two-head
+  implementation or a longer-horizon probe-gated run.
 
 ## Not Yet Proven
 
@@ -782,5 +799,6 @@ Updated: 2026-06-29 JST
   current best representation baselines under the mission-preservation probe.
   v2.23's single-head mission-conditioned target did not pass this gate, while
   v2.24 beta `0.1` passed CPU, CUDA replication, and bounded three-seed CUDA
-  gates. v2.27 beta `0.05` has CPU and single-seed CUDA evidence so far.
+  gates. v2.29 beta `0.075` is now the strongest beta-neighborhood candidate
+  from a bounded three-seed CUDA sweep.
 - Full objective completion.
