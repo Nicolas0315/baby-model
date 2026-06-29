@@ -42,7 +42,7 @@ Updated: 2026-06-29 JST
   - CI billing/spending-limit blocker: `https://github.com/Nicolas0315/baby-model/issues/3` resolved
   - v0.1 prediction-improvement reward: `https://github.com/Nicolas0315/baby-model/issues/4` closed
   - v0.2 progress-reward tuning/richer task: `https://github.com/Nicolas0315/baby-model/issues/5` closed
-  - v0.3 annealed or auxiliary progress reward: `https://github.com/Nicolas0315/baby-model/issues/6`
+  - v0.3 annealed or auxiliary progress reward: `https://github.com/Nicolas0315/baby-model/issues/6` closed
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -71,10 +71,15 @@ Updated: 2026-06-29 JST
 - v0.3 result: `B_encoder_first` still won by mean last-window success.
   `E_progress_anneal` was the best intrinsic variant; `G_progress_aux`
   underperformed direct reward shaping in this tiny grid.
+- Fleet v0.3 sweep completed on all four configured worker classes using
+  `git archive | ssh | tmux`; all workers produced the same aggregate winner,
+  `B_encoder_first`, and the same condition table as the local run. Exact
+  host-level evidence is kept outside this repository in local docs.
 
 ## Next
 
-- Replicate v0.3 under fleet worker tmux lanes and update issue #6.
+- Start issue #2 MiniGrid/BabyAI migration with local-first dependency and
+  protocol design.
 
 ## Not Yet Proven
 

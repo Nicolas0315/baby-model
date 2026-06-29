@@ -44,6 +44,14 @@ direct reward shaping in this tiny grid, so auxiliary progress needs a weaker
 weight, a decay schedule, or a representation-learning target before spending
 fleet/GPU time on it.
 
+## Fleet Replication
+
+The same sweep was replicated on all four configured worker classes on
+2026-06-29 via `git archive | ssh | tmux` at commit
+`8193d4b05c4a3a7f17f6c610763c142832d2d8e4`. Every worker produced the same
+aggregate winner, `B_encoder_first`, and the same condition table as the local
+run. Exact host-level evidence is kept outside this repository in local docs.
+
 ## Verification
 
 ```sh
