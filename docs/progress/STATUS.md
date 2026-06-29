@@ -372,11 +372,24 @@ Updated: 2026-06-29 JST
   last-window success (`0.000`) and did not improve final-stage return
   (`0.000`). Treat v2.0 as negative evidence for a plain transition change-mask
   target.
+- Issue #26 v2.1 explicit subgoal-progress representation target is
+  implemented:
+  - `configs/experiments/minigrid-torch-adda-v21.json`
+  - `docs/experiments/minigrid-torch-adda-v21.md`
+  - PyTorch DQN now supports a `subgoal_progress` representation objective that
+    predicts a 10-bit key-door-goal progress event vector from current and next
+    observations.
+- Local v2.1 CPU smoke passed in the existing optional PyTorch venv with
+  `torch==2.12.1` and `device=cpu`, but did not meet the CUDA escalation rule.
+  All final-stage last-window success and return values were `0.000`; both
+  subgoal-progress conditions ran non-zero representation updates but did not
+  improve final-stage reward. Treat v2.1 as negative evidence for a sparse
+  explicit subgoal event target under the current ladder.
 
 ## Next
 
-- Open the next design issue for an explicit subgoal-progress or richer
-  state-plus-delta representation target.
+- Design a richer state-plus-delta representation target or a denser task ladder
+  with more observable key/door transitions before the final unlock stage.
 
 ## Not Yet Proven
 

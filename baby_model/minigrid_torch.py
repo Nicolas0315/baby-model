@@ -25,6 +25,7 @@ TASK_SIGNAL_DIM = 16
 CONTROLLABILITY_DIM = 1
 AFFORDANCE_PROGRESS_DIM = 16
 TRANSITION_GROUP_DIM = 16
+SUBGOAL_PROGRESS_DIM = 10
 ACTION_LEFT = 0
 ACTION_RIGHT = 1
 ACTION_FORWARD = 2
@@ -103,6 +104,7 @@ class TorchDQNAgent:
             "controllability",
             "affordance_progress",
             "transition_group",
+            "subgoal_progress",
         }:
             target_dim = _representation_target_dim(representation_objective, config.feature_dim)
             self.representation_predictor = build_next_feature_predictor(
@@ -197,6 +199,7 @@ class TorchDQNAgent:
             "controllability",
             "affordance_progress",
             "transition_group",
+            "subgoal_progress",
         } or self.representation_predictor is None:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
@@ -451,6 +454,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             "controllability",
             "affordance_progress",
             "transition_group",
+            "subgoal_progress",
         }:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
@@ -1010,6 +1014,8 @@ def _representation_target_dim(representation_objective: str, feature_dim: int) 
         return AFFORDANCE_PROGRESS_DIM
     if representation_objective == "transition_group":
         return TRANSITION_GROUP_DIM
+    if representation_objective == "subgoal_progress":
+        return SUBGOAL_PROGRESS_DIM
     raise ValueError(f"unsupported representation objective: {representation_objective}")
 
 
@@ -1032,6 +1038,8 @@ def representation_target_for_objective(
         return affordance_progress_vector(next_observation)
     if condition.representation_objective == "transition_group":
         return transition_group_vector(observation, next_observation)
+    if condition.representation_objective == "subgoal_progress":
+        return subgoal_progress_vector(observation, next_observation)
     if condition.representation_objective == "action_prior":
         return action_prior_label(observation, actions)
     return []
@@ -1097,6 +1105,99 @@ def transition_group_vector(observation: Any, next_observation: Any) -> list[flo
     if len(before) != len(after):
         raise ValueError("affordance vectors must have matching lengths")
     return [1.0 if old != new else 0.0 for old, new in zip(before, after, strict=True)]
+
+
+def subgoal_progress_vector(observation: Any, next_observation: Any) -> list[float]:
+    before = _subgoal_snapshot(observation)
+    after = _subgoal_snapshot(next_observation)
+    mission_mentions_key = before["mission_mentions_key"] or after["mission_mentions_key"]
+    mission_mentions_door = before["mission_mentions_door"] or after["mission_mentions_door"]
+
+    key_disappeared = mission_mentions_key and before["key_count"] > 0 and after["key_count"] == 0
+    key_became_visible = mission_mentions_key and before["key_count"] == 0 and after["key_count"] > 0
+    locked_door_decreased = (
+        mission_mentions_door and before["locked_door_count"] > after["locked_door_count"]
+    )
+    open_door_increased = mission_mentions_door and before["open_door_count"] < after["open_door_count"]
+    goal_became_visible = before["goal_count"] == 0 and after["goal_count"] > 0
+    front_became_key = mission_mentions_key and before["front_type"] != OBJECT_KEY and after["front_type"] == OBJECT_KEY
+    front_became_locked_door = (
+        mission_mentions_door
+        and not (before["front_type"] == OBJECT_DOOR and before["front_state"] == 2)
+        and after["front_type"] == OBJECT_DOOR
+        and after["front_state"] == 2
+    )
+    front_became_open_door = (
+        mission_mentions_door
+        and not (before["front_type"] == OBJECT_DOOR and before["front_state"] == 0)
+        and after["front_type"] == OBJECT_DOOR
+        and after["front_state"] == 0
+    )
+    front_became_goal = before["front_type"] != OBJECT_GOAL and after["front_type"] == OBJECT_GOAL
+    unlock_chain_progress = key_disappeared or locked_door_decreased or open_door_increased or goal_became_visible
+
+    return [
+        1.0 if key_disappeared else 0.0,
+        1.0 if key_became_visible else 0.0,
+        1.0 if locked_door_decreased else 0.0,
+        1.0 if open_door_increased else 0.0,
+        1.0 if goal_became_visible else 0.0,
+        1.0 if front_became_key else 0.0,
+        1.0 if front_became_locked_door else 0.0,
+        1.0 if front_became_open_door else 0.0,
+        1.0 if front_became_goal else 0.0,
+        1.0 if unlock_chain_progress else 0.0,
+    ]
+
+
+def _subgoal_snapshot(observation: Any) -> dict[str, Any]:
+    if not isinstance(observation, dict):
+        return {
+            "mission_mentions_key": False,
+            "mission_mentions_door": False,
+            "key_count": 0,
+            "locked_door_count": 0,
+            "open_door_count": 0,
+            "goal_count": 0,
+            "front_type": -1,
+            "front_state": -1,
+        }
+    image = observation.get("image")
+    if hasattr(image, "tolist"):
+        image = image.tolist()
+    cells = _flat_image_cells(image)
+    front = _image_cell(image, VIEW_FORWARD_X, VIEW_FORWARD_Y)
+    mission = str(observation.get("mission", "")).lower()
+    key_count = 0
+    locked_door_count = 0
+    open_door_count = 0
+    goal_count = 0
+    for cell in cells:
+        if len(cell) < 3:
+            continue
+        obj_type = int(cell[0])
+        state = int(cell[2])
+        if obj_type == OBJECT_KEY:
+            key_count += 1
+        elif obj_type == OBJECT_DOOR:
+            if state == 2:
+                locked_door_count += 1
+            elif state == 0:
+                open_door_count += 1
+        elif obj_type == OBJECT_GOAL:
+            goal_count += 1
+    front_type = int(front[0]) if front is not None and len(front) >= 3 else -1
+    front_state = int(front[2]) if front is not None and len(front) >= 3 else -1
+    return {
+        "mission_mentions_key": "key" in mission or "unlock" in mission,
+        "mission_mentions_door": "door" in mission or "open" in mission or "unlock" in mission,
+        "key_count": key_count,
+        "locked_door_count": locked_door_count,
+        "open_door_count": open_door_count,
+        "goal_count": goal_count,
+        "front_type": front_type,
+        "front_state": front_state,
+    }
 
 
 def action_prior_label(observation: Any, actions: int) -> int:
