@@ -245,11 +245,24 @@ Updated: 2026-06-29 JST
   `K_torch_long_coarse_aux` each reached one all-window success
   (`success_all=0.021`), but all four conditions had `success_last=0.000`.
   This is not promising enough to escalate v1.2 to a multi-seed GPU sweep.
+- Issue #17 v1.3 predictive representation objective is implemented:
+  - `configs/experiments/minigrid-torch-adda-v13.json`
+  - `docs/experiments/minigrid-torch-adda-v13.md`
+  - PyTorch DQN now supports a `next_feature` prediction head attached to the
+    shared hidden representation.
+- Local v1.3 CPU smoke passed in the existing optional PyTorch venv.
+- A bounded v1.3 CUDA smoke completed on `gpu-worker-c` at commit
+  `fd3ef5eb3fcb833d78f7c68652709d0d75567e0e`. The run was executable on
+  `torch==2.12.1+cu132` and `device=cuda`; the predictive conditions each ran
+  `5760` representation updates, but all conditions had
+  `success_last=0.000`. This is not promising enough to escalate v1.3 to a
+  multi-seed GPU sweep.
 
 ## Next
 
-- Execute issue #17 by adding a separate predictive representation objective to
-  the PyTorch AD/DA runner, then run a bounded CUDA smoke.
+- Close issue #17 after push and green CI, then open the next experiment issue
+  around revising the representation target or pairing it with a task
+  curriculum.
 
 ## Not Yet Proven
 

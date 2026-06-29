@@ -52,3 +52,26 @@ Escalate to a three-seed CUDA sweep only if a predictive AD/DA condition beats
 `A_torch_hard_only_long` on last-window success, or ties last-window success
 while improving all-window success or mean return. Otherwise, record the result
 as negative evidence and revisit the representation target or task curriculum.
+
+## Current Result
+
+Source commit: `fd3ef5eb3fcb833d78f7c68652709d0d75567e0e`
+
+A bounded CUDA smoke completed on `gpu-worker-c` with
+`torch==2.12.1+cu132` and `device=cuda`.
+
+Summary artifact:
+
+`/home/ogosh/work/baby-model-fleet/v13-smoke-20260629T053200Z-fd3ef5e/.tmp/verify-minigrid/torch/20260629T054439Z/summary.md`
+
+| condition | success_all | success_last | return_last | rep_loss | rep_updates | updates |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only_long` | 0.000 | 0.000 | 0.000 | 0.0000 | 0 | 5745 |
+| `L_torch_predictive_delay` | 0.000 | 0.000 | 0.000 | 0.0031 | 5760 | 5265 |
+| `M_torch_predictive_aux_progress` | 0.000 | 0.000 | 0.000 | 0.0035 | 5760 | 5265 |
+
+Conclusion: the predictive head executed and trained on every transition, but
+neither predictive condition improved external task success. This does not meet
+the escalation rule for a multi-seed GPU sweep. The next design should revisit
+the representation target or pair the predictive objective with a task
+curriculum.
