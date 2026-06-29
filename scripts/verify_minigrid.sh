@@ -13,6 +13,8 @@ MINIGRID_LINEAR_CONFIG="${MINIGRID_LINEAR_CONFIG:-}"
 MINIGRID_LINEAR_SEED="${MINIGRID_LINEAR_SEED:-401}"
 MINIGRID_LINEAR_SWEEP_CONFIG="${MINIGRID_LINEAR_SWEEP_CONFIG:-}"
 MINIGRID_LINEAR_SWEEP_SEEDS="${MINIGRID_LINEAR_SWEEP_SEEDS:-401,402,403}"
+MINIGRID_NEURAL_CONFIG="${MINIGRID_NEURAL_CONFIG:-}"
+MINIGRID_NEURAL_SEED="${MINIGRID_NEURAL_SEED:-501}"
 
 if [[ -n "$MINIGRID_EXTRA_CONFIG" ]]; then
   if [[ ! "$MINIGRID_EXTRA_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
@@ -58,6 +60,17 @@ if [[ -n "$MINIGRID_LINEAR_SWEEP_CONFIG" ]]; then
   fi
 fi
 
+if [[ -n "$MINIGRID_NEURAL_CONFIG" ]]; then
+  if [[ ! "$MINIGRID_NEURAL_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
+    echo "invalid MINIGRID_NEURAL_CONFIG: $MINIGRID_NEURAL_CONFIG" >&2
+    exit 2
+  fi
+  if [[ ! "$MINIGRID_NEURAL_SEED" =~ ^[0-9]+$ ]]; then
+    echo "invalid MINIGRID_NEURAL_SEED: $MINIGRID_NEURAL_SEED" >&2
+    exit 2
+  fi
+fi
+
 case "$VERIFY_MINIGRID_DIR" in
   .tmp/verify-minigrid) rm -rf -- "$VERIFY_MINIGRID_DIR" ;;
   *) echo "refusing to remove unexpected path: $VERIFY_MINIGRID_DIR" >&2; exit 2 ;;
@@ -95,4 +108,11 @@ if [[ -n "$MINIGRID_LINEAR_SWEEP_CONFIG" ]]; then
     --config "$MINIGRID_LINEAR_SWEEP_CONFIG" \
     --output-dir "$VERIFY_MINIGRID_DIR/linear-sweep" \
     --seeds "$MINIGRID_LINEAR_SWEEP_SEEDS"
+fi
+
+if [[ -n "$MINIGRID_NEURAL_CONFIG" ]]; then
+  python3 -m baby_model.minigrid_neural \
+    --config "$MINIGRID_NEURAL_CONFIG" \
+    --output-dir "$VERIFY_MINIGRID_DIR/neural" \
+    --seed "$MINIGRID_NEURAL_SEED"
 fi

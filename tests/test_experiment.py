@@ -33,6 +33,12 @@ from baby_model.minigrid_linear import (
     run_minigrid_linear_suite,
 )
 from baby_model.minigrid_linear_sweep import aggregate_linear_reports, linear_sweep_summary_markdown
+from baby_model.minigrid_neural import (
+    NeuralQAgent,
+    neural_summary_markdown,
+    parse_minigrid_neural_config,
+    run_minigrid_neural_suite,
+)
 from baby_model.minigrid_probe import observation_schema, summary_markdown
 from baby_model.sweep import parse_seeds, run_sweep
 
@@ -602,6 +608,96 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         self.assertIn("Per-Seed Winners", summary)
+
+    def test_minigrid_neural_agent_updates_parameters(self) -> None:
+        agent = NeuralQAgent(
+            actions=2,
+            feature_dim=128,
+            hidden_dim=4,
+            alpha_output=0.2,
+            alpha_hidden=0.1,
+            gamma=0.0,
+            epsilon=0.0,
+            seed=3,
+        )
+        features = {3: 1.0, 7: 1.0}
+        before = agent.nonzero_parameters()
+        agent.update(features, action=1, reward=1.0, next_features=features, done=True)
+        self.assertGreater(agent.nonzero_parameters(), before)
+
+    def test_minigrid_neural_config_and_runner_are_dependency_free(self) -> None:
+        config = {
+            "environment": {"id": "FakeNeural-v0", "max_steps": 1},
+            "agent": {
+                "feature_dim": 256,
+                "hidden_dim": 4,
+                "alpha_output": 0.1,
+                "alpha_hidden": 0.01,
+                "gamma": 0.9,
+                "epsilon": 0.0,
+                "init_scale": 0.02,
+            },
+            "conditions": [
+                {
+                    "name": "neural",
+                    "encoder_mode": "raw",
+                    "episodes": 2,
+                    "decoder_delay_episodes": 0,
+                    "intrinsic_beta": 0.0,
+                    "intrinsic_mode": "none",
+                }
+            ],
+        }
+        parsed = parse_minigrid_neural_config(config, seed=31)
+        self.assertEqual(parsed.agent.hidden_dim, 4)
+        self.assertEqual(parsed.conditions[0].seed, 31)
+
+        class FakeImage:
+            def tolist(self) -> list[list[list[int]]]:
+                return [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+
+        observation = {"image": FakeImage(), "direction": 1, "mission": "unlock red door"}
+
+        class FakeActionSpace:
+            n = 2
+
+            def seed(self, seed: int) -> None:
+                self.last_seed = seed
+
+        class FakeEnv:
+            action_space = FakeActionSpace()
+
+            def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
+                return observation, {}
+
+            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+                return observation, 1.0, True, False, {}
+
+            def close(self) -> None:
+                pass
+
+        fake_gym = types.ModuleType("gymnasium")
+        fake_gym.make = lambda env_id: FakeEnv()  # type: ignore[attr-defined]
+        fake_minigrid = types.ModuleType("minigrid")
+        previous_gym = sys.modules.get("gymnasium")
+        previous_minigrid = sys.modules.get("minigrid")
+        sys.modules["gymnasium"] = fake_gym
+        sys.modules["minigrid"] = fake_minigrid
+        try:
+            report = run_minigrid_neural_suite(config, seed=31)
+        finally:
+            if previous_gym is None:
+                sys.modules.pop("gymnasium", None)
+            else:
+                sys.modules["gymnasium"] = previous_gym
+            if previous_minigrid is None:
+                sys.modules.pop("minigrid", None)
+            else:
+                sys.modules["minigrid"] = previous_minigrid
+
+        self.assertEqual(report["winner_last_window"], "neural")
+        self.assertGreater(report["results"][0]["nonzero_parameters"], 0)
+        self.assertIn("neural encoder", neural_summary_markdown(report))
 
 
 if __name__ == "__main__":

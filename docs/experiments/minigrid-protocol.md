@@ -61,6 +61,14 @@ MINIGRID_LINEAR_SWEEP_SEEDS=401,402,403 \
 ./scripts/verify_minigrid.sh
 ```
 
+Run the default probe and smoke plus a CPU-safe neural encoder config:
+
+```sh
+MINIGRID_NEURAL_CONFIG=configs/experiments/minigrid-neural-unlock.json \
+MINIGRID_NEURAL_SEED=501 \
+./scripts/verify_minigrid.sh
+```
+
 ## Probe Environments
 
 The optional probe starts with:
@@ -147,6 +155,17 @@ Linear multi-seed sweep on `BabyAI-Unlock-v0`, 3 seeds:
 
 The multi-seed sweep is recorded in
 `docs/experiments/minigrid-linear-sweep.md`.
+
+Neural encoder result on `BabyAI-Unlock-v0`, 60 episodes:
+
+| condition | success_all | success_last | return_last | mean_steps_success |
+| --- | ---: | ---: | ---: | ---: |
+| `A_neural_hard_only` | 0.017 | 0.000 | 0.000 | 27.00 |
+| `B_neural_encoder_first` | 0.017 | 0.000 | 0.000 | 12.00 |
+| `E_neural_progress` | 0.017 | 0.000 | 0.000 | 101.00 |
+
+The neural pilot is recorded in
+`docs/experiments/minigrid-neural-unlock.md`.
 
 ## Fleet Verification
 

@@ -139,12 +139,20 @@ Updated: 2026-06-29 JST
   worker classes at commit `69f111719c9829128b78a8a0a5a97367dc6c19db`; all
   workers produced the same aggregate table. Exact host-level evidence is kept
   outside this repository in local docs.
+- CPU-safe neural encoder pilot for issue #11 is implemented locally:
+  - `baby_model/minigrid_neural.py`
+  - `configs/experiments/minigrid-neural-unlock.json`
+  - optional verifier support via `MINIGRID_NEURAL_CONFIG`
+- Local neural result on `BabyAI-Unlock-v0`: all conditions had
+  `success_last=0.000`; `A_neural_hard_only` won only by tie order.
 
 ## Next
 
-- Track the stronger optional neural encoder lane in issue #11.
+- Replicate the neural encoder pilot through fleet tmux while runtime remains
+  lightweight.
 
 ## Not Yet Proven
 
 - Any GPU training result.
+- Fleet replication of the neural encoder pilot.
 - Full objective completion.

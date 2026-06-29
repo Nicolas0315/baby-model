@@ -1,0 +1,43 @@
+{
+  "hypothesis": "Baby-AD/DA MiniGrid neural encoder on BabyAI Unlock",
+  "environment": {
+    "id": "BabyAI-Unlock-v0",
+    "max_steps": 160,
+    "quiet_env_output": true
+  },
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 24,
+    "alpha_output": 0.05,
+    "alpha_hidden": 0.005,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "init_scale": 0.04
+  },
+  "conditions": [
+    {
+      "name": "A_neural_hard_only",
+      "encoder_mode": "raw",
+      "episodes": 60,
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "B_neural_encoder_first",
+      "encoder_mode": "raw",
+      "episodes": 60,
+      "decoder_delay_episodes": 16,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "E_neural_progress",
+      "encoder_mode": "raw",
+      "episodes": 60,
+      "decoder_delay_episodes": 16,
+      "intrinsic_beta": 0.03,
+      "intrinsic_mode": "progress"
+    }
+  ]
+}

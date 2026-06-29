@@ -70,5 +70,6 @@ host.
   `docs/experiments/minigrid-linear-unlock.md`
 - MiniGrid linear multi-seed sweep:
   `docs/experiments/minigrid-linear-sweep.md`
+- MiniGrid neural encoder: `docs/experiments/minigrid-neural-unlock.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`
