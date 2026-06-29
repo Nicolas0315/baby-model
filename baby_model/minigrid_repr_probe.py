@@ -861,7 +861,7 @@ def evaluate_relative_probe_decision(
     reports_by_feature_set = {report["feature_set"]: report for report in feature_reports}
     baseline = reports_by_feature_set[decision.baseline_feature_set]
     candidate = reports_by_feature_set[decision.candidate_feature_set]
-    required_labels = ("changed", "mission_object", "mission_color")
+    required_labels = (decision.transition_label, "mission_object", "mission_color")
     missing_labels = [
         label
         for label in required_labels
@@ -891,10 +891,13 @@ def evaluate_relative_probe_decision(
             "candidate_test_examples": candidate_metrics["test_examples"],
         }
 
-    changed_passed = comparisons["changed"]["lift_delta"] >= decision.changed_min_lift_delta
+    transition_threshold = (
+        decision.changed_min_lift_delta if decision.transition_label == "changed" else decision.transition_min_lift_delta
+    )
+    transition_passed = comparisons[decision.transition_label]["lift_delta"] >= transition_threshold
     mission_object_passed = comparisons["mission_object"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
     mission_color_passed = comparisons["mission_color"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
-    passed = bool(enough_examples and changed_passed and mission_object_passed and mission_color_passed)
+    passed = bool(enough_examples and transition_passed and mission_object_passed and mission_color_passed)
     candidates = [
         {
             "feature_set": decision.baseline_feature_set,
@@ -920,6 +923,8 @@ def evaluate_relative_probe_decision(
             "min_test_examples": decision.min_test_examples,
             "baseline_feature_set": decision.baseline_feature_set,
             "candidate_feature_set": decision.candidate_feature_set,
+            "transition_label": decision.transition_label,
+            "transition_min_lift_delta": transition_threshold,
             "changed_min_lift_delta": decision.changed_min_lift_delta,
             "max_mission_accuracy_drop": decision.max_mission_accuracy_drop,
         },

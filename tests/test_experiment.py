@@ -1417,6 +1417,20 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.decision.transition_label, "changed")
         self.assertEqual(parsed.decision.external_transition_lift_baseline, 0.209)
 
+    def test_minigrid_repr_probe_v32_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-repr-probe-v32.json")
+        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        self.assertEqual(parsed.policy, "scripted_object")
+        self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_next_signature"))
+        self.assertEqual(parsed.predictive_encoders[0].name, "predictive_next_signature")
+        self.assertEqual(parsed.predictive_encoders[0].target_label, "next_signature_bucket")
+        self.assertEqual(parsed.decision.mode, "relative_to_baseline")
+        self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "next_signature_bucket"))
+        self.assertEqual(parsed.decision.candidate_feature_set, "predictive_next_signature")
+        self.assertEqual(parsed.decision.transition_label, "next_signature_bucket")
+        self.assertEqual(parsed.decision.transition_min_lift_delta, 0.01)
+        self.assertEqual(parsed.decision.max_mission_accuracy_drop, 0.05)
+
     def test_minigrid_repr_relative_decision_is_dependency_free(self) -> None:
         config = parse_minigrid_representation_probe_config(
             {
@@ -1533,6 +1547,72 @@ class ExperimentTest(unittest.TestCase):
         self.assertFalse(result_for(candidate_object_accuracy=0.84)["met"])
         self.assertFalse(result_for(candidate_color_accuracy=0.74)["met"])
         self.assertFalse(result_for(candidate_test_examples=9)["met"])
+
+    def test_minigrid_repr_relative_decision_uses_transition_label(self) -> None:
+        config = parse_minigrid_representation_probe_config(
+            {
+                "dataset": {
+                    "policy": "scripted_object",
+                    "test_every": 3,
+                    "signature_buckets": 4,
+                    "envs": [{"name": "fake", "env_id": "Fake-v0", "episodes": 1, "max_steps": 1}],
+                },
+                "features": {
+                    "feature_dim": 128,
+                    "encoder_mode": "raw",
+                    "feature_sets": ["raw_current", "predictive_next_signature"],
+                },
+                "training": {
+                    "predictive_encoders": [
+                        {"name": "predictive_next_signature", "target_label": "next_signature_bucket"}
+                    ]
+                },
+                "decision": {
+                    "mode": "relative_to_baseline",
+                    "labels": ["mission_object", "mission_color", "next_signature_bucket"],
+                    "baseline_feature_set": "raw_current",
+                    "candidate_feature_set": "predictive_next_signature",
+                    "transition_label": "next_signature_bucket",
+                    "transition_min_lift_delta": 0.01,
+                    "max_mission_accuracy_drop": 0.05,
+                    "min_test_examples": 10,
+                },
+            }
+        )
+        base_labels = {
+            "mission_object": {"accuracy": 0.90, "majority_baseline": 0.50, "lift": 0.40, "test_examples": 20},
+            "mission_color": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
+            "next_signature_bucket": {"accuracy": 0.70, "majority_baseline": 0.20, "lift": 0.50, "test_examples": 20},
+        }
+        candidate_labels = {
+            "mission_object": {"accuracy": 0.87, "majority_baseline": 0.50, "lift": 0.37, "test_examples": 20},
+            "mission_color": {"accuracy": 0.78, "majority_baseline": 0.50, "lift": 0.28, "test_examples": 20},
+            "next_signature_bucket": {"accuracy": 0.72, "majority_baseline": 0.20, "lift": 0.52, "test_examples": 20},
+        }
+        result = evaluate_probe_decision(
+            [
+                {"feature_set": "raw_current", "labels": base_labels},
+                {"feature_set": "predictive_next_signature", "labels": candidate_labels},
+            ],
+            config.decision,
+        )
+        self.assertTrue(result["met"])
+        self.assertAlmostEqual(result["comparisons"]["next_signature_bucket"]["lift_delta"], 0.02)
+
+        candidate_labels["next_signature_bucket"] = {
+            "accuracy": 0.705,
+            "majority_baseline": 0.20,
+            "lift": 0.505,
+            "test_examples": 20,
+        }
+        failed = evaluate_probe_decision(
+            [
+                {"feature_set": "raw_current", "labels": base_labels},
+                {"feature_set": "predictive_next_signature", "labels": candidate_labels},
+            ],
+            config.decision,
+        )
+        self.assertFalse(failed["met"])
 
     def test_minigrid_repr_scripted_policy_is_dependency_free(self) -> None:
         empty = [0, 0, 0]

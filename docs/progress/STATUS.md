@@ -522,18 +522,35 @@ Updated: 2026-06-29 JST
   - Treat v2.11 as negative for the current scripted `changed` encoder, but
     positive evidence that scripted collection produces a more structured
     dataset for richer transition labels.
+- Issue #37 v2.12 scripted-policy transition-label probe is implemented:
+  - `baby_model/minigrid_repr_probe.py`
+  - `configs/experiments/minigrid-repr-probe-v32.json`
+  - `docs/experiments/minigrid-repr-probe-v32.md`
+  - local CPU smoke collected `781` GoToObj-family scripted-policy transitions.
+  - `relative_to_baseline` decision logic now honors the configured
+    `transition_label`, allowing `next_signature_bucket` to be evaluated
+    without a new decision mode.
+  - `predictive_next_signature` reached held-out `next_signature_bucket`
+    accuracy `0.282` and lift `0.115`, but the downstream representation probe
+    matched `raw_current` exactly on `next_signature_bucket` lift (`0.462` vs
+    `0.462`), so the lift delta was `0.000` against the required `0.010`.
+  - Treat v2.12 as negative for bucketed next-signature prediction with raw
+    passthrough. The next non-DQN probe should either remove raw passthrough for
+    a purer representation diagnostic or replace hashed buckets with a semantic
+    object/color transition label.
 
 ## Next
 
-- Use the corrected scripted-policy dataset with a transition label that
-  benefits from the new data distribution, especially `next_signature_bucket`
-  or a semantic object/color transition label.
+- Test whether the non-DQN representation signal is being hidden by raw
+  passthrough, or switch from hashed `next_signature_bucket` to a semantic
+  object/color transition label on the corrected scripted-policy dataset.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable representation-driven AD/DA winner across multiple CUDA seeds.
-- A non-DQN probe that improves beyond the current linear `changed` encoder.
+- A non-DQN probe that improves beyond the current linear `changed` encoder
+  under scripted-policy collection.
 - Transfer of a scripted-policy representation signal back into RL/CUDA.
 - Full objective completion.
