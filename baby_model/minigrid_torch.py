@@ -633,6 +633,7 @@ def run_minigrid_torch_condition(
         )
         transition = TransitionSurprise()
         episodes: list[EpisodeMetrics] = []
+        mission_probes: list[dict[str, float | str]] = []
         representation_losses: list[float] = []
         representation_update_counts: list[int] = []
         first_schema: dict[str, Any] | None = None
@@ -720,10 +721,12 @@ def run_minigrid_torch_condition(
                     unique_features=len(visited),
                 )
             )
+            mission_probes.append(mission_preservation_probe(observation))
             representation_losses.append(representation_loss / max(1, representation_updates))
             representation_update_counts.append(representation_updates)
 
         last_window = episodes[-20:] if len(episodes) >= 20 else episodes
+        mission_probe_summary = summarize_mission_preservation_probes(mission_probes)
         representation_last_window = (
             representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
         )
@@ -754,6 +757,7 @@ def run_minigrid_torch_condition(
             "mean_return_last_window": mean(item.external_return for item in last_window),
             "mean_intrinsic_return_last_window": mean(item.intrinsic_return for item in last_window),
             "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
+            **mission_probe_summary,
             "mean_representation_loss_last_window": mean(representation_last_window),
             "representation_updates": sum(representation_update_counts),
             "representation_parameter_count": agent.representation_parameter_count(),
@@ -831,6 +835,11 @@ def run_minigrid_torch_curriculum_condition(
         "mean_return_last_window": final_stage["mean_return_last_window"],
         "mean_intrinsic_return_last_window": final_stage["mean_intrinsic_return_last_window"],
         "mean_unique_features_last_window": final_stage["mean_unique_features_last_window"],
+        "mission_target_known_rate": final_stage["mission_target_known_rate"],
+        "mission_target_visible_rate_all": final_stage["mission_target_visible_rate_all"],
+        "mission_target_visible_rate_last_window": final_stage["mission_target_visible_rate_last_window"],
+        "mission_target_center_rate_last_window": final_stage["mission_target_center_rate_last_window"],
+        "mission_target_near_rate_last_window": final_stage["mission_target_near_rate_last_window"],
         "mean_representation_loss_last_window": final_stage["mean_representation_loss_last_window"],
         "representation_updates": sum(stage["representation_updates"] for stage in stage_results),
         "representation_parameter_count": agent.representation_parameter_count(),
@@ -882,6 +891,7 @@ def _run_minigrid_torch_stage(
             raise ValueError(f"action-space mismatch in stage {stage.name}")
 
         episodes: list[EpisodeMetrics] = []
+        mission_probes: list[dict[str, float | str]] = []
         representation_losses: list[float] = []
         representation_update_counts: list[int] = []
         first_schema: dict[str, Any] | None = None
@@ -970,6 +980,7 @@ def _run_minigrid_torch_stage(
                     unique_features=len(visited),
                 )
             )
+            mission_probes.append(mission_preservation_probe(observation))
             representation_losses.append(representation_loss / max(1, representation_updates))
             representation_update_counts.append(representation_updates)
 
@@ -978,6 +989,7 @@ def _run_minigrid_torch_stage(
                 stage=stage,
                 condition=condition,
                 episodes=episodes,
+                mission_probes=mission_probes,
                 first_schema=first_schema,
                 representation_losses=representation_losses,
                 representation_update_counts=representation_update_counts,
@@ -995,12 +1007,14 @@ def _torch_stage_summary(
     stage: TorchCurriculumStage,
     condition: Condition,
     episodes: list[EpisodeMetrics],
+    mission_probes: list[dict[str, float | str]],
     first_schema: dict[str, Any] | None,
     representation_losses: list[float],
     representation_update_counts: list[int],
     agent: TorchDQNAgent,
 ) -> dict[str, Any]:
     last_window = episodes[-20:] if len(episodes) >= 20 else episodes
+    mission_probe_summary = summarize_mission_preservation_probes(mission_probes)
     representation_last_window = (
         representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
     )
@@ -1018,6 +1032,7 @@ def _torch_stage_summary(
         "mean_return_last_window": mean(item.external_return for item in last_window),
         "mean_intrinsic_return_last_window": mean(item.intrinsic_return for item in last_window),
         "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
+        **mission_probe_summary,
         "mean_representation_loss_last_window": mean(representation_last_window),
         "representation_updates": sum(representation_update_counts),
         "updates": agent.updates,
@@ -1181,6 +1196,60 @@ def target_visibility_transition_vector(observation: Any, next_observation: Any)
     index = TARGET_VISIBILITY_RELATIONS.index(before) * len(TARGET_VISIBILITY_RELATIONS)
     index += TARGET_VISIBILITY_RELATIONS.index(after)
     return [1.0 if item == index else 0.0 for item in range(TARGET_VISIBILITY_TRANSITION_DIM)]
+
+
+def mission_preservation_probe(observation: Any) -> dict[str, float | str]:
+    if not isinstance(observation, dict):
+        return _empty_mission_preservation_probe()
+    target = _target_from_mission(str(observation.get("mission", "")))
+    object_known = target.get("object") != "unknown"
+    color_known = target.get("color") != "unknown"
+    relation = target_visibility_relation(observation)
+    visible = relation != "absent"
+    return {
+        "mission_object_known": 1.0 if object_known else 0.0,
+        "mission_color_known": 1.0 if color_known else 0.0,
+        "mission_target_known": 1.0 if object_known and color_known else 0.0,
+        "mission_target_visible": 1.0 if visible else 0.0,
+        "mission_target_center": 1.0 if relation.startswith("center") else 0.0,
+        "mission_target_near": 1.0 if relation.endswith("_near") else 0.0,
+        "mission_target_relation": relation,
+    }
+
+
+def summarize_mission_preservation_probes(probes: list[dict[str, float | str]]) -> dict[str, float]:
+    if not probes:
+        return {
+            "mission_target_known_rate": 0.0,
+            "mission_target_visible_rate_all": 0.0,
+            "mission_target_visible_rate_last_window": 0.0,
+            "mission_target_center_rate_last_window": 0.0,
+            "mission_target_near_rate_last_window": 0.0,
+        }
+    last_window = probes[-20:] if len(probes) >= 20 else probes
+    return {
+        "mission_target_known_rate": _probe_mean(probes, "mission_target_known"),
+        "mission_target_visible_rate_all": _probe_mean(probes, "mission_target_visible"),
+        "mission_target_visible_rate_last_window": _probe_mean(last_window, "mission_target_visible"),
+        "mission_target_center_rate_last_window": _probe_mean(last_window, "mission_target_center"),
+        "mission_target_near_rate_last_window": _probe_mean(last_window, "mission_target_near"),
+    }
+
+
+def _empty_mission_preservation_probe() -> dict[str, float | str]:
+    return {
+        "mission_object_known": 0.0,
+        "mission_color_known": 0.0,
+        "mission_target_known": 0.0,
+        "mission_target_visible": 0.0,
+        "mission_target_center": 0.0,
+        "mission_target_near": 0.0,
+        "mission_target_relation": "absent",
+    }
+
+
+def _probe_mean(probes: list[dict[str, float | str]], field: str) -> float:
+    return mean(float(probe.get(field, 0.0)) for probe in probes)
 
 
 def target_visibility_relation(observation: Any) -> str:
@@ -1569,15 +1638,15 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
             [
                 f"- stages: `{stage_text}`",
                 "",
-                "| condition | active_stages | final_stage | prior | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
-                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| condition | active_stages | final_stage | prior | success_all | success_last | return_last | target_visible_last | target_center_last | target_near_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
+                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
     else:
         lines.extend(
             [
-                "| condition | prior | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| condition | prior | success_all | success_last | return_last | target_visible_last | target_center_last | target_near_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
     for row in report["results"]:
@@ -1586,7 +1655,7 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
         if is_curriculum:
             final_stage = row["final_stage"]
             lines.append(
-                "| {name} | {stages} | {stage} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
+                "| {name} | {stages} | {stage} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {visible:.3f} | {center:.3f} | {near:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
                     name=row["name"],
                     stages=",".join(row["active_stages"]),
                     stage=final_stage["stage"],
@@ -1594,6 +1663,9 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
                     all=row["success_rate_all"],
                     last=row["success_rate_last_window"],
                     ret=row["mean_return_last_window"],
+                    visible=row.get("mission_target_visible_rate_last_window", 0.0),
+                    center=row.get("mission_target_center_rate_last_window", 0.0),
+                    near=row.get("mission_target_near_rate_last_window", 0.0),
                     steps="" if mean_steps is None else f"{mean_steps:.2f}",
                     rep_loss=rep_loss,
                     rep_updates=row.get("representation_updates", 0),
@@ -1603,12 +1675,15 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
             )
         else:
             lines.append(
-                "| {name} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
+                "| {name} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {visible:.3f} | {center:.3f} | {near:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
                     name=row["name"],
                     prior=row.get("action_prior_weight", 0.0),
                     all=row["success_rate_all"],
                     last=row["success_rate_last_window"],
                     ret=row["mean_return_last_window"],
+                    visible=row.get("mission_target_visible_rate_last_window", 0.0),
+                    center=row.get("mission_target_center_rate_last_window", 0.0),
+                    near=row.get("mission_target_near_rate_last_window", 0.0),
                     steps="" if mean_steps is None else f"{mean_steps:.2f}",
                     rep_loss=rep_loss,
                     rep_updates=row.get("representation_updates", 0),

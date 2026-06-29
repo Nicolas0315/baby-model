@@ -662,17 +662,35 @@ Updated: 2026-06-29 JST
   - Treat v2.21 as negative stability evidence for the simple combined target:
     the positive single-seed CPU/CUDA result did not generalize across this
     three-seed CUDA sweep.
+- Issue #47 v2.22 direct mission-preservation probe is implemented:
+  - `baby_model/minigrid_torch.py`
+  - `baby_model/minigrid_torch_sweep.py`
+  - `docs/experiments/minigrid-torch-mission-probe-v38.md`
+  - Added final-observation mission-target probe fields to PyTorch RL metrics
+    and summary tables: target visible, center, and near rates over the final
+    window.
+  - Added the same probe fields to PyTorch sweep aggregates so multi-seed runs
+    can report mean mission-target retention.
+  - Local CPU smoke on the v37 GoToObj matched curriculum completed with
+    `torch==2.12.1` and `device=cpu`.
+  - In that smoke, `ZO_torch_gotoobj_state_plus_target_visibility_delay` had
+    the best reward metrics and the best probe metrics:
+    `success_last=0.450`, `return_last=0.295`,
+    `target_visible_last=0.600`, `target_center_last=0.500`,
+    `target_near_last=0.500`.
+  - The probe did not reveal a hidden mission-preservation winner that
+    success/return missed, so no CUDA issue is opened from v2.22 alone.
 
 ## Next
 
-- Stop escalating the simple concatenation target. Add a direct
-  mission-preservation probe inside the RL runner or redesign the auxiliary
-  objective before spending more CUDA.
+- Redesign the auxiliary objective or training protocol using the new
+  mission-preservation probe as a reporting gate before spending more CUDA.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable best representation-driven AD/DA winner across multiple CUDA seeds.
-- Direct mission-preservation probe inside the RL runner.
+- A redesigned objective that beats the no-representation curriculum and the
+  current best representation baselines under the mission-preservation probe.
 - Full objective completion.

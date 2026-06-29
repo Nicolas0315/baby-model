@@ -69,11 +69,13 @@ from baby_model.minigrid_torch import (
     affordance_progress_vector,
     controllability_target,
     dense_feature_vector,
+    mission_preservation_probe,
     parse_minigrid_torch_config,
     run_minigrid_torch_curriculum_condition,
     select_torch_device,
     state_plus_delta_vector,
     state_plus_target_visibility_vector,
+    summarize_mission_preservation_probes,
     subgoal_progress_vector,
     target_visibility_relation,
     target_visibility_transition_vector,
@@ -820,6 +822,7 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         self.assertIn("PyTorch DQN", summary)
+        self.assertIn("target_visible_last", summary)
 
     def test_minigrid_torch_v11_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v11.json")
@@ -966,6 +969,31 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(target_visibility_relation(left_observation), "left_far")
         self.assertEqual(target_visibility_relation(right_observation), "right_near")
         self.assertEqual(relation_vector[2 * 7 + 5], 1.0)
+
+    def test_minigrid_torch_mission_preservation_probe_is_dependency_free(self) -> None:
+        absent = {"direction": 0, "mission": "go to the red ball", "image": [[[0, 0, 0] for _ in range(7)] for _ in range(7)]}
+        center_near_image = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        center_near_image[3][5] = [6, 0, 0]
+        center_near = {"direction": 0, "mission": "go to the red ball", "image": center_near_image}
+        right_far_image = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        right_far_image[6][0] = [7, 2, 0]
+        right_far = {"direction": 0, "mission": "go to the blue box", "image": right_far_image}
+
+        absent_probe = mission_preservation_probe(absent)
+        center_probe = mission_preservation_probe(center_near)
+        far_probe = mission_preservation_probe(right_far)
+        summary = summarize_mission_preservation_probes([absent_probe, center_probe, far_probe])
+
+        self.assertEqual(absent_probe["mission_target_relation"], "absent")
+        self.assertEqual(center_probe["mission_target_relation"], "center_near")
+        self.assertEqual(far_probe["mission_target_relation"], "right_far")
+        self.assertEqual(center_probe["mission_target_known"], 1.0)
+        self.assertEqual(center_probe["mission_target_visible"], 1.0)
+        self.assertEqual(center_probe["mission_target_center"], 1.0)
+        self.assertEqual(center_probe["mission_target_near"], 1.0)
+        self.assertAlmostEqual(summary["mission_target_visible_rate_all"], 2 / 3)
+        self.assertAlmostEqual(summary["mission_target_center_rate_last_window"], 1 / 3)
+        self.assertAlmostEqual(summary["mission_target_near_rate_last_window"], 1 / 3)
 
     def test_minigrid_torch_subgoal_progress_vector_is_dependency_free(self) -> None:
         before = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
@@ -2244,6 +2272,7 @@ class ExperimentTest(unittest.TestCase):
                 }
             ),
         )
+        self.assertIn("mission_target_visible_rate_last_window", report["final_stage"])
 
     def test_minigrid_torch_two_phase_protocol_freezes_and_stops_representation(self) -> None:
         class FakeTorch:
@@ -2450,6 +2479,9 @@ class ExperimentTest(unittest.TestCase):
                         "success_rate_all": 0.1,
                         "success_rate_last_window": 0.2,
                         "mean_return_last_window": 0.3,
+                        "mission_target_visible_rate_last_window": 0.6,
+                        "mission_target_center_rate_last_window": 0.4,
+                        "mission_target_near_rate_last_window": 0.5,
                         "updates": 10,
                         "parameter_count": 20,
                     },
@@ -2459,6 +2491,9 @@ class ExperimentTest(unittest.TestCase):
                         "success_rate_all": 0.0,
                         "success_rate_last_window": 0.0,
                         "mean_return_last_window": 0.0,
+                        "mission_target_visible_rate_last_window": 0.1,
+                        "mission_target_center_rate_last_window": 0.0,
+                        "mission_target_near_rate_last_window": 0.1,
                         "updates": 8,
                         "parameter_count": 20,
                     },
@@ -2474,6 +2509,9 @@ class ExperimentTest(unittest.TestCase):
                         "success_rate_all": 0.0,
                         "success_rate_last_window": 0.0,
                         "mean_return_last_window": 0.0,
+                        "mission_target_visible_rate_last_window": 0.2,
+                        "mission_target_center_rate_last_window": 0.0,
+                        "mission_target_near_rate_last_window": 0.1,
                         "updates": 6,
                         "parameter_count": 20,
                     },
@@ -2483,6 +2521,9 @@ class ExperimentTest(unittest.TestCase):
                         "success_rate_all": 0.2,
                         "success_rate_last_window": 0.4,
                         "mean_return_last_window": 0.5,
+                        "mission_target_visible_rate_last_window": 0.7,
+                        "mission_target_center_rate_last_window": 0.5,
+                        "mission_target_near_rate_last_window": 0.6,
                         "updates": 12,
                         "parameter_count": 20,
                     },
@@ -2496,6 +2537,8 @@ class ExperimentTest(unittest.TestCase):
         self.assertAlmostEqual(by_name["B"]["mean_success_rate_last_window"], 0.2)
         self.assertAlmostEqual(by_name["A"]["median_return_last_window"], 0.15)
         self.assertAlmostEqual(by_name["B"]["median_return_last_window"], 0.25)
+        self.assertAlmostEqual(by_name["A"]["mean_mission_target_visible_rate_last_window"], 0.4)
+        self.assertAlmostEqual(by_name["B"]["mean_mission_target_center_rate_last_window"], 0.25)
         self.assertEqual(by_name["A"]["condition_seeds"], [601, 603])
         summary = torch_sweep_summary_markdown(
             {
@@ -2510,7 +2553,8 @@ class ExperimentTest(unittest.TestCase):
         )
         self.assertIn("PyTorch sweep", summary)
         self.assertIn("median_return_last", summary)
-        self.assertIn("| A | 1 | 0.050 | 0.100 | 0.100 | 0.150 | 0.150 | 8.0 | 20 |", summary)
+        self.assertIn("target_visible_last", summary)
+        self.assertIn("| A | 1 | 0.050 | 0.100 | 0.100 | 0.150 | 0.150 | 0.400 | 0.200 | 0.300 | 8.0 | 20 |", summary)
         self.assertIn("Per-Seed Winners", summary)
 
     def test_gpu_compat_policy_is_dependency_free(self) -> None:

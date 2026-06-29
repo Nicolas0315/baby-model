@@ -71,6 +71,9 @@ def aggregate_torch_reports(runs: list[dict[str, Any]], seeds: list[int]) -> lis
         success_last = [float(row["success_rate_last_window"]) for row in rows]
         success_all = [float(row["success_rate_all"]) for row in rows]
         returns = [float(row["mean_return_last_window"]) for row in rows]
+        target_visible = [float(row.get("mission_target_visible_rate_last_window", 0.0)) for row in rows]
+        target_center = [float(row.get("mission_target_center_rate_last_window", 0.0)) for row in rows]
+        target_near = [float(row.get("mission_target_near_rate_last_window", 0.0)) for row in rows]
         updates = [int(row["updates"]) for row in rows]
         parameters = [int(row["parameter_count"]) for row in rows]
         aggregate.append(
@@ -84,6 +87,9 @@ def aggregate_torch_reports(runs: list[dict[str, Any]], seeds: list[int]) -> lis
                 "median_success_rate_last_window": median(success_last),
                 "mean_return_last_window": mean(returns),
                 "median_return_last_window": median(returns),
+                "mean_mission_target_visible_rate_last_window": mean(target_visible),
+                "mean_mission_target_center_rate_last_window": mean(target_center),
+                "mean_mission_target_near_rate_last_window": mean(target_near),
                 "mean_updates": mean(updates),
                 "mean_parameter_count": mean(parameters),
             }
@@ -117,12 +123,12 @@ def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:
         f"- devices: `{','.join(devices)}`",
         f"- winner_by_mean_success_last_window: `{report['winner_by_mean_success_last_window']}`",
         "",
-        "| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | median_return_last | mean_updates | parameters |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | median_return_last | target_visible_last | target_center_last | target_near_last | mean_updates | parameters |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in report["aggregate"]:
         lines.append(
-            "| {name} | {wins} | {all:.3f} | {last:.3f} | {median:.3f} | {ret:.3f} | {median_ret:.3f} | {updates:.1f} | {params:.0f} |".format(
+            "| {name} | {wins} | {all:.3f} | {last:.3f} | {median:.3f} | {ret:.3f} | {median_ret:.3f} | {visible:.3f} | {center:.3f} | {near:.3f} | {updates:.1f} | {params:.0f} |".format(
                 name=row["name"],
                 wins=row["win_count"],
                 all=row["mean_success_rate_all"],
@@ -130,6 +136,9 @@ def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:
                 median=row["median_success_rate_last_window"],
                 ret=row["mean_return_last_window"],
                 median_ret=row["median_return_last_window"],
+                visible=row.get("mean_mission_target_visible_rate_last_window", 0.0),
+                center=row.get("mean_mission_target_center_rate_last_window", 0.0),
+                near=row.get("mean_mission_target_near_rate_last_window", 0.0),
                 updates=row["mean_updates"],
                 params=row["mean_parameter_count"],
             )
