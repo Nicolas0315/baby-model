@@ -538,12 +538,29 @@ Updated: 2026-06-29 JST
     passthrough. The next non-DQN probe should either remove raw passthrough for
     a purer representation diagnostic or replace hashed buckets with a semantic
     object/color transition label.
+- Issue #38 v2.13 pure scripted representation probe is implemented:
+  - `configs/experiments/minigrid-repr-probe-v33.json`
+  - `docs/experiments/minigrid-repr-probe-v33.md`
+  - local CPU smoke collected `904` GoToObj-family scripted-policy transitions.
+  - `predictive_next_signature` and `predictive_next_signature_pure` reached
+    the same held-out `next_signature_bucket` classifier result:
+    accuracy `0.361`, lift `0.239`.
+  - The pure learned representation did not improve downstream transition
+    probing: `predictive_next_signature_pure` `next_signature_bucket` lift was
+    `0.389`, below both `raw_current` and raw-passthrough
+    `predictive_next_signature` at `0.500`.
+  - Mission-object and mission-color accuracy also dropped too far in the pure
+    representation (`-0.089` and `-0.128` vs `raw_current`), so v2.13 is
+    negative under the documented rule.
+  - Treat hashed next-signature prediction as the wrong next diagnostic for
+    this non-DQN lane. The next probe should add a semantic object/color
+    transition label on the corrected scripted-policy dataset.
 
 ## Next
 
-- Test whether the non-DQN representation signal is being hidden by raw
-  passthrough, or switch from hashed `next_signature_bucket` to a semantic
-  object/color transition label on the corrected scripted-policy dataset.
+- Add a semantic object/color transition label on the corrected scripted-policy
+  dataset and test whether it yields a representation signal beyond
+  `raw_current` without erasing mission-object or mission-color information.
 
 ## Not Yet Proven
 

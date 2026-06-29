@@ -1431,6 +1431,32 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.decision.transition_min_lift_delta, 0.01)
         self.assertEqual(parsed.decision.max_mission_accuracy_drop, 0.05)
 
+    def test_minigrid_repr_probe_v33_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-repr-probe-v33.json")
+        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        self.assertEqual(parsed.policy, "scripted_object")
+        self.assertEqual(
+            parsed.feature_sets,
+            ("raw_current", "predictive_next_signature", "predictive_next_signature_pure"),
+        )
+        self.assertEqual(
+            [encoder.name for encoder in parsed.predictive_encoders],
+            ["predictive_next_signature", "predictive_next_signature_pure"],
+        )
+        self.assertEqual(
+            [encoder.include_raw_passthrough for encoder in parsed.predictive_encoders],
+            [True, False],
+        )
+        self.assertEqual(parsed.decision.mode, "relative_to_reference")
+        self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "next_signature_bucket"))
+        self.assertEqual(parsed.decision.baseline_feature_set, "raw_current")
+        self.assertEqual(parsed.decision.reference_feature_set, "predictive_next_signature")
+        self.assertEqual(parsed.decision.candidate_feature_set, "predictive_next_signature_pure")
+        self.assertEqual(parsed.decision.transition_label, "next_signature_bucket")
+        self.assertEqual(parsed.decision.transition_min_lift_delta, 0.01)
+        self.assertEqual(parsed.decision.max_mission_accuracy_drop, 0.05)
+        self.assertEqual(parsed.decision.min_test_examples, 10)
+
     def test_minigrid_repr_relative_decision_is_dependency_free(self) -> None:
         config = parse_minigrid_representation_probe_config(
             {
