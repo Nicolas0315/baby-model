@@ -233,11 +233,22 @@ Updated: 2026-06-29 JST
   `torch==2.12.1+cu132` and `device=cuda`, but all four conditions had
   `success_last=0.000`; this is negative evidence for escalating v1.1 to a
   multi-seed sweep.
+- Issue #16 v1.2 longer-window condition set is implemented:
+  - `configs/experiments/minigrid-torch-adda-v12.json`
+  - `docs/experiments/minigrid-torch-adda-v12.md`
+  The design extends all conditions to 48 episodes while keeping a long-window
+  hard-only baseline.
+- A bounded v1.2 CUDA smoke completed on `gpu-worker-c` at commit
+  `b739545f58e55ed40e044b1a5cd5b3b4083f0dd9`. The run was executable on
+  `torch==2.12.1+cu132` and `device=cuda`. `I_torch_long_delay` and
+  `K_torch_long_coarse_aux` each reached one all-window success
+  (`success_all=0.021`), but all four conditions had `success_last=0.000`.
+  This is not promising enough to escalate v1.2 to a multi-seed GPU sweep.
 
 ## Next
 
-- Execute issue #16 with a more substantial AD/DA change, starting with a
-  longer learning window or a separate predictive representation objective.
+- Close issue #16 after push and green CI, then open the next experiment issue
+  around a separate predictive representation objective.
 
 ## Not Yet Proven
 

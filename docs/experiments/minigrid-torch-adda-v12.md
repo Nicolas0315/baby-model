@@ -77,3 +77,27 @@ if an AD/DA condition beats `A_torch_hard_only_long` on last-window success, or
 ties last-window success while improving all-window success or mean return.
 Otherwise, record the result as negative evidence and move to a representation
 objective change instead of spending more GPU time on the same condition family.
+
+## Current Result
+
+Source commit: `b739545f58e55ed40e044b1a5cd5b3b4083f0dd9`
+
+A bounded CUDA smoke completed on `gpu-worker-c` with
+`torch==2.12.1+cu132` and `device=cuda`.
+
+Summary artifact:
+
+`/home/ogosh/work/baby-model-fleet/v12-smoke-20260629T050900Z-b739545/.tmp/verify-minigrid/torch/20260629T052135Z/summary.md`
+
+| condition | success_all | success_last | return_last | updates |
+| --- | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only_long` | 0.000 | 0.000 | 0.000 | 5745 |
+| `I_torch_long_delay` | 0.021 | 0.000 | 0.000 | 5166 |
+| `J_torch_long_aux_progress` | 0.000 | 0.000 | 0.000 | 5265 |
+| `K_torch_long_coarse_aux` | 0.021 | 0.000 | 0.000 | 5222 |
+
+Conclusion: the longer window produced isolated all-window successes for two
+AD/DA conditions, but no condition achieved last-window success or mean-return
+improvement. This does not meet the escalation rule for a multi-seed GPU sweep.
+The next condition family should change the representation objective instead of
+only extending the same delayed-decoder setup.
