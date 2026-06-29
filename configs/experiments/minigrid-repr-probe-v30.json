@@ -1,0 +1,65 @@
+{
+  "hypothesis": "Baby-AD/DA v2.10: richer non-DQN predictive encoder probe on GoToObj transitions",
+  "dataset": {
+    "policy": "random",
+    "quiet_env_output": true,
+    "test_every": 5,
+    "signature_buckets": 16,
+    "envs": [
+      {
+        "name": "goto_red_ball",
+        "env_id": "BabyAI-GoToRedBall-v0",
+        "episodes": 6,
+        "max_steps": 80
+      },
+      {
+        "name": "goto_obj",
+        "env_id": "BabyAI-GoToObj-v0",
+        "episodes": 10,
+        "max_steps": 80
+      }
+    ]
+  },
+  "features": {
+    "feature_dim": 1024,
+    "encoder_mode": "raw",
+    "feature_sets": ["raw_current", "predictive_changed", "predictive_next_signature"]
+  },
+  "training": {
+    "predictive_encoders": [
+      {
+        "name": "predictive_changed",
+        "target_label": "changed",
+        "epochs": 5,
+        "learning_rate": 0.08,
+        "include_action": true,
+        "include_raw_passthrough": true,
+        "score_scale": 1.0,
+        "prediction_weight": 1.0
+      },
+      {
+        "name": "predictive_next_signature",
+        "target_label": "next_signature_bucket",
+        "epochs": 5,
+        "learning_rate": 0.08,
+        "include_action": true,
+        "include_raw_passthrough": true,
+        "score_scale": 1.0,
+        "prediction_weight": 1.0
+      }
+    ]
+  },
+  "decision": {
+    "mode": "relative_to_reference",
+    "labels": ["mission_object", "mission_color", "next_signature_bucket"],
+    "min_accuracy": 0.6,
+    "min_lift": 0.05,
+    "min_test_examples": 10,
+    "baseline_feature_set": "raw_current",
+    "reference_feature_set": "predictive_changed",
+    "candidate_feature_set": "predictive_next_signature",
+    "transition_label": "next_signature_bucket",
+    "transition_min_lift_delta": 0.01,
+    "max_mission_accuracy_drop": 0.05
+  }
+}

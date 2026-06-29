@@ -491,17 +491,30 @@ Updated: 2026-06-29 JST
     `0.024`, both within the allowed `0.050` maximum drop.
   - Treat v2.9 as positive non-DQN evidence that a trained predictive signal
     can add transition information without erasing the mission signal.
+- Issue #35 v2.10 richer non-DQN predictive encoder probe is implemented:
+  - `baby_model/minigrid_repr_probe.py`
+  - `configs/experiments/minigrid-repr-probe-v30.json`
+  - `docs/experiments/minigrid-repr-probe-v30.md`
+  - local CPU smoke collected `936` GoToObj-family random-policy transitions.
+  - `predictive_changed` reproduced a useful held-out `changed` signal
+    (`test_accuracy=0.904`, `test_lift=0.214`).
+  - `predictive_next_signature` failed as a richer objective
+    (`test_accuracy=0.037`, `test_lift=-0.075`) and did not beat
+    `predictive_changed` on `next_signature_bucket` probe lift
+    (`0.139` vs `0.150`).
+  - Treat v2.10 as negative evidence for a plain next-signature-bucket
+    predictive objective under the current random-policy dataset.
 
 ## Next
 
-- Design the next non-DQN probe around either a stronger predictive objective
-  or a more informative scripted-policy dataset before returning to RL/CUDA.
+- Design the next non-DQN probe around a more informative scripted-policy
+  dataset or a different transition label surface before returning to RL/CUDA.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable representation-driven AD/DA winner across multiple CUDA seeds.
-- A non-DQN probe that uses a richer predictive objective or policy-generated
-  dataset beyond the current linear `changed` encoder.
+- A non-DQN probe that improves beyond the current linear `changed` encoder.
+- A policy-generated dataset for the non-DQN representation probe.
 - Full objective completion.

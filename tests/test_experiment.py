@@ -1388,10 +1388,23 @@ class ExperimentTest(unittest.TestCase):
             transitions,
             feature_set="predictive_encoder",
             config=config,
-            predictive_encoder=encoder,
+            predictive_encoders={"predictive_encoder": encoder},
         )
         self.assertIn("changed", report["labels"])
         self.assertGreaterEqual(report["labels"]["changed"]["accuracy"], report["labels"]["changed"]["majority_baseline"])
+
+    def test_minigrid_repr_probe_v30_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-repr-probe-v30.json")
+        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_changed", "predictive_next_signature"))
+        self.assertEqual([encoder.name for encoder in parsed.predictive_encoders], ["predictive_changed", "predictive_next_signature"])
+        self.assertEqual([encoder.target_label for encoder in parsed.predictive_encoders], ["changed", "next_signature_bucket"])
+        self.assertEqual(parsed.decision.mode, "relative_to_reference")
+        self.assertEqual(parsed.decision.baseline_feature_set, "raw_current")
+        self.assertEqual(parsed.decision.reference_feature_set, "predictive_changed")
+        self.assertEqual(parsed.decision.candidate_feature_set, "predictive_next_signature")
+        self.assertEqual(parsed.decision.transition_label, "next_signature_bucket")
+        self.assertEqual(parsed.decision.transition_min_lift_delta, 0.01)
 
     def test_minigrid_repr_relative_decision_is_dependency_free(self) -> None:
         config = parse_minigrid_representation_probe_config(
@@ -1509,6 +1522,81 @@ class ExperimentTest(unittest.TestCase):
         self.assertFalse(result_for(candidate_object_accuracy=0.84)["met"])
         self.assertFalse(result_for(candidate_color_accuracy=0.74)["met"])
         self.assertFalse(result_for(candidate_test_examples=9)["met"])
+
+    def test_minigrid_repr_reference_decision_is_dependency_free(self) -> None:
+        config = parse_minigrid_representation_probe_config(
+            {
+                "dataset": {
+                    "policy": "random",
+                    "test_every": 3,
+                    "signature_buckets": 4,
+                    "envs": [{"name": "fake", "env_id": "Fake-v0", "episodes": 1, "max_steps": 1}],
+                },
+                "features": {
+                    "feature_dim": 128,
+                    "encoder_mode": "raw",
+                    "feature_sets": ["raw_current", "predictive_changed", "predictive_next_signature"],
+                },
+                "training": {
+                    "predictive_encoders": [
+                        {"name": "predictive_changed", "target_label": "changed"},
+                        {"name": "predictive_next_signature", "target_label": "next_signature_bucket"},
+                    ]
+                },
+                "decision": {
+                    "mode": "relative_to_reference",
+                    "labels": ["mission_object", "mission_color", "next_signature_bucket"],
+                    "baseline_feature_set": "raw_current",
+                    "reference_feature_set": "predictive_changed",
+                    "candidate_feature_set": "predictive_next_signature",
+                    "transition_label": "next_signature_bucket",
+                    "transition_min_lift_delta": 0.01,
+                    "max_mission_accuracy_drop": 0.05,
+                    "min_test_examples": 10,
+                },
+            }
+        )
+        base_labels = {
+            "mission_object": {"accuracy": 0.90, "majority_baseline": 0.50, "lift": 0.40, "test_examples": 20},
+            "mission_color": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
+            "next_signature_bucket": {"accuracy": 0.30, "majority_baseline": 0.20, "lift": 0.10, "test_examples": 20},
+        }
+        reference_labels = {
+            "mission_object": {"accuracy": 0.89, "majority_baseline": 0.50, "lift": 0.39, "test_examples": 20},
+            "mission_color": {"accuracy": 0.79, "majority_baseline": 0.50, "lift": 0.29, "test_examples": 20},
+            "next_signature_bucket": {"accuracy": 0.32, "majority_baseline": 0.20, "lift": 0.12, "test_examples": 20},
+        }
+        candidate_labels = {
+            "mission_object": {"accuracy": 0.86, "majority_baseline": 0.50, "lift": 0.36, "test_examples": 20},
+            "mission_color": {"accuracy": 0.77, "majority_baseline": 0.50, "lift": 0.27, "test_examples": 20},
+            "next_signature_bucket": {"accuracy": 0.34, "majority_baseline": 0.20, "lift": 0.14, "test_examples": 20},
+        }
+        result = evaluate_probe_decision(
+            [
+                {"feature_set": "raw_current", "labels": base_labels},
+                {"feature_set": "predictive_changed", "labels": reference_labels},
+                {"feature_set": "predictive_next_signature", "labels": candidate_labels},
+            ],
+            config.decision,
+        )
+        self.assertTrue(result["met"])
+        self.assertEqual(result["best_feature_set"], "predictive_next_signature")
+
+        candidate_labels["next_signature_bucket"] = {
+            "accuracy": 0.325,
+            "majority_baseline": 0.20,
+            "lift": 0.125,
+            "test_examples": 20,
+        }
+        failed = evaluate_probe_decision(
+            [
+                {"feature_set": "raw_current", "labels": base_labels},
+                {"feature_set": "predictive_changed", "labels": reference_labels},
+                {"feature_set": "predictive_next_signature", "labels": candidate_labels},
+            ],
+            config.decision,
+        )
+        self.assertFalse(failed["met"])
 
     def test_minigrid_repr_probe_summary_is_dependency_free(self) -> None:
         summary = representation_probe_summary_markdown(

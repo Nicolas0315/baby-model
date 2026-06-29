@@ -39,13 +39,17 @@ class ProbeDecisionConfig:
     min_test_examples: int
     mode: str
     baseline_feature_set: str
+    reference_feature_set: str
     candidate_feature_set: str
+    transition_label: str
     changed_min_lift_delta: float
+    transition_min_lift_delta: float
     max_mission_accuracy_drop: float
 
 
 @dataclass(frozen=True)
 class PredictiveEncoderConfig:
+    name: str
     target_label: str
     epochs: int
     learning_rate: float
@@ -67,6 +71,7 @@ class MiniGridRepresentationProbeConfig:
     quiet_env_output: bool
     decision: ProbeDecisionConfig
     predictive_encoder: PredictiveEncoderConfig
+    predictive_encoders: tuple[PredictiveEncoderConfig, ...]
 
 
 @dataclass(frozen=True)
@@ -130,16 +135,19 @@ def run_minigrid_representation_probe(config: dict[str, Any], seed: int = 2301) 
         raise ImportError("gymnasium/minigrid") from exc
 
     transitions = collect_probe_transitions(gym=gym, config=parsed, seed=seed)
-    predictive_encoder: PredictiveLinearEncoder | None = None
-    training_report: dict[str, Any] | None = None
-    if "predictive_encoder" in parsed.feature_sets:
-        predictive_encoder, training_report = train_predictive_encoder(transitions, parsed)
+    predictive_encoders: dict[str, PredictiveLinearEncoder] = {}
+    training_reports: dict[str, dict[str, Any]] = {}
+    for encoder_config in parsed.predictive_encoders:
+        if encoder_config.name in parsed.feature_sets:
+            encoder, report = train_predictive_encoder(transitions, parsed, encoder_config)
+            predictive_encoders[encoder_config.name] = encoder
+            training_reports[encoder_config.name] = report
     feature_reports = [
         evaluate_feature_set(
             transitions,
             feature_set=feature_set,
             config=parsed,
-            predictive_encoder=predictive_encoder,
+            predictive_encoders=predictive_encoders,
         )
         for feature_set in parsed.feature_sets
     ]
@@ -157,15 +165,19 @@ def run_minigrid_representation_probe(config: dict[str, Any], seed: int = 2301) 
             "signature_buckets": parsed.signature_buckets,
             "feature_sets": list(parsed.feature_sets),
             "training": {
-                "predictive_encoder": {
-                    "target_label": parsed.predictive_encoder.target_label,
-                    "epochs": parsed.predictive_encoder.epochs,
-                    "learning_rate": parsed.predictive_encoder.learning_rate,
-                    "include_action": parsed.predictive_encoder.include_action,
-                    "include_raw_passthrough": parsed.predictive_encoder.include_raw_passthrough,
-                    "score_scale": parsed.predictive_encoder.score_scale,
-                    "prediction_weight": parsed.predictive_encoder.prediction_weight,
-                }
+                "predictive_encoders": [
+                    {
+                        "name": encoder_config.name,
+                        "target_label": encoder_config.target_label,
+                        "epochs": encoder_config.epochs,
+                        "learning_rate": encoder_config.learning_rate,
+                        "include_action": encoder_config.include_action,
+                        "include_raw_passthrough": encoder_config.include_raw_passthrough,
+                        "score_scale": encoder_config.score_scale,
+                        "prediction_weight": encoder_config.prediction_weight,
+                    }
+                    for encoder_config in parsed.predictive_encoders
+                ]
             },
             "decision": {
                 "mode": parsed.decision.mode,
@@ -174,8 +186,11 @@ def run_minigrid_representation_probe(config: dict[str, Any], seed: int = 2301) 
                 "min_lift": parsed.decision.min_lift,
                 "min_test_examples": parsed.decision.min_test_examples,
                 "baseline_feature_set": parsed.decision.baseline_feature_set,
+                "reference_feature_set": parsed.decision.reference_feature_set,
                 "candidate_feature_set": parsed.decision.candidate_feature_set,
+                "transition_label": parsed.decision.transition_label,
                 "changed_min_lift_delta": parsed.decision.changed_min_lift_delta,
+                "transition_min_lift_delta": parsed.decision.transition_min_lift_delta,
                 "max_mission_accuracy_drop": parsed.decision.max_mission_accuracy_drop,
             },
         },
@@ -184,7 +199,8 @@ def run_minigrid_representation_probe(config: dict[str, Any], seed: int = 2301) 
             for env in parsed.envs
         ],
         "observation_schema": transitions[0]["observation_schema"] if transitions else {},
-        "training_report": training_report,
+        "training_report": training_reports.get("predictive_encoder"),
+        "training_reports": training_reports,
         "feature_reports": feature_reports,
         "decision": decision,
     }
@@ -231,7 +247,8 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
         raise ValueError("features.encoder_mode must be raw or coarse")
     if not feature_sets:
         raise ValueError("features.feature_sets must be non-empty")
-    supported_feature_sets = {"raw_current", "affordance_current", "predictive_encoder"}
+    predictive_names = predictive_encoder_names(config)
+    supported_feature_sets = {"raw_current", "affordance_current"} | predictive_names
     for feature_set in feature_sets:
         if feature_set not in supported_feature_sets:
             raise ValueError(f"unsupported feature set: {feature_set}")
@@ -266,48 +283,34 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
     if min_test_examples < 1:
         raise ValueError("decision.min_test_examples must be positive")
     mode = str(decision_cfg.get("mode", "absolute_all_labels"))
-    if mode not in {"absolute_all_labels", "relative_to_baseline"}:
-        raise ValueError("decision.mode must be absolute_all_labels or relative_to_baseline")
+    if mode not in {"absolute_all_labels", "relative_to_baseline", "relative_to_reference"}:
+        raise ValueError("decision.mode must be absolute_all_labels, relative_to_baseline, or relative_to_reference")
     baseline_feature_set = str(decision_cfg.get("baseline_feature_set", "raw_current"))
+    reference_feature_set = str(decision_cfg.get("reference_feature_set", "predictive_encoder"))
     candidate_feature_set = str(decision_cfg.get("candidate_feature_set", "predictive_encoder"))
+    transition_label = str(decision_cfg.get("transition_label", "changed"))
     changed_min_lift_delta = float(decision_cfg.get("changed_min_lift_delta", 0.05))
+    transition_min_lift_delta = float(decision_cfg.get("transition_min_lift_delta", 0.01))
     max_mission_accuracy_drop = float(decision_cfg.get("max_mission_accuracy_drop", 0.05))
+    if transition_label not in SUPPORTED_LABELS:
+        raise ValueError(f"unsupported decision transition_label: {transition_label}")
     if changed_min_lift_delta < 0.0 or changed_min_lift_delta > 1.0:
         raise ValueError("decision.changed_min_lift_delta out of range")
+    if transition_min_lift_delta < 0.0 or transition_min_lift_delta > 1.0:
+        raise ValueError("decision.transition_min_lift_delta out of range")
     if max_mission_accuracy_drop < 0.0 or max_mission_accuracy_drop > 1.0:
         raise ValueError("decision.max_mission_accuracy_drop out of range")
     if mode == "relative_to_baseline":
         for feature_set in (baseline_feature_set, candidate_feature_set):
             if feature_set not in feature_sets:
                 raise ValueError(f"decision feature set is not enabled: {feature_set}")
+    if mode == "relative_to_reference":
+        for feature_set in (baseline_feature_set, reference_feature_set, candidate_feature_set):
+            if feature_set not in feature_sets:
+                raise ValueError(f"decision feature set is not enabled: {feature_set}")
 
-    training_cfg = config.get("training", {})
-    if training_cfg is None:
-        training_cfg = {}
-    if not isinstance(training_cfg, dict):
-        raise ValueError("training must be an object")
-    predictive_cfg = training_cfg.get("predictive_encoder", training_cfg)
-    if predictive_cfg is None:
-        predictive_cfg = {}
-    if not isinstance(predictive_cfg, dict):
-        raise ValueError("training.predictive_encoder must be an object")
-    target_label = str(predictive_cfg.get("target_label", "changed"))
-    epochs = int(predictive_cfg.get("epochs", 4))
-    learning_rate = float(predictive_cfg.get("learning_rate", 0.10))
-    include_action = bool(predictive_cfg.get("include_action", True))
-    include_raw_passthrough = bool(predictive_cfg.get("include_raw_passthrough", True))
-    score_scale = float(predictive_cfg.get("score_scale", 1.0))
-    prediction_weight = float(predictive_cfg.get("prediction_weight", 1.0))
-    if target_label not in SUPPORTED_LABELS:
-        raise ValueError(f"unsupported predictive encoder target_label: {target_label}")
-    if epochs < 1:
-        raise ValueError("training.predictive_encoder.epochs must be positive")
-    if learning_rate <= 0.0:
-        raise ValueError("training.predictive_encoder.learning_rate must be positive")
-    if score_scale < 0.0:
-        raise ValueError("training.predictive_encoder.score_scale must be non-negative")
-    if prediction_weight < 0.0:
-        raise ValueError("training.predictive_encoder.prediction_weight must be non-negative")
+    predictive_encoders = parse_predictive_encoder_configs(config)
+    predictive_encoder = predictive_encoders[0]
 
     return MiniGridRepresentationProbeConfig(
         envs=tuple(envs),
@@ -325,20 +328,79 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
             min_test_examples=min_test_examples,
             mode=mode,
             baseline_feature_set=baseline_feature_set,
+            reference_feature_set=reference_feature_set,
             candidate_feature_set=candidate_feature_set,
+            transition_label=transition_label,
             changed_min_lift_delta=changed_min_lift_delta,
+            transition_min_lift_delta=transition_min_lift_delta,
             max_mission_accuracy_drop=max_mission_accuracy_drop,
         ),
-        predictive_encoder=PredictiveEncoderConfig(
-            target_label=target_label,
-            epochs=epochs,
-            learning_rate=learning_rate,
-            include_action=include_action,
-            include_raw_passthrough=include_raw_passthrough,
-            score_scale=score_scale,
-            prediction_weight=prediction_weight,
-        ),
+        predictive_encoder=predictive_encoder,
+        predictive_encoders=predictive_encoders,
     )
+
+
+def predictive_encoder_names(config: dict[str, Any]) -> set[str]:
+    return {encoder.name for encoder in parse_predictive_encoder_configs(config)}
+
+
+def parse_predictive_encoder_configs(config: dict[str, Any]) -> tuple[PredictiveEncoderConfig, ...]:
+    training_cfg = config.get("training", {})
+    if training_cfg is None:
+        training_cfg = {}
+    if not isinstance(training_cfg, dict):
+        raise ValueError("training must be an object")
+    encoder_items = training_cfg.get("predictive_encoders")
+    if encoder_items is None:
+        encoder_items = [training_cfg.get("predictive_encoder", training_cfg)]
+    if not isinstance(encoder_items, list) or not encoder_items:
+        raise ValueError("training.predictive_encoders must be a non-empty list")
+
+    encoders: list[PredictiveEncoderConfig] = []
+    names: set[str] = set()
+    for item in encoder_items:
+        if item is None:
+            item = {}
+        if not isinstance(item, dict):
+            raise ValueError("each training.predictive_encoders item must be an object")
+        name = str(item.get("name", "predictive_encoder"))
+        target_label = str(item.get("target_label", "changed"))
+        epochs = int(item.get("epochs", 4))
+        learning_rate = float(item.get("learning_rate", 0.10))
+        include_action = bool(item.get("include_action", True))
+        include_raw_passthrough = bool(item.get("include_raw_passthrough", True))
+        score_scale = float(item.get("score_scale", 1.0))
+        prediction_weight = float(item.get("prediction_weight", 1.0))
+        if not name:
+            raise ValueError("training.predictive_encoders.name is required")
+        if name in names:
+            raise ValueError(f"duplicate predictive encoder name: {name}")
+        if name in {"raw_current", "affordance_current"}:
+            raise ValueError(f"predictive encoder name conflicts with built-in feature set: {name}")
+        if target_label not in SUPPORTED_LABELS:
+            raise ValueError(f"unsupported predictive encoder target_label: {target_label}")
+        if epochs < 1:
+            raise ValueError("training.predictive_encoders.epochs must be positive")
+        if learning_rate <= 0.0:
+            raise ValueError("training.predictive_encoders.learning_rate must be positive")
+        if score_scale < 0.0:
+            raise ValueError("training.predictive_encoders.score_scale must be non-negative")
+        if prediction_weight < 0.0:
+            raise ValueError("training.predictive_encoders.prediction_weight must be non-negative")
+        names.add(name)
+        encoders.append(
+            PredictiveEncoderConfig(
+                name=name,
+                target_label=target_label,
+                epochs=epochs,
+                learning_rate=learning_rate,
+                include_action=include_action,
+                include_raw_passthrough=include_raw_passthrough,
+                score_scale=score_scale,
+                prediction_weight=prediction_weight,
+            )
+        )
+    return tuple(encoders)
 
 
 def collect_probe_transitions(gym: Any, config: MiniGridRepresentationProbeConfig, seed: int) -> list[dict[str, Any]]:
@@ -420,13 +482,13 @@ def evaluate_feature_set(
     transitions: list[dict[str, Any]],
     feature_set: str,
     config: MiniGridRepresentationProbeConfig,
-    predictive_encoder: PredictiveLinearEncoder | None = None,
+    predictive_encoders: dict[str, PredictiveLinearEncoder] | None = None,
 ) -> dict[str, Any]:
     examples = [
         transition_features(
             transition,
             feature_set=feature_set,
-            predictive_encoder=predictive_encoder,
+            predictive_encoders=predictive_encoders,
         )
         for transition in transitions
     ]
@@ -451,24 +513,28 @@ def evaluate_feature_set(
 def transition_features(
     transition: dict[str, Any],
     feature_set: str,
-    predictive_encoder: PredictiveLinearEncoder | None = None,
+    predictive_encoders: dict[str, PredictiveLinearEncoder] | None = None,
 ) -> SparseFeatures:
     if feature_set == "raw_current":
         return dict(transition["features"])
     if feature_set == "affordance_current":
         return dict(transition["affordance_features"])
-    if feature_set == "predictive_encoder":
-        if predictive_encoder is None:
+    if predictive_encoders is not None and feature_set in predictive_encoders:
+        return predictive_encoders[feature_set].embed(transition)
+    if feature_set.startswith("predictive_") or feature_set == "predictive_encoder":
+        if predictive_encoders is None:
             raise ValueError("predictive_encoder feature set requires a trained encoder")
-        return predictive_encoder.embed(transition)
+        raise ValueError(f"missing trained encoder for feature set: {feature_set}")
     raise ValueError(f"unsupported feature set: {feature_set}")
 
 
 def train_predictive_encoder(
     transitions: list[dict[str, Any]],
     config: MiniGridRepresentationProbeConfig,
+    encoder_config: PredictiveEncoderConfig | None = None,
 ) -> tuple[PredictiveLinearEncoder, dict[str, Any]]:
-    target_label = config.predictive_encoder.target_label
+    encoder_config = encoder_config or config.predictive_encoder
+    target_label = encoder_config.target_label
     train_transitions: list[dict[str, Any]] = []
     test_transitions: list[dict[str, Any]] = []
     for index, transition in enumerate(transitions):
@@ -482,38 +548,39 @@ def train_predictive_encoder(
     classes = tuple(sorted({str(transition["labels"][target_label]) for transition in train_transitions}))
     weights: dict[str, SparseFeatures] = {label: {} for label in classes}
     epoch_mistakes: list[int] = []
-    for _epoch in range(config.predictive_encoder.epochs):
+    for _epoch in range(encoder_config.epochs):
         mistakes = 0
         for transition in train_transitions:
             features = predictive_input_features(
                 transition=transition,
                 feature_dim=config.feature_dim,
-                include_action=config.predictive_encoder.include_action,
+                include_action=encoder_config.include_action,
             )
             expected = str(transition["labels"][target_label])
             predicted = _predict_linear_label(features, classes, weights)
             if predicted != expected:
                 mistakes += 1
-                _add_scaled_features(weights[expected], features, config.predictive_encoder.learning_rate)
+                _add_scaled_features(weights[expected], features, encoder_config.learning_rate)
                 if predicted:
-                    _add_scaled_features(weights[predicted], features, -config.predictive_encoder.learning_rate)
+                    _add_scaled_features(weights[predicted], features, -encoder_config.learning_rate)
         epoch_mistakes.append(mistakes)
 
     encoder = PredictiveLinearEncoder(
         classes=classes,
         weights=weights,
-        config=config.predictive_encoder,
+        config=encoder_config,
         feature_dim=config.feature_dim,
     )
     report = {
+        "name": encoder_config.name,
         "target_label": target_label,
         "classes": list(classes),
-        "epochs": config.predictive_encoder.epochs,
-        "learning_rate": config.predictive_encoder.learning_rate,
-        "include_action": config.predictive_encoder.include_action,
-        "include_raw_passthrough": config.predictive_encoder.include_raw_passthrough,
-        "score_scale": config.predictive_encoder.score_scale,
-        "prediction_weight": config.predictive_encoder.prediction_weight,
+        "epochs": encoder_config.epochs,
+        "learning_rate": encoder_config.learning_rate,
+        "include_action": encoder_config.include_action,
+        "include_raw_passthrough": encoder_config.include_raw_passthrough,
+        "score_scale": encoder_config.score_scale,
+        "prediction_weight": encoder_config.prediction_weight,
         "train_examples": len(train_transitions),
         "test_examples": len(test_transitions),
         "epoch_mistakes": epoch_mistakes,
@@ -611,6 +678,8 @@ def centroid_probe_metrics(examples: list[SparseFeatures], labels: list[str], te
 def evaluate_probe_decision(feature_reports: list[dict[str, Any]], decision: ProbeDecisionConfig) -> dict[str, Any]:
     if decision.mode == "relative_to_baseline":
         return evaluate_relative_probe_decision(feature_reports, decision)
+    if decision.mode == "relative_to_reference":
+        return evaluate_reference_probe_decision(feature_reports, decision)
     candidates: list[dict[str, Any]] = []
     for report in feature_reports:
         label_metrics = [report["labels"][label] for label in decision.labels]
@@ -715,6 +784,91 @@ def evaluate_relative_probe_decision(
     }
 
 
+def evaluate_reference_probe_decision(
+    feature_reports: list[dict[str, Any]],
+    decision: ProbeDecisionConfig,
+) -> dict[str, Any]:
+    reports_by_feature_set = {report["feature_set"]: report for report in feature_reports}
+    baseline = reports_by_feature_set[decision.baseline_feature_set]
+    reference = reports_by_feature_set[decision.reference_feature_set]
+    candidate = reports_by_feature_set[decision.candidate_feature_set]
+    required_labels = ("mission_object", "mission_color", decision.transition_label)
+    missing_labels = [
+        label
+        for label in required_labels
+        if label not in baseline["labels"] or label not in reference["labels"] or label not in candidate["labels"]
+    ]
+    if missing_labels:
+        raise ValueError(f"missing reference decision labels: {','.join(missing_labels)}")
+
+    comparisons: dict[str, dict[str, float | int]] = {}
+    enough_examples = True
+    for label in required_labels:
+        base_metrics = baseline["labels"][label]
+        reference_metrics = reference["labels"][label]
+        candidate_metrics = candidate["labels"][label]
+        enough_examples = (
+            enough_examples
+            and base_metrics["test_examples"] >= decision.min_test_examples
+            and reference_metrics["test_examples"] >= decision.min_test_examples
+            and candidate_metrics["test_examples"] >= decision.min_test_examples
+        )
+        comparisons[label] = {
+            "baseline_accuracy": base_metrics["accuracy"],
+            "reference_accuracy": reference_metrics["accuracy"],
+            "candidate_accuracy": candidate_metrics["accuracy"],
+            "accuracy_delta_vs_baseline": candidate_metrics["accuracy"] - base_metrics["accuracy"],
+            "accuracy_delta_vs_reference": candidate_metrics["accuracy"] - reference_metrics["accuracy"],
+            "baseline_lift": base_metrics["lift"],
+            "reference_lift": reference_metrics["lift"],
+            "candidate_lift": candidate_metrics["lift"],
+            "lift_delta_vs_baseline": candidate_metrics["lift"] - base_metrics["lift"],
+            "lift_delta_vs_reference": candidate_metrics["lift"] - reference_metrics["lift"],
+            "baseline_test_examples": base_metrics["test_examples"],
+            "reference_test_examples": reference_metrics["test_examples"],
+            "candidate_test_examples": candidate_metrics["test_examples"],
+        }
+
+    transition = comparisons[decision.transition_label]
+    transition_passed = (
+        transition["lift_delta_vs_baseline"] >= decision.transition_min_lift_delta
+        and transition["lift_delta_vs_reference"] >= decision.transition_min_lift_delta
+    )
+    mission_object_passed = (
+        comparisons["mission_object"]["accuracy_delta_vs_baseline"] >= -decision.max_mission_accuracy_drop
+    )
+    mission_color_passed = (
+        comparisons["mission_color"]["accuracy_delta_vs_baseline"] >= -decision.max_mission_accuracy_drop
+    )
+    passed = bool(enough_examples and transition_passed and mission_object_passed and mission_color_passed)
+    candidates = [
+        {
+            "feature_set": report["feature_set"],
+            "passed": bool(report["feature_set"] == decision.candidate_feature_set and passed),
+            "mean_accuracy": mean(report["labels"][label]["accuracy"] for label in decision.labels),
+            "mean_lift": mean(report["labels"][label]["lift"] for label in decision.labels),
+        }
+        for report in (baseline, reference, candidate)
+    ]
+    return {
+        "met": passed,
+        "best_feature_set": decision.candidate_feature_set if passed else decision.reference_feature_set,
+        "candidates": candidates,
+        "comparisons": comparisons,
+        "rule": {
+            "mode": decision.mode,
+            "labels": list(decision.labels),
+            "min_test_examples": decision.min_test_examples,
+            "baseline_feature_set": decision.baseline_feature_set,
+            "reference_feature_set": decision.reference_feature_set,
+            "candidate_feature_set": decision.candidate_feature_set,
+            "transition_label": decision.transition_label,
+            "transition_min_lift_delta": decision.transition_min_lift_delta,
+            "max_mission_accuracy_drop": decision.max_mission_accuracy_drop,
+        },
+    }
+
+
 def write_representation_probe(report: dict[str, Any], output_dir: Path) -> Path:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
@@ -758,21 +912,46 @@ def representation_probe_summary_markdown(report: dict[str, Any]) -> str:
                 )
             )
     lines.append("")
-    training_report = report.get("training_report")
-    if training_report:
+    training_reports = report.get("training_reports")
+    if isinstance(training_reports, dict) and training_reports:
         lines.extend(
             [
-                "## Predictive encoder",
+                "## Predictive encoders",
                 "",
-                f"- target_label: `{training_report['target_label']}`",
-                f"- train_accuracy: `{training_report['train_accuracy']:.3f}`",
-                f"- test_accuracy: `{training_report['test_accuracy']:.3f}`",
-                f"- test_majority: `{training_report['test_majority_baseline']:.3f}`",
-                f"- test_lift: `{training_report['test_lift']:.3f}`",
-                f"- epoch_mistakes: `{','.join(str(item) for item in training_report['epoch_mistakes'])}`",
-                "",
+                "| name | target_label | train_accuracy | test_accuracy | test_majority | test_lift | epoch_mistakes |",
+                "| --- | --- | ---: | ---: | ---: | ---: | --- |",
             ]
         )
+        for name in sorted(training_reports):
+            training_report = training_reports[name]
+            lines.append(
+                "| {name} | {target_label} | {train_accuracy:.3f} | {test_accuracy:.3f} | {test_majority:.3f} | {test_lift:.3f} | {epoch_mistakes} |".format(
+                    name=name,
+                    target_label=training_report["target_label"],
+                    train_accuracy=training_report["train_accuracy"],
+                    test_accuracy=training_report["test_accuracy"],
+                    test_majority=training_report["test_majority_baseline"],
+                    test_lift=training_report["test_lift"],
+                    epoch_mistakes=",".join(str(item) for item in training_report["epoch_mistakes"]),
+                )
+            )
+        lines.append("")
+    else:
+        training_report = report.get("training_report")
+        if training_report:
+            lines.extend(
+                [
+                    "## Predictive encoder",
+                    "",
+                    f"- target_label: `{training_report['target_label']}`",
+                    f"- train_accuracy: `{training_report['train_accuracy']:.3f}`",
+                    f"- test_accuracy: `{training_report['test_accuracy']:.3f}`",
+                    f"- test_majority: `{training_report['test_majority_baseline']:.3f}`",
+                    f"- test_lift: `{training_report['test_lift']:.3f}`",
+                    f"- epoch_mistakes: `{','.join(str(item) for item in training_report['epoch_mistakes'])}`",
+                    "",
+                ]
+            )
     return "\n".join(lines)
 
 
