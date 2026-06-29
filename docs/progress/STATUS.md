@@ -290,11 +290,23 @@ Updated: 2026-06-29 JST
   all-window success (`0.021`), but had lower final-stage return (`0.042` vs
   `0.045`). This does not meet the v1.5 escalation rule, so do not run a
   multi-seed GPU sweep for this condition family.
+- Issue #20 v1.6 action-prior AD/DA signal is implemented:
+  - `configs/experiments/minigrid-torch-adda-v16.json`
+  - `docs/experiments/minigrid-torch-adda-v16.md`
+  - PyTorch DQN now supports an `action_prior` representation objective and an
+    optional `action_prior_weight` bonus mixed into action selection after the
+    decoder delay.
+- Local v1.6 CPU smoke passed in the existing optional PyTorch venv. On the
+  final `BabyAI-Unlock-v0` stage, `R_torch_action_prior_delay` beat
+  `A_torch_hard_only_long` by last-window success (`0.050` vs `0.000`) and
+  return (`0.046` vs `0.000`). This is a positive local smoke signal, but not
+  yet a robust GPU result.
 
 ## Next
 
-- Execute issue #20 by designing a v1.6 AD/DA signal family beyond the current
-  curriculum-backed task-signal condition family.
+- Run a bounded v1.6 CUDA smoke on `gpu-worker-c`. Escalate to a multi-seed
+  CUDA sweep only if the v1.6 action-prior condition family beats the hard-only
+  baseline under the documented decision rule.
 
 ## Not Yet Proven
 

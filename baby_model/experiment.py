@@ -27,6 +27,7 @@ class Condition:
     intrinsic_target: str = "reward"
     representation_objective: str = "none"
     representation_beta: float = 0.0
+    action_prior_weight: float = 0.0
 
 
 def default_conditions(seed: int = 7) -> list[Condition]:

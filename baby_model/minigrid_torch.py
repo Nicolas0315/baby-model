@@ -22,6 +22,16 @@ class TorchDeviceUnavailable(RuntimeError):
 
 
 TASK_SIGNAL_DIM = 16
+ACTION_LEFT = 0
+ACTION_RIGHT = 1
+ACTION_FORWARD = 2
+ACTION_PICKUP = 3
+ACTION_TOGGLE = 5
+OBJECT_WALL = 2
+OBJECT_DOOR = 4
+OBJECT_KEY = 5
+OBJECT_BALL = 6
+OBJECT_GOAL = 8
 
 
 @dataclass(frozen=True)
@@ -91,14 +101,32 @@ class TorchDQNAgent:
                 target_dim=target_dim,
             ).to(device)
             parameters.extend(self.representation_predictor.parameters())
+        elif representation_objective == "action_prior":
+            self.representation_predictor = build_action_prior_predictor(
+                torch,
+                hidden_dim=config.hidden_dim,
+                actions=actions,
+            ).to(device)
+            parameters.extend(self.representation_predictor.parameters())
         self.optimizer = torch.optim.Adam(parameters, lr=config.learning_rate)
         self.loss_fn = torch.nn.MSELoss()
+        self.classification_loss_fn = torch.nn.CrossEntropyLoss()
         self.replay: deque[tuple[SparseFeatures, int, float, SparseFeatures, bool]] = deque(maxlen=config.replay_capacity)
         self.updates = 0
 
     def action_values(self, features: SparseFeatures) -> dict[int, float]:
         values = self._q_values(features)
         return {action: values[action] for action in range(self.actions)}
+
+    def action_prior_values(self, features: SparseFeatures) -> dict[int, float]:
+        if self.representation_objective != "action_prior" or self.representation_predictor is None:
+            return {}
+        with self.torch.no_grad():
+            state = self._feature_tensor(features).unsqueeze(0)
+            hidden = self.model.encode(state)
+            logits = self.representation_predictor(hidden)
+            probabilities = self.torch.softmax(logits, dim=1).detach().cpu().tolist()[0]
+        return {action: float(probabilities[action]) for action in range(self.actions)}
 
     def choose(
         self,
@@ -147,20 +175,28 @@ class TorchDQNAgent:
         self,
         features: SparseFeatures,
         action: int,
-        target_vector: list[float],
+        target_vector: list[float] | int,
     ) -> float | None:
         if self.representation_objective == "none":
             return None
-        if self.representation_objective not in {"next_feature", "next_task_signal"} or self.representation_predictor is None:
+        if self.representation_objective not in {"next_feature", "next_task_signal", "action_prior"} or self.representation_predictor is None:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
         state = self._feature_tensor(features).unsqueeze(0)
-        target = self.torch.tensor([target_vector], dtype=self.torch.float32, device=self.device)
         hidden = self.model.encode(state)
-        action_one_hot = self.torch.zeros((1, self.actions), dtype=self.torch.float32, device=self.device)
-        action_one_hot[0, action] = 1.0
-        prediction = self.representation_predictor(self.torch.cat([hidden, action_one_hot], dim=1))
-        loss = self.loss_fn(prediction, target) * self.representation_beta
+        if self.representation_objective == "action_prior":
+            target_action = int(target_vector)
+            if target_action < 0 or target_action >= self.actions:
+                raise ValueError(f"action_prior target out of range: {target_action}")
+            target = self.torch.tensor([target_action], dtype=self.torch.long, device=self.device)
+            prediction = self.representation_predictor(hidden)
+            loss = self.classification_loss_fn(prediction, target) * self.representation_beta
+        else:
+            target = self.torch.tensor([target_vector], dtype=self.torch.float32, device=self.device)
+            action_one_hot = self.torch.zeros((1, self.actions), dtype=self.torch.float32, device=self.device)
+            action_one_hot[0, action] = 1.0
+            prediction = self.representation_predictor(self.torch.cat([hidden, action_one_hot], dim=1))
+            loss = self.loss_fn(prediction, target) * self.representation_beta
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -300,6 +336,25 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
     return report
 
 
+def _combined_action_bonus(
+    agent: TorchDQNAgent,
+    auxiliary_agent: TorchDQNAgent,
+    features: SparseFeatures,
+    condition: Condition,
+    force_random: bool,
+) -> dict[int, float] | None:
+    if force_random:
+        return None
+    bonus: dict[int, float] = {}
+    if condition.intrinsic_target == "auxiliary":
+        for action, value in auxiliary_agent.action_values(features).items():
+            bonus[action] = bonus.get(action, 0.0) + value
+    if condition.action_prior_weight > 0.0:
+        for action, value in agent.action_prior_values(features).items():
+            bonus[action] = bonus.get(action, 0.0) + condition.action_prior_weight * value
+    return bonus or None
+
+
 def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> MiniGridTorchConfig:
     env_cfg = config.get("environment", {})
     if not isinstance(env_cfg, dict):
@@ -370,9 +425,10 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         if intrinsic_target not in {"reward", "auxiliary"}:
             raise ValueError(f"invalid intrinsic_target for {name}")
         representation_objective = str(item.get("representation_objective", "none"))
-        if representation_objective not in {"none", "next_feature", "next_task_signal"}:
+        if representation_objective not in {"none", "next_feature", "next_task_signal", "action_prior"}:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
+        action_prior_weight = float(item.get("action_prior_weight", 0.0))
         active_stages = tuple(str(stage_name) for stage_name in item.get("active_stages", all_stage_names))
         if stages:
             if not active_stages:
@@ -397,6 +453,10 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             raise ValueError(f"representation_beta must be non-negative for {name}")
         if representation_objective != "none" and representation_beta <= 0.0:
             raise ValueError(f"representation_beta must be positive for {name}")
+        if action_prior_weight < 0.0:
+            raise ValueError(f"action_prior_weight must be non-negative for {name}")
+        if action_prior_weight > 0.0 and representation_objective != "action_prior":
+            raise ValueError(f"action_prior_weight requires action_prior for {name}")
         conditions.append(
             Condition(
                 name=name,
@@ -409,6 +469,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 intrinsic_target=intrinsic_target,
                 representation_objective=representation_objective,
                 representation_beta=representation_beta,
+                action_prior_weight=action_prior_weight,
             )
         )
         active_stages_by_condition.append((name, active_stages))
@@ -522,9 +583,13 @@ def run_minigrid_torch_condition(
 
             for _ in range(max_steps):
                 force_random = episode < condition.decoder_delay_episodes
-                action_bonus = None
-                if condition.intrinsic_target == "auxiliary" and not force_random:
-                    action_bonus = auxiliary_agent.action_values(features)
+                action_bonus = _combined_action_bonus(
+                    agent=agent,
+                    auxiliary_agent=auxiliary_agent,
+                    features=features,
+                    condition=condition,
+                    force_random=force_random,
+                )
                 action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
                 next_observation, reward, terminated, truncated, _info = _env_call(
                     env.step,
@@ -538,10 +603,14 @@ def run_minigrid_torch_condition(
                 total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
                 done = bool(terminated or truncated)
 
-                if condition.representation_objective == "next_feature":
-                    representation_target = dense_feature_vector(next_features, agent_config.feature_dim)
-                else:
-                    representation_target = task_signal_vector(next_observation)
+                representation_target = representation_target_for_objective(
+                    condition=condition,
+                    observation=observation,
+                    next_observation=next_observation,
+                    next_features=next_features,
+                    feature_dim=agent_config.feature_dim,
+                    actions=actions,
+                )
                 loss = agent.update_representation(features, action, representation_target)
                 if loss is not None:
                     representation_loss += loss
@@ -556,6 +625,7 @@ def run_minigrid_torch_condition(
                 intrinsic_return += intrinsic
                 steps += 1
                 visited.add(next_feature_key)
+                observation = next_observation
                 features = next_features
                 feature_key = next_feature_key
                 if float(reward) > 0.0:
@@ -594,6 +664,7 @@ def run_minigrid_torch_condition(
             "intrinsic_target": condition.intrinsic_target,
             "representation_objective": condition.representation_objective,
             "representation_beta": condition.representation_beta,
+            "action_prior_weight": condition.action_prior_weight,
             "seed": condition.seed,
             "observation_schema": first_schema or {},
             "success_rate_all": mean(1.0 if item.success else 0.0 for item in episodes),
@@ -665,6 +736,7 @@ def run_minigrid_torch_curriculum_condition(
         "intrinsic_target": condition.intrinsic_target,
         "representation_objective": condition.representation_objective,
         "representation_beta": condition.representation_beta,
+        "action_prior_weight": condition.action_prior_weight,
         "seed": condition.seed,
         "active_stages": list(active_stages),
         "stage_results": stage_results,
@@ -751,9 +823,13 @@ def _run_minigrid_torch_stage(
 
             for _ in range(stage.max_steps):
                 force_random = global_episode < condition.decoder_delay_episodes
-                action_bonus = None
-                if condition.intrinsic_target == "auxiliary" and not force_random:
-                    action_bonus = auxiliary_agent.action_values(features)
+                action_bonus = _combined_action_bonus(
+                    agent=agent,
+                    auxiliary_agent=auxiliary_agent,
+                    features=features,
+                    condition=condition,
+                    force_random=force_random,
+                )
                 action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
                 next_observation, reward, terminated, truncated, _info = _env_call(
                     env.step,
@@ -767,10 +843,14 @@ def _run_minigrid_torch_stage(
                 total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
                 done = bool(terminated or truncated)
 
-                if condition.representation_objective == "next_feature":
-                    representation_target = dense_feature_vector(next_features, agent_config.feature_dim)
-                else:
-                    representation_target = task_signal_vector(next_observation)
+                representation_target = representation_target_for_objective(
+                    condition=condition,
+                    observation=observation,
+                    next_observation=next_observation,
+                    next_features=next_features,
+                    feature_dim=agent_config.feature_dim,
+                    actions=actions,
+                )
                 loss = agent.update_representation(features, action, representation_target)
                 if loss is not None:
                     representation_loss += loss
@@ -785,6 +865,7 @@ def _run_minigrid_torch_stage(
                 intrinsic_return += intrinsic
                 steps += 1
                 visited.add(next_feature_key)
+                observation = next_observation
                 features = next_features
                 feature_key = next_feature_key
                 if float(reward) > 0.0:
@@ -882,6 +963,60 @@ def build_next_feature_predictor(torch: Any, hidden_dim: int, actions: int, targ
     )
 
 
+def build_action_prior_predictor(torch: Any, hidden_dim: int, actions: int) -> Any:
+    return torch.nn.Sequential(
+        torch.nn.Linear(hidden_dim, hidden_dim),
+        torch.nn.ReLU(),
+        torch.nn.Linear(hidden_dim, actions),
+    )
+
+
+def representation_target_for_objective(
+    condition: Condition,
+    observation: Any,
+    next_observation: Any,
+    next_features: SparseFeatures,
+    feature_dim: int,
+    actions: int,
+) -> list[float] | int:
+    if condition.representation_objective == "next_feature":
+        return dense_feature_vector(next_features, feature_dim)
+    if condition.representation_objective == "next_task_signal":
+        return task_signal_vector(next_observation)
+    if condition.representation_objective == "action_prior":
+        return action_prior_label(observation, actions)
+    return []
+
+
+def action_prior_label(observation: Any, actions: int) -> int:
+    if actions < 1:
+        raise ValueError("actions must be positive")
+    if not isinstance(observation, dict):
+        return _available_action(ACTION_FORWARD, actions)
+
+    image = observation.get("image")
+    if hasattr(image, "tolist"):
+        image = image.tolist()
+    front = _image_cell(image, 2, 3)
+    mission = str(observation.get("mission", "")).lower()
+
+    if front is not None and len(front) >= 3:
+        obj_type = int(front[0])
+        state = int(front[2])
+        if obj_type == OBJECT_KEY and ("key" in mission or "unlock" in mission):
+            return _available_action(ACTION_PICKUP, actions)
+        if obj_type == OBJECT_DOOR:
+            if state == 0:
+                return _available_action(ACTION_FORWARD, actions)
+            return _available_action(ACTION_TOGGLE, actions)
+        if obj_type in {OBJECT_BALL, OBJECT_GOAL}:
+            return _available_action(ACTION_FORWARD, actions)
+        if obj_type == OBJECT_WALL:
+            return _turn_action(observation, actions)
+
+    return _available_action(ACTION_FORWARD, actions)
+
+
 def task_signal_vector(observation: Any) -> list[float]:
     if not isinstance(observation, dict):
         return [0.0 for _ in range(TASK_SIGNAL_DIM)]
@@ -935,6 +1070,32 @@ def _flat_image_cells(image: Any) -> list[list[int]]:
             if isinstance(cell, list):
                 cells.append(cell)
     return cells
+
+
+def _image_cell(image: Any, y: int, x: int) -> list[int] | None:
+    if not isinstance(image, list):
+        return None
+    if y < 0 or y >= len(image):
+        return None
+    row = image[y]
+    if not isinstance(row, list) or x < 0 or x >= len(row):
+        return None
+    cell = row[x]
+    return cell if isinstance(cell, list) else None
+
+
+def _available_action(preferred: int, actions: int) -> int:
+    if 0 <= preferred < actions:
+        return preferred
+    if ACTION_FORWARD < actions:
+        return ACTION_FORWARD
+    return actions - 1
+
+
+def _turn_action(observation: dict[str, Any], actions: int) -> int:
+    direction = int(observation.get("direction", 0))
+    preferred = ACTION_LEFT if direction % 2 == 0 else ACTION_RIGHT
+    return _available_action(preferred, actions)
 
 
 def dense_feature_vector(features: SparseFeatures, feature_dim: int) -> list[float]:
@@ -1006,15 +1167,15 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
             [
                 f"- stages: `{stage_text}`",
                 "",
-                "| condition | active_stages | final_stage | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
-                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| condition | active_stages | final_stage | prior | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
+                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
     else:
         lines.extend(
             [
-                "| condition | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| condition | prior | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
     for row in report["results"]:
@@ -1023,10 +1184,11 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
         if is_curriculum:
             final_stage = row["final_stage"]
             lines.append(
-                "| {name} | {stages} | {stage} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
+                "| {name} | {stages} | {stage} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
                     name=row["name"],
                     stages=",".join(row["active_stages"]),
                     stage=final_stage["stage"],
+                    prior=row.get("action_prior_weight", 0.0),
                     all=row["success_rate_all"],
                     last=row["success_rate_last_window"],
                     ret=row["mean_return_last_window"],
@@ -1039,8 +1201,9 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
             )
         else:
             lines.append(
-                "| {name} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
+                "| {name} | {prior:.3f} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
                     name=row["name"],
+                    prior=row.get("action_prior_weight", 0.0),
                     all=row["success_rate_all"],
                     last=row["success_rate_last_window"],
                     ret=row["mean_return_last_window"],

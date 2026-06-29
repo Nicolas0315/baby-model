@@ -1,0 +1,70 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v1.6: action-prior representation as a stronger AD-to-DA signal",
+  "environment": {
+    "id": "BabyAI-Unlock-v0",
+    "max_steps": 120,
+    "quiet_env_output": true
+  },
+  "stages": [
+    {
+      "name": "empty_warmup",
+      "env_id": "MiniGrid-Empty-5x5-v0",
+      "max_steps": 30,
+      "episodes": 12
+    },
+    {
+      "name": "goto_warmup",
+      "env_id": "BabyAI-GoToRedBall-v0",
+      "max_steps": 80,
+      "episodes": 24
+    },
+    {
+      "name": "unlock_eval",
+      "env_id": "BabyAI-Unlock-v0",
+      "max_steps": 120,
+      "episodes": 48
+    }
+  ],
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "auto"
+  },
+  "conditions": [
+    {
+      "name": "A_torch_hard_only_long",
+      "encoder_mode": "raw",
+      "active_stages": ["unlock_eval"],
+      "decoder_delay_episodes": 0,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "R_torch_action_prior_delay",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_warmup", "unlock_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "action_prior",
+      "representation_beta": 0.2
+    },
+    {
+      "name": "S_torch_action_prior_policy_mix",
+      "encoder_mode": "raw",
+      "active_stages": ["empty_warmup", "goto_warmup", "unlock_eval"],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "action_prior",
+      "representation_beta": 0.2,
+      "action_prior_weight": 0.25
+    }
+  ]
+}

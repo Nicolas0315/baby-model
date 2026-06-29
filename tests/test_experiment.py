@@ -47,6 +47,7 @@ import baby_model.minigrid_torch as minigrid_torch_module
 from baby_model.minigrid_torch import (
     TorchAgentConfig,
     TorchCurriculumStage,
+    action_prior_label,
     dense_feature_vector,
     parse_minigrid_torch_config,
     run_minigrid_torch_curriculum_condition,
@@ -869,6 +870,17 @@ class ExperimentTest(unittest.TestCase):
         self.assertAlmostEqual(vector[7], 0.25)
         self.assertAlmostEqual(vector[13], 0.25)
 
+    def test_minigrid_torch_action_prior_label_is_dependency_free(self) -> None:
+        def observation_with_front(front_cell: list[int], mission: str = "unlock the door with the key") -> dict[str, object]:
+            image = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+            image[2][3] = front_cell
+            return {"direction": 0, "mission": mission, "image": image}
+
+        self.assertEqual(action_prior_label(observation_with_front([5, 0, 0]), actions=7), 3)
+        self.assertEqual(action_prior_label(observation_with_front([4, 0, 2]), actions=7), 5)
+        self.assertEqual(action_prior_label(observation_with_front([2, 0, 0]), actions=7), 0)
+        self.assertEqual(action_prior_label(observation_with_front([8, 0, 0], mission="go to the goal"), actions=7), 2)
+
     def test_minigrid_torch_v14_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v14.json")
         parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1001)
@@ -909,6 +921,24 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.conditions[1].episodes, 84)
         self.assertEqual(parsed.conditions[1].representation_objective, "next_task_signal")
         self.assertEqual(parsed.conditions[2].intrinsic_target, "auxiliary")
+
+    def test_minigrid_torch_v16_action_prior_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v16.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1201)
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "R_torch_action_prior_delay",
+                "S_torch_action_prior_policy_mix",
+            ],
+        )
+        self.assertEqual(parsed.conditions[1].representation_objective, "action_prior")
+        self.assertEqual(parsed.conditions[1].representation_beta, 0.2)
+        self.assertEqual(parsed.conditions[1].action_prior_weight, 0.0)
+        self.assertEqual(parsed.conditions[2].representation_objective, "action_prior")
+        self.assertEqual(parsed.conditions[2].action_prior_weight, 0.25)
 
     def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:
         class FakeTorch:
@@ -980,6 +1010,9 @@ class ExperimentTest(unittest.TestCase):
             def action_values(self, features: dict[int, float]) -> dict[int, float]:
                 return {0: 0.0, 1: 0.0}
 
+            def action_prior_values(self, features: dict[int, float]) -> dict[int, float]:
+                return {0: 0.0, 1: 1.0}
+
             def update(
                 self,
                 features: dict[int, float],
@@ -994,11 +1027,12 @@ class ExperimentTest(unittest.TestCase):
                 self,
                 features: dict[int, float],
                 action: int,
-                target_vector: list[float],
+                target_vector: list[float] | int,
             ) -> float | None:
                 if self.representation_objective == "none":
                     return None
                 self.representation_updates += 1
+                self.last_representation_target = target_vector
                 return 0.25
 
             def parameter_count(self) -> int:
@@ -1019,8 +1053,9 @@ class ExperimentTest(unittest.TestCase):
             intrinsic_beta=0.0,
             intrinsic_mode="none",
             seed=31,
-            representation_objective="next_task_signal",
+            representation_objective="action_prior",
             representation_beta=0.3,
+            action_prior_weight=0.2,
         )
         agent_config = TorchAgentConfig(
             feature_dim=128,
@@ -1050,6 +1085,8 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(report["success_rate_last_window"], 1.0)
         self.assertEqual(report["representation_updates"], 4)
         self.assertEqual(report["updates"], 3)
+        self.assertEqual(report["action_prior_weight"], 0.2)
+        self.assertIsInstance(FakeAgent.instances[0].last_representation_target, int)
         self.assertIn("warmup", torch_summary_markdown(
             {
                 "created_at": "2026-06-29T00:00:00+00:00",
@@ -1079,6 +1116,27 @@ class ExperimentTest(unittest.TestCase):
                             "intrinsic_mode": "none",
                             "representation_objective": "mystery",
                             "representation_beta": 0.1,
+                        }
+                    ]
+                },
+                seed=1,
+            )
+
+    def test_minigrid_torch_rejects_action_prior_weight_without_action_prior(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_minigrid_torch_config(
+                {
+                    "conditions": [
+                        {
+                            "name": "bad",
+                            "encoder_mode": "raw",
+                            "episodes": 4,
+                            "decoder_delay_episodes": 1,
+                            "intrinsic_beta": 0.0,
+                            "intrinsic_mode": "none",
+                            "representation_objective": "next_task_signal",
+                            "representation_beta": 0.1,
+                            "action_prior_weight": 0.1,
                         }
                     ]
                 },
