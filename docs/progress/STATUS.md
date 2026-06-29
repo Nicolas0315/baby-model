@@ -478,16 +478,30 @@ Updated: 2026-06-29 JST
   - Treat fixed current-observation features as insufficient for the full probe
     target set; redesign toward stronger transition labels or a trained
     predictive encoder before returning to RL/CUDA.
+- Issue #34 v2.9 trained non-DQN predictive encoder probe is implemented:
+  - `baby_model/minigrid_repr_probe.py`
+  - `configs/experiments/minigrid-repr-probe-v29.json`
+  - `docs/experiments/minigrid-repr-probe-v29.md`
+  - local CPU smoke collected `821` GoToObj-family random-policy transitions.
+  - The predictive encoder trained on `changed` reached held-out accuracy
+    `0.945` and held-out lift `0.445` over majority.
+  - `predictive_encoder` met the #34 relative decision rule: it improved
+    `changed` lift over `raw_current` by `0.415`, while mission-object
+    accuracy dropped only `0.006` and mission-color accuracy dropped only
+    `0.024`, both within the allowed `0.050` maximum drop.
+  - Treat v2.9 as positive non-DQN evidence that a trained predictive signal
+    can add transition information without erasing the mission signal.
 
 ## Next
 
-- Redesign the non-DQN representation probe around stronger transition labels
-  or a trained predictive encoder before returning to RL/CUDA.
+- Design the next non-DQN probe around either a stronger predictive objective
+  or a more informative scripted-policy dataset before returning to RL/CUDA.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable representation-driven AD/DA winner across multiple CUDA seeds.
-- A non-DQN probe that cleanly separates both mission and transition labels.
+- A non-DQN probe that uses a richer predictive objective or policy-generated
+  dataset beyond the current linear `changed` encoder.
 - Full objective completion.

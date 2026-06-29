@@ -45,7 +45,10 @@ from baby_model.minigrid_neural import (
 from baby_model.minigrid_probe import observation_schema, summary_markdown
 from baby_model.minigrid_repr_probe import (
     centroid_probe_metrics,
+    evaluate_probe_decision,
+    evaluate_feature_set,
     parse_minigrid_representation_probe_config,
+    train_predictive_encoder,
     representation_probe_summary_markdown,
     transition_probe_labels,
     vector_to_sparse_features,
@@ -1287,6 +1290,19 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "changed"))
         self.assertEqual(parsed.decision.min_test_examples, 10)
 
+    def test_minigrid_repr_probe_v29_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-repr-probe-v29.json")
+        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_encoder"))
+        self.assertEqual(parsed.predictive_encoder.target_label, "changed")
+        self.assertTrue(parsed.predictive_encoder.include_action)
+        self.assertTrue(parsed.predictive_encoder.include_raw_passthrough)
+        self.assertEqual(parsed.decision.mode, "relative_to_baseline")
+        self.assertEqual(parsed.decision.baseline_feature_set, "raw_current")
+        self.assertEqual(parsed.decision.candidate_feature_set, "predictive_encoder")
+        self.assertEqual(parsed.decision.changed_min_lift_delta, 0.05)
+        self.assertEqual(parsed.decision.max_mission_accuracy_drop, 0.05)
+
     def test_minigrid_repr_probe_labels_and_centroid_metrics_are_dependency_free(self) -> None:
         before = {
             "direction": 0,
@@ -1315,6 +1331,184 @@ class ExperimentTest(unittest.TestCase):
         metrics = centroid_probe_metrics(examples, ["a", "a", "b", "b", "a", "b"], test_every=3)
         self.assertEqual(metrics["test_examples"], 2)
         self.assertGreaterEqual(metrics["accuracy"], metrics["majority_baseline"])
+
+    def test_minigrid_repr_predictive_encoder_is_dependency_free(self) -> None:
+        config = parse_minigrid_representation_probe_config(
+            {
+                "dataset": {
+                    "policy": "random",
+                    "test_every": 3,
+                    "signature_buckets": 4,
+                    "envs": [{"name": "fake", "env_id": "Fake-v0", "episodes": 1, "max_steps": 12}],
+                },
+                "features": {
+                    "feature_dim": 128,
+                    "encoder_mode": "raw",
+                    "feature_sets": ["raw_current", "predictive_encoder"],
+                },
+                "training": {
+                    "predictive_encoder": {
+                        "target_label": "changed",
+                        "epochs": 3,
+                        "learning_rate": 0.2,
+                        "include_action": True,
+                        "include_raw_passthrough": True,
+                    }
+                },
+                "decision": {
+                    "mode": "relative_to_baseline",
+                    "labels": ["mission_object", "mission_color", "changed"],
+                    "baseline_feature_set": "raw_current",
+                    "candidate_feature_set": "predictive_encoder",
+                    "min_test_examples": 2,
+                },
+            }
+        )
+        transitions = []
+        for index in range(12):
+            is_changed = index % 2 == 1
+            transitions.append(
+                {
+                    "action": 1 if is_changed else 0,
+                    "features": {1 if is_changed else 2: 1.0},
+                    "affordance_features": {},
+                    "labels": {
+                        "mission_object": "ball" if index < 6 else "key",
+                        "mission_color": "red" if index < 6 else "blue",
+                        "changed": "changed" if is_changed else "same",
+                        "next_signature_bucket": f"bucket:{index % 4}",
+                    },
+                }
+            )
+        encoder, training_report = train_predictive_encoder(transitions, config)
+        self.assertEqual(training_report["target_label"], "changed")
+        self.assertGreaterEqual(training_report["test_accuracy"], training_report["test_majority_baseline"])
+
+        report = evaluate_feature_set(
+            transitions,
+            feature_set="predictive_encoder",
+            config=config,
+            predictive_encoder=encoder,
+        )
+        self.assertIn("changed", report["labels"])
+        self.assertGreaterEqual(report["labels"]["changed"]["accuracy"], report["labels"]["changed"]["majority_baseline"])
+
+    def test_minigrid_repr_relative_decision_is_dependency_free(self) -> None:
+        config = parse_minigrid_representation_probe_config(
+            {
+                "dataset": {
+                    "policy": "random",
+                    "test_every": 3,
+                    "signature_buckets": 4,
+                    "envs": [{"name": "fake", "env_id": "Fake-v0", "episodes": 1, "max_steps": 1}],
+                },
+                "features": {
+                    "feature_dim": 128,
+                    "encoder_mode": "raw",
+                    "feature_sets": ["raw_current", "predictive_encoder"],
+                },
+                "decision": {
+                    "mode": "relative_to_baseline",
+                    "labels": ["mission_object", "mission_color", "changed"],
+                    "baseline_feature_set": "raw_current",
+                    "candidate_feature_set": "predictive_encoder",
+                    "changed_min_lift_delta": 0.05,
+                    "max_mission_accuracy_drop": 0.05,
+                    "min_test_examples": 10,
+                },
+            }
+        )
+        base_labels = {
+            "mission_object": {"accuracy": 0.90, "majority_baseline": 0.50, "lift": 0.40, "test_examples": 20},
+            "mission_color": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
+            "changed": {"accuracy": 0.60, "majority_baseline": 0.58, "lift": 0.02, "test_examples": 20},
+        }
+        candidate_labels = {
+            "mission_object": {"accuracy": 0.86, "majority_baseline": 0.50, "lift": 0.36, "test_examples": 20},
+            "mission_color": {"accuracy": 0.78, "majority_baseline": 0.50, "lift": 0.28, "test_examples": 20},
+            "changed": {"accuracy": 0.66, "majority_baseline": 0.58, "lift": 0.08, "test_examples": 20},
+        }
+        result = evaluate_probe_decision(
+            [
+                {"feature_set": "raw_current", "labels": base_labels},
+                {"feature_set": "predictive_encoder", "labels": candidate_labels},
+            ],
+            config.decision,
+        )
+        self.assertTrue(result["met"])
+        self.assertEqual(result["best_feature_set"], "predictive_encoder")
+        self.assertGreaterEqual(result["comparisons"]["changed"]["lift_delta"], 0.05)
+
+    def test_minigrid_repr_relative_decision_rejects_failed_gates(self) -> None:
+        config = parse_minigrid_representation_probe_config(
+            {
+                "dataset": {
+                    "policy": "random",
+                    "test_every": 3,
+                    "signature_buckets": 4,
+                    "envs": [{"name": "fake", "env_id": "Fake-v0", "episodes": 1, "max_steps": 1}],
+                },
+                "features": {
+                    "feature_dim": 128,
+                    "encoder_mode": "raw",
+                    "feature_sets": ["raw_current", "predictive_encoder"],
+                },
+                "decision": {
+                    "mode": "relative_to_baseline",
+                    "labels": ["mission_object", "mission_color", "changed"],
+                    "baseline_feature_set": "raw_current",
+                    "candidate_feature_set": "predictive_encoder",
+                    "changed_min_lift_delta": 0.05,
+                    "max_mission_accuracy_drop": 0.05,
+                    "min_test_examples": 10,
+                },
+            }
+        )
+
+        def result_for(
+            *,
+            candidate_object_accuracy: float = 0.86,
+            candidate_color_accuracy: float = 0.78,
+            candidate_changed_lift: float = 0.08,
+            candidate_test_examples: int = 20,
+        ) -> dict[str, object]:
+            base_labels = {
+                "mission_object": {"accuracy": 0.90, "majority_baseline": 0.50, "lift": 0.40, "test_examples": 20},
+                "mission_color": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
+                "changed": {"accuracy": 0.60, "majority_baseline": 0.58, "lift": 0.02, "test_examples": 20},
+            }
+            candidate_labels = {
+                "mission_object": {
+                    "accuracy": candidate_object_accuracy,
+                    "majority_baseline": 0.50,
+                    "lift": candidate_object_accuracy - 0.50,
+                    "test_examples": candidate_test_examples,
+                },
+                "mission_color": {
+                    "accuracy": candidate_color_accuracy,
+                    "majority_baseline": 0.50,
+                    "lift": candidate_color_accuracy - 0.50,
+                    "test_examples": candidate_test_examples,
+                },
+                "changed": {
+                    "accuracy": candidate_changed_lift + 0.58,
+                    "majority_baseline": 0.58,
+                    "lift": candidate_changed_lift,
+                    "test_examples": candidate_test_examples,
+                },
+            }
+            return evaluate_probe_decision(
+                [
+                    {"feature_set": "raw_current", "labels": base_labels},
+                    {"feature_set": "predictive_encoder", "labels": candidate_labels},
+                ],
+                config.decision,
+            )
+
+        self.assertFalse(result_for(candidate_changed_lift=0.06)["met"])
+        self.assertFalse(result_for(candidate_object_accuracy=0.84)["met"])
+        self.assertFalse(result_for(candidate_color_accuracy=0.74)["met"])
+        self.assertFalse(result_for(candidate_test_examples=9)["met"])
 
     def test_minigrid_repr_probe_summary_is_dependency_free(self) -> None:
         summary = representation_probe_summary_markdown(
