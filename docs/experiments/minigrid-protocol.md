@@ -194,6 +194,10 @@ classes on 2026-06-29 at commit
 `69f111719c9829128b78a8a0a5a97367dc6c19db`. Every worker produced the same
 aggregate table as local verification.
 
+The neural encoder config was replicated on all four configured worker classes
+on 2026-06-29 at commit `c08b295014ec24489585b6a3798b9834c6c1597e`. Every
+worker produced the same neural table as local verification.
+
 ## Metrics Schema
 
 Future trained runs should preserve this top-level shape:

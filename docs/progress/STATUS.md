@@ -145,14 +145,17 @@ Updated: 2026-06-29 JST
   - optional verifier support via `MINIGRID_NEURAL_CONFIG`
 - Local neural result on `BabyAI-Unlock-v0`: all conditions had
   `success_last=0.000`; `A_neural_hard_only` won only by tie order.
+- Fleet neural replication completed on all four configured worker classes at
+  commit `c08b295014ec24489585b6a3798b9834c6c1597e`; all workers produced the
+  same neural table as local verification. Exact host-level evidence is kept
+  outside this repository in local docs.
 
 ## Next
 
-- Replicate the neural encoder pilot through fleet tmux while runtime remains
-  lightweight.
+- Decide whether to tune the dependency-free neural architecture or move to a
+  real optional deep-learning/GPU lane.
 
 ## Not Yet Proven
 
 - Any GPU training result.
-- Fleet replication of the neural encoder pilot.
 - Full objective completion.

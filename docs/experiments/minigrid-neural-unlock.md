@@ -44,6 +44,14 @@ conditions had `success_last=0.000`.
 
 This CPU-safe neural pilot did not improve the Baby-AD/DA hard-task result.
 The learned hidden layer is active, but all conditions lost last-window
-success. Because runtime stayed lightweight, the next check is fleet
-replication before deciding whether to tune the neural architecture or move to
-a real deep-learning dependency/GPU lane.
+success.
+
+## Fleet Replication
+
+The neural config was replicated on all four configured worker classes at
+commit `c08b295014ec24489585b6a3798b9834c6c1597e`. Every worker produced the
+same result, with `A_neural_hard_only` winning only by tie order. Exact
+host-level evidence is kept outside this repository in local docs.
+
+The next decision is whether to tune the neural architecture in the
+dependency-free runner or move to a real deep-learning dependency/GPU lane.
