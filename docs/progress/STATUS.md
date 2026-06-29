@@ -198,11 +198,23 @@ Updated: 2026-06-29 JST
   The policy keeps repo-visible worker names anonymous and classifies each GPU
   worker into CUDA candidate vs. CPU-fallback-required using current driver,
   CUDA UMD, and PyTorch wheel family constraints.
+- Issue #13 strict `cu132` CUDA smoke:
+  - `gpu-worker-a` completed with `torch==2.12.1+cu132`, `device=cuda`, and
+    `A_torch_hard_only success_last=0.083`.
+  - `gpu-worker-b` remains driver/wheel blocked for CUDA 13 and was not rerun
+    as strict GPU in this turn.
+  - `gpu-worker-c` is driver-compatible for CUDA 13, but strict `cu132` did not
+    reach training because wheel installation stalled inside the bounded smoke
+    window. A resume attempt reached `torch` import but failed from a partial
+    environment with missing `libtorch_global_deps.so`; future retries should
+    use `MINIGRID_ENV_CLEAR=1`. Host-level evidence is kept outside this
+    repository.
 
 ## Next
 
-- Run bounded strict `cu132` CUDA smoke for the GPU-candidate workers from
-  issue #13, and keep raw host-level evidence outside this repository.
+- For issue #13, clear/rebuild or prewarm the `gpu-worker-c` CUDA 13
+  environment and rerun strict CUDA smoke; do not count `gpu-worker-b` as
+  GPU-proven until the driver/wheel compatibility path changes.
 
 ## Not Yet Proven
 

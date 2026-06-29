@@ -11,6 +11,7 @@ MINIGRID_TORCH_CONFIG="${MINIGRID_TORCH_CONFIG:-}"
 MINIGRID_TORCH_INDEX_URL="${MINIGRID_TORCH_INDEX_URL:-}"
 MINIGRID_TORCH_CPU_FALLBACK="${MINIGRID_TORCH_CPU_FALLBACK:-0}"
 MINIGRID_SETUP_DRY_RUN="${MINIGRID_SETUP_DRY_RUN:-0}"
+MINIGRID_ENV_CLEAR="${MINIGRID_ENV_CLEAR:-0}"
 
 if [[ ! "$MINIGRID_ENV_BACKEND" =~ ^(auto|venv|uv)$ ]]; then
   echo "invalid MINIGRID_ENV_BACKEND: $MINIGRID_ENV_BACKEND" >&2
@@ -39,6 +40,11 @@ fi
 
 if [[ ! "$MINIGRID_SETUP_DRY_RUN" =~ ^(0|1)$ ]]; then
   echo "invalid MINIGRID_SETUP_DRY_RUN: $MINIGRID_SETUP_DRY_RUN" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_ENV_CLEAR" =~ ^(0|1)$ ]]; then
+  echo "invalid MINIGRID_ENV_CLEAR: $MINIGRID_ENV_CLEAR" >&2
   exit 2
 fi
 
@@ -87,6 +93,9 @@ install_with_venv() {
     echo "dry_run=1"
     return
   fi
+  if [[ "$MINIGRID_ENV_CLEAR" == "1" ]]; then
+    rm -rf -- "$MINIGRID_VENV_DIR"
+  fi
   "$python_bin" -m venv "$MINIGRID_VENV_DIR"
   # shellcheck disable=SC1090
   . "$MINIGRID_VENV_DIR/bin/activate"
@@ -110,11 +119,16 @@ install_with_uv() {
   echo "minigrid_env_backend=uv"
   echo "python_request=$MINIGRID_PYTHON"
   echo "venv_dir=$MINIGRID_VENV_DIR"
+  echo "venv_clear=$MINIGRID_ENV_CLEAR"
   if [[ "$MINIGRID_SETUP_DRY_RUN" == "1" ]]; then
     echo "dry_run=1"
     return
   fi
-  uv venv --seed --allow-existing --python "$MINIGRID_PYTHON" "$MINIGRID_VENV_DIR"
+  if [[ "$MINIGRID_ENV_CLEAR" == "1" ]]; then
+    uv venv --seed --clear --python "$MINIGRID_PYTHON" "$MINIGRID_VENV_DIR"
+  else
+    uv venv --seed --allow-existing --python "$MINIGRID_PYTHON" "$MINIGRID_VENV_DIR"
+  fi
   # shellcheck disable=SC1090
   . "$MINIGRID_VENV_DIR/bin/activate"
   uv pip install minigrid

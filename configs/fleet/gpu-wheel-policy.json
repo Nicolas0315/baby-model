@@ -1,6 +1,6 @@
 {
   "created_at": "2026-06-29 JST",
-  "source_commit": "15fb966308f642f282f03fe35888a51a0179c172",
+  "source_commit": "e14f8c763b8a0bba8fb956b377d6ef3f5954056a",
   "workers": [
     {
       "worker_class": "gpu-worker-a",

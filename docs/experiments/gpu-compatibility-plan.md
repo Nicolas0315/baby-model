@@ -62,6 +62,7 @@ MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cu132 \
 MINIGRID_ENV_BACKEND=uv \
 MINIGRID_PYTHON=3.12 \
 MINIGRID_VENV_DIR=.venv-minigrid-gpu \
+MINIGRID_ENV_CLEAR=1 \
 ./scripts/fleet_archive_run.sh wsl:host
 ```
 
@@ -73,19 +74,26 @@ MINIGRID_TORCH_CPU_FALLBACK=1
 
 ## Current State
 
-- `gpu-worker-a` already completed a CUDA smoke under issue #12 with `cu126`.
-  It should be re-tested with `cu132` for policy consistency.
+- `gpu-worker-a` completed strict CUDA smoke with `cu132` at source commit
+  `e14f8c763b8a0bba8fb956b377d6ef3f5954056a`. The result matched the local
+  CPU table: `A_torch_hard_only success_last=0.083`; `B_torch_encoder_first`
+  and `E_torch_progress` stayed at `0.000`.
 - `gpu-worker-b` is blocked for CUDA by driver/wheel compatibility and should
   not be counted as GPU-proven until that external state changes.
-- `gpu-worker-c` has a CUDA 13-capable driver path but needs a bounded `cu132`
-  smoke because the previous `cu126` install lane was too slow for GPU proof.
+- `gpu-worker-c` has a CUDA 13-capable driver path, but the strict `cu132`
+  smoke did not reach training because `uv pip install torch` stalled in the
+  bounded smoke window after preparing the wheel stack. A resume attempt reused
+  a partial environment and reached `torch` import, but failed with missing
+  `libtorch_global_deps.so`. It remains an install-path blocker, not a driver
+  blocker. Use `MINIGRID_ENV_CLEAR=1` for future strict GPU retries so partial
+  wheel installs are not trusted.
 
 ## Acceptance For Issue #13
 
 - `gpu-worker-a` and `gpu-worker-c` complete strict CUDA smoke with `cu132`, or
-  each has a command-output blocker.
+  each has a command-output blocker. Current state: `gpu-worker-a` passed;
+  `gpu-worker-c` has an install-path blocker.
 - `gpu-worker-b` remains documented as driver-blocked unless a driver update is
   explicitly approved and verified separately.
 - Default `./scripts/verify.sh` and GitHub Actions remain green.
 - Host-level evidence stays outside this repository.
-

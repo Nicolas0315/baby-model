@@ -23,6 +23,7 @@ MINIGRID_TORCH_CPU_FALLBACK="${MINIGRID_TORCH_CPU_FALLBACK:-0}"
 MINIGRID_ENV_BACKEND="${MINIGRID_ENV_BACKEND:-auto}"
 MINIGRID_PYTHON="${MINIGRID_PYTHON:-3.12}"
 MINIGRID_VENV_DIR="${MINIGRID_VENV_DIR:-.venv-minigrid}"
+MINIGRID_ENV_CLEAR="${MINIGRID_ENV_CLEAR:-0}"
 RUN_ID="${RUN_ID:-baby-model-fleet-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT" rev-parse --short HEAD)}"
 SESSION="${SESSION:-$RUN_ID}"
 
@@ -153,6 +154,11 @@ if [[ ! "$MINIGRID_VENV_DIR" =~ ^\.venv-minigrid[A-Za-z0-9._-]*$ ]]; then
   exit 2
 fi
 
+if [[ ! "$MINIGRID_ENV_CLEAR" =~ ^(0|1)$ ]]; then
+  echo "invalid MINIGRID_ENV_CLEAR: $MINIGRID_ENV_CLEAR" >&2
+  exit 2
+fi
+
 if [[ ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "invalid RUN_ID: $RUN_ID" >&2
   exit 2
@@ -182,7 +188,7 @@ case "$MODE" in
     JOB_CMD="CONFIG=$CONFIG SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"
     ;;
   minigrid)
-    MINIGRID_ENV="export MINIGRID_ENV_BACKEND=$(printf '%q' "$MINIGRID_ENV_BACKEND"); export MINIGRID_PYTHON=$(printf '%q' "$MINIGRID_PYTHON"); export MINIGRID_VENV_DIR=$(printf '%q' "$MINIGRID_VENV_DIR"); export MINIGRID_TORCH_CPU_FALLBACK=$(printf '%q' "$MINIGRID_TORCH_CPU_FALLBACK"); "
+    MINIGRID_ENV="export MINIGRID_ENV_BACKEND=$(printf '%q' "$MINIGRID_ENV_BACKEND"); export MINIGRID_PYTHON=$(printf '%q' "$MINIGRID_PYTHON"); export MINIGRID_VENV_DIR=$(printf '%q' "$MINIGRID_VENV_DIR"); export MINIGRID_ENV_CLEAR=$(printf '%q' "$MINIGRID_ENV_CLEAR"); export MINIGRID_TORCH_CPU_FALLBACK=$(printf '%q' "$MINIGRID_TORCH_CPU_FALLBACK"); "
     if [[ -n "$MINIGRID_EXTRA_CONFIG" ]]; then
       MINIGRID_ENV="${MINIGRID_ENV}export MINIGRID_EXTRA_CONFIG=$(printf '%q' "$MINIGRID_EXTRA_CONFIG"); export MINIGRID_EXTRA_SEED=$(printf '%q' "$MINIGRID_EXTRA_SEED"); "
     fi
