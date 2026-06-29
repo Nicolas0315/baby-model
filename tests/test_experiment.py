@@ -8,6 +8,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from baby_model.agents import QAgent
 from baby_model.experiment import (
@@ -42,9 +43,13 @@ from baby_model.minigrid_neural import (
     run_minigrid_neural_suite,
 )
 from baby_model.minigrid_probe import observation_schema, summary_markdown
+import baby_model.minigrid_torch as minigrid_torch_module
 from baby_model.minigrid_torch import (
+    TorchAgentConfig,
+    TorchCurriculumStage,
     dense_feature_vector,
     parse_minigrid_torch_config,
+    run_minigrid_torch_curriculum_condition,
     select_torch_device,
     task_signal_vector,
     torch_summary_markdown,
@@ -880,6 +885,185 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(predictive.representation_objective, "next_task_signal")
         self.assertEqual(predictive.representation_beta, 0.3)
         self.assertEqual(parsed.conditions[2].intrinsic_target, "auxiliary")
+
+    def test_minigrid_torch_v15_curriculum_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v15.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1101)
+        self.assertEqual([stage.name for stage in parsed.stages], ["empty_warmup", "goto_warmup", "unlock_eval"])
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "P_torch_curriculum_task_signal_delay",
+                "Q_torch_curriculum_task_signal_aux_progress",
+            ],
+        )
+        active = dict(parsed.active_stages_by_condition)
+        self.assertEqual(active["A_torch_hard_only_long"], ("unlock_eval",))
+        self.assertEqual(
+            active["P_torch_curriculum_task_signal_delay"],
+            ("empty_warmup", "goto_warmup", "unlock_eval"),
+        )
+        self.assertEqual(parsed.conditions[0].episodes, 48)
+        self.assertEqual(parsed.conditions[1].episodes, 84)
+        self.assertEqual(parsed.conditions[1].representation_objective, "next_task_signal")
+        self.assertEqual(parsed.conditions[2].intrinsic_target, "auxiliary")
+
+    def test_minigrid_torch_curriculum_runner_is_dependency_free(self) -> None:
+        class FakeTorch:
+            def manual_seed(self, seed: int) -> None:
+                self.last_seed = seed
+
+        class FakeImage:
+            def tolist(self) -> list[list[list[int]]]:
+                return [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+
+        observation = {"image": FakeImage(), "direction": 0, "mission": "unlock the door"}
+        made_envs: list[str] = []
+
+        class FakeActionSpace:
+            n = 2
+
+            def seed(self, seed: int) -> None:
+                self.last_seed = seed
+
+        class FakeEnv:
+            def __init__(self, env_id: str) -> None:
+                self.env_id = env_id
+                self.action_space = FakeActionSpace()
+
+            def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
+                return observation, {}
+
+            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+                reward = 1.0 if self.env_id == "FakeEval-v0" else 0.0
+                return observation, reward, True, False, {}
+
+            def close(self) -> None:
+                pass
+
+        class FakeGym:
+            def make(self, env_id: str) -> FakeEnv:
+                made_envs.append(env_id)
+                return FakeEnv(env_id)
+
+        class FakeAgent:
+            instances: list["FakeAgent"] = []
+
+            def __init__(
+                self,
+                torch: object,
+                actions: int,
+                config: TorchAgentConfig,
+                device: object,
+                seed: int,
+                epsilon: float | None = None,
+                representation_objective: str = "none",
+                representation_beta: float = 0.0,
+            ) -> None:
+                self.actions = actions
+                self.updates = 0
+                self.representation_objective = representation_objective
+                self.representation_updates = 0
+                FakeAgent.instances.append(self)
+
+            def choose(
+                self,
+                features: dict[int, float],
+                force_random: bool = False,
+                action_bonus: dict[int, float] | None = None,
+                bonus_weight: float = 1.0,
+            ) -> int:
+                return 0
+
+            def action_values(self, features: dict[int, float]) -> dict[int, float]:
+                return {0: 0.0, 1: 0.0}
+
+            def update(
+                self,
+                features: dict[int, float],
+                action: int,
+                reward: float,
+                next_features: dict[int, float],
+                done: bool,
+            ) -> None:
+                self.updates += 1
+
+            def update_representation(
+                self,
+                features: dict[int, float],
+                action: int,
+                target_vector: list[float],
+            ) -> float | None:
+                if self.representation_objective == "none":
+                    return None
+                self.representation_updates += 1
+                return 0.25
+
+            def parameter_count(self) -> int:
+                return 10
+
+            def representation_parameter_count(self) -> int:
+                return 2 if self.representation_objective != "none" else 0
+
+        stages = (
+            TorchCurriculumStage("warmup", "FakeWarmup-v0", max_steps=1, episodes=2),
+            TorchCurriculumStage("eval", "FakeEval-v0", max_steps=1, episodes=2),
+        )
+        condition = Condition(
+            name="curriculum",
+            encoder_mode="raw",
+            episodes=4,
+            decoder_delay_episodes=1,
+            intrinsic_beta=0.0,
+            intrinsic_mode="none",
+            seed=31,
+            representation_objective="next_task_signal",
+            representation_beta=0.3,
+        )
+        agent_config = TorchAgentConfig(
+            feature_dim=128,
+            hidden_dim=8,
+            learning_rate=0.001,
+            gamma=0.9,
+            epsilon=0.0,
+            batch_size=1,
+            replay_capacity=4,
+            target_sync_updates=2,
+            device="cpu",
+        )
+
+        with mock.patch.object(minigrid_torch_module, "TorchDQNAgent", FakeAgent):
+            report = run_minigrid_torch_curriculum_condition(
+                gym=FakeGym(),
+                torch=FakeTorch(),
+                stages=stages,
+                active_stages=("warmup", "eval"),
+                condition=condition,
+                agent_config=agent_config,
+                device="cpu",
+            )
+
+        self.assertEqual(made_envs, ["FakeWarmup-v0", "FakeEval-v0"])
+        self.assertEqual(report["final_stage"]["stage"], "eval")
+        self.assertEqual(report["success_rate_last_window"], 1.0)
+        self.assertEqual(report["representation_updates"], 4)
+        self.assertEqual(report["updates"], 3)
+        self.assertIn("warmup", torch_summary_markdown(
+            {
+                "created_at": "2026-06-29T00:00:00+00:00",
+                "hypothesis": "torch curriculum",
+                "env_id": "BabyAI-Unlock-v0",
+                "framework": {"version": "fake", "device": "cpu"},
+                "winner_last_window": "curriculum",
+                "stages": [
+                    {"name": "warmup", "env_id": "FakeWarmup-v0", "episodes": 2},
+                    {"name": "eval", "env_id": "FakeEval-v0", "episodes": 2},
+                ],
+                "results": [report],
+            }
+        ))
 
     def test_minigrid_torch_rejects_invalid_representation_objective(self) -> None:
         with self.assertRaises(ValueError):

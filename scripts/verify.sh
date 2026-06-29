@@ -14,6 +14,7 @@ python3 -m json.tool configs/experiments/minigrid-torch-adda-v11.json >/dev/null
 python3 -m json.tool configs/experiments/minigrid-torch-adda-v12.json >/dev/null
 python3 -m json.tool configs/experiments/minigrid-torch-adda-v13.json >/dev/null
 python3 -m json.tool configs/experiments/minigrid-torch-adda-v14.json >/dev/null
+python3 -m json.tool configs/experiments/minigrid-torch-adda-v15.json >/dev/null
 python3 -m json.tool configs/fleet/gpu-wheel-policy.json >/dev/null
 python3 -m baby_model.gpu_compat --config configs/fleet/gpu-wheel-policy.json >/dev/null
 bash -n scripts/*.sh

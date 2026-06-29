@@ -25,6 +25,14 @@ TASK_SIGNAL_DIM = 16
 
 
 @dataclass(frozen=True)
+class TorchCurriculumStage:
+    name: str
+    env_id: str
+    max_steps: int
+    episodes: int
+
+
+@dataclass(frozen=True)
 class TorchAgentConfig:
     feature_dim: int
     hidden_dim: int
@@ -44,6 +52,8 @@ class MiniGridTorchConfig:
     quiet_env_output: bool
     agent: TorchAgentConfig
     conditions: tuple[Condition, ...]
+    stages: tuple[TorchCurriculumStage, ...] = ()
+    active_stages_by_condition: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 class TorchDQNAgent:
@@ -222,20 +232,36 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
 
     torch.manual_seed(seed)
     device = select_torch_device(torch, parsed.agent.device)
-    results = [
-        run_minigrid_torch_condition(
-            gym=gym,
-            torch=torch,
-            env_id=parsed.env_id,
-            condition=condition,
-            max_steps=parsed.max_steps,
-            agent_config=parsed.agent,
-            device=device,
-            quiet_env_output=parsed.quiet_env_output,
-        )
-        for condition in parsed.conditions
-    ]
-    return {
+    active_stages_by_condition = dict(parsed.active_stages_by_condition)
+    if parsed.stages:
+        results = [
+            run_minigrid_torch_curriculum_condition(
+                gym=gym,
+                torch=torch,
+                stages=parsed.stages,
+                active_stages=active_stages_by_condition[condition.name],
+                condition=condition,
+                agent_config=parsed.agent,
+                device=device,
+                quiet_env_output=parsed.quiet_env_output,
+            )
+            for condition in parsed.conditions
+        ]
+    else:
+        results = [
+            run_minigrid_torch_condition(
+                gym=gym,
+                torch=torch,
+                env_id=parsed.env_id,
+                condition=condition,
+                max_steps=parsed.max_steps,
+                agent_config=parsed.agent,
+                device=device,
+                quiet_env_output=parsed.quiet_env_output,
+            )
+            for condition in parsed.conditions
+        ]
+    report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "hypothesis": str(config.get("hypothesis", "Baby-AD/DA MiniGrid PyTorch DQN")),
         "env_id": parsed.env_id,
@@ -261,6 +287,17 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
         "results": results,
         "winner_last_window": max(results, key=lambda row: row["success_rate_last_window"])["name"],
     }
+    if parsed.stages:
+        report["stages"] = [
+            {
+                "name": stage.name,
+                "env_id": stage.env_id,
+                "max_steps": stage.max_steps,
+                "episodes": stage.episodes,
+            }
+            for stage in parsed.stages
+        ]
+    return report
 
 
 def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> MiniGridTorchConfig:
@@ -304,11 +341,16 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
     if not (device in {"auto", "cpu", "cuda", "mps"} or (device.startswith("cuda:") and device[5:].isdigit())):
         raise ValueError("agent.device must be auto, cpu, cuda, cuda:N, or mps")
 
+    stages = parse_torch_curriculum_stages(config)
+    stage_names = {stage.name for stage in stages}
+    all_stage_names = tuple(stage.name for stage in stages)
+
     condition_cfgs = config.get("conditions", [])
     if not isinstance(condition_cfgs, list) or not condition_cfgs:
         raise ValueError("conditions must be a non-empty list")
     names: set[str] = set()
     conditions: list[Condition] = []
+    active_stages_by_condition: list[tuple[str, tuple[str, ...]]] = []
     for i, item in enumerate(condition_cfgs):
         if not isinstance(item, dict):
             raise ValueError("each condition must be an object")
@@ -331,7 +373,18 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         if representation_objective not in {"none", "next_feature", "next_task_signal"}:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
-        episodes = int(item.get("episodes", 0))
+        active_stages = tuple(str(stage_name) for stage_name in item.get("active_stages", all_stage_names))
+        if stages:
+            if not active_stages:
+                raise ValueError(f"active_stages must be non-empty for {name}")
+            unknown_stages = sorted(set(active_stages) - stage_names)
+            if unknown_stages:
+                raise ValueError(f"unknown active_stages for {name}: {','.join(unknown_stages)}")
+            episodes = sum(stage.episodes for stage in stages if stage.name in active_stages)
+        else:
+            if "active_stages" in item:
+                raise ValueError(f"active_stages requires top-level stages for {name}")
+            episodes = int(item.get("episodes", 0))
         delay = int(item.get("decoder_delay_episodes", 0))
         beta = float(item.get("intrinsic_beta", 0.0))
         if episodes < 1:
@@ -358,6 +411,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 representation_beta=representation_beta,
             )
         )
+        active_stages_by_condition.append((name, active_stages))
     return MiniGridTorchConfig(
         env_id=env_id,
         max_steps=max_steps,
@@ -374,7 +428,39 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             device=device,
         ),
         conditions=tuple(conditions),
+        stages=stages,
+        active_stages_by_condition=tuple(active_stages_by_condition),
     )
+
+
+def parse_torch_curriculum_stages(config: dict[str, Any]) -> tuple[TorchCurriculumStage, ...]:
+    stage_cfgs = config.get("stages", [])
+    if stage_cfgs in (None, []):
+        return ()
+    if not isinstance(stage_cfgs, list):
+        raise ValueError("stages must be a list")
+    stages: list[TorchCurriculumStage] = []
+    names: set[str] = set()
+    for item in stage_cfgs:
+        if not isinstance(item, dict):
+            raise ValueError("each stage must be an object")
+        name = str(item.get("name", ""))
+        if not name:
+            raise ValueError("stage.name is required")
+        if name in names:
+            raise ValueError(f"duplicate stage.name: {name}")
+        names.add(name)
+        env_id = str(item.get("env_id", ""))
+        max_steps = int(item.get("max_steps", 0))
+        episodes = int(item.get("episodes", 0))
+        if not env_id:
+            raise ValueError(f"stage.env_id is required for {name}")
+        if max_steps < 1:
+            raise ValueError(f"stage.max_steps must be positive for {name}")
+        if episodes < 1:
+            raise ValueError(f"stage.episodes must be positive for {name}")
+        stages.append(TorchCurriculumStage(name=name, env_id=env_id, max_steps=max_steps, episodes=episodes))
+    return tuple(stages)
 
 
 def run_minigrid_torch_condition(
@@ -526,6 +612,249 @@ def run_minigrid_torch_condition(
         env.close()
 
 
+def run_minigrid_torch_curriculum_condition(
+    gym: Any,
+    torch: Any,
+    stages: tuple[TorchCurriculumStage, ...],
+    active_stages: tuple[str, ...],
+    condition: Condition,
+    agent_config: TorchAgentConfig,
+    device: Any,
+    quiet_env_output: bool = True,
+) -> dict[str, Any]:
+    active_stage_names = set(active_stages)
+    agent: TorchDQNAgent | None = None
+    auxiliary_agent: TorchDQNAgent | None = None
+    transition = TransitionSurprise()
+    stage_results: list[dict[str, Any]] = []
+    global_episode = 0
+
+    for stage_index, stage in enumerate(stages):
+        if stage.name not in active_stage_names:
+            continue
+        stage_result, agent, auxiliary_agent, global_episode = _run_minigrid_torch_stage(
+            gym=gym,
+            torch=torch,
+            stage=stage,
+            condition=condition,
+            agent_config=agent_config,
+            device=device,
+            stage_index=stage_index,
+            global_episode_start=global_episode,
+            agent=agent,
+            auxiliary_agent=auxiliary_agent,
+            transition=transition,
+            quiet_env_output=quiet_env_output,
+        )
+        stage_results.append(stage_result)
+
+    if not stage_results or agent is None:
+        raise ValueError(f"no active curriculum stages for {condition.name}")
+    final_stage = stage_results[-1]
+    return {
+        "name": condition.name,
+        "env_id": final_stage["env_id"],
+        "agent_type": "torch_dqn",
+        "feature_dim": agent_config.feature_dim,
+        "hidden_dim": agent_config.hidden_dim,
+        "encoder_mode": condition.encoder_mode,
+        "episodes": condition.episodes,
+        "decoder_delay_episodes": condition.decoder_delay_episodes,
+        "intrinsic_beta": condition.intrinsic_beta,
+        "intrinsic_mode": condition.intrinsic_mode,
+        "intrinsic_target": condition.intrinsic_target,
+        "representation_objective": condition.representation_objective,
+        "representation_beta": condition.representation_beta,
+        "seed": condition.seed,
+        "active_stages": list(active_stages),
+        "stage_results": stage_results,
+        "final_stage": final_stage,
+        "success_rate_all": final_stage["success_rate_all"],
+        "success_rate_last_window": final_stage["success_rate_last_window"],
+        "mean_steps_success": final_stage["mean_steps_success"],
+        "mean_return_last_window": final_stage["mean_return_last_window"],
+        "mean_intrinsic_return_last_window": final_stage["mean_intrinsic_return_last_window"],
+        "mean_unique_features_last_window": final_stage["mean_unique_features_last_window"],
+        "mean_representation_loss_last_window": final_stage["mean_representation_loss_last_window"],
+        "representation_updates": sum(stage["representation_updates"] for stage in stage_results),
+        "representation_parameter_count": agent.representation_parameter_count(),
+        "parameter_count": agent.parameter_count(),
+        "updates": agent.updates,
+    }
+
+
+def _run_minigrid_torch_stage(
+    gym: Any,
+    torch: Any,
+    stage: TorchCurriculumStage,
+    condition: Condition,
+    agent_config: TorchAgentConfig,
+    device: Any,
+    stage_index: int,
+    global_episode_start: int,
+    agent: TorchDQNAgent | None,
+    auxiliary_agent: TorchDQNAgent | None,
+    transition: TransitionSurprise,
+    quiet_env_output: bool,
+) -> tuple[dict[str, Any], TorchDQNAgent, TorchDQNAgent, int]:
+    env = gym.make(stage.env_id)
+    try:
+        actions = int(env.action_space.n)
+        if hasattr(env.action_space, "seed"):
+            env.action_space.seed(condition.seed + stage_index)
+        torch.manual_seed(condition.seed + stage_index)
+        if agent is None:
+            agent = TorchDQNAgent(
+                torch=torch,
+                actions=actions,
+                config=agent_config,
+                device=device,
+                seed=condition.seed,
+                representation_objective=condition.representation_objective,
+                representation_beta=condition.representation_beta,
+            )
+        if auxiliary_agent is None:
+            auxiliary_agent = TorchDQNAgent(
+                torch=torch,
+                actions=actions,
+                config=agent_config,
+                device=device,
+                seed=condition.seed + 100_003,
+                epsilon=0.0,
+            )
+        if agent.actions != actions or auxiliary_agent.actions != actions:
+            raise ValueError(f"action-space mismatch in stage {stage.name}")
+
+        episodes: list[EpisodeMetrics] = []
+        representation_losses: list[float] = []
+        representation_update_counts: list[int] = []
+        first_schema: dict[str, Any] | None = None
+
+        for stage_episode in range(stage.episodes):
+            global_episode = global_episode_start + stage_episode
+            observation, _info = _env_call(
+                env.reset,
+                quiet=quiet_env_output,
+                seed=condition.seed * 100_000 + stage_index * 1000 + stage_episode,
+            )
+            if first_schema is None:
+                first_schema = observation_schema(observation)
+            features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+            feature_key = feature_signature(features)
+            visited = {feature_key}
+            external_return = 0.0
+            intrinsic_return = 0.0
+            representation_loss = 0.0
+            representation_updates = 0
+            success = False
+            steps = 0
+
+            for _ in range(stage.max_steps):
+                force_random = global_episode < condition.decoder_delay_episodes
+                action_bonus = None
+                if condition.intrinsic_target == "auxiliary" and not force_random:
+                    action_bonus = auxiliary_agent.action_values(features)
+                action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
+                next_observation, reward, terminated, truncated, _info = _env_call(
+                    env.step,
+                    action,
+                    quiet=quiet_env_output,
+                )
+                next_features = linear_features(next_observation, condition.encoder_mode, agent_config.feature_dim)
+                next_feature_key = feature_signature(next_features)
+                intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature_key, action, next_feature_key)
+                intrinsic = condition.intrinsic_beta * intrinsic_signal
+                total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
+                done = bool(terminated or truncated)
+
+                if condition.representation_objective == "next_feature":
+                    representation_target = dense_feature_vector(next_features, agent_config.feature_dim)
+                else:
+                    representation_target = task_signal_vector(next_observation)
+                loss = agent.update_representation(features, action, representation_target)
+                if loss is not None:
+                    representation_loss += loss
+                    representation_updates += 1
+                if not force_random:
+                    agent.update(features, action, total_reward, next_features, done)
+                    if condition.intrinsic_target == "auxiliary":
+                        auxiliary_agent.update(features, action, intrinsic, next_features, done)
+                transition.update(feature_key, action, next_feature_key)
+
+                external_return += float(reward)
+                intrinsic_return += intrinsic
+                steps += 1
+                visited.add(next_feature_key)
+                features = next_features
+                feature_key = next_feature_key
+                if float(reward) > 0.0:
+                    success = True
+                if done:
+                    break
+
+            episodes.append(
+                EpisodeMetrics(
+                    success=success,
+                    steps=steps,
+                    external_return=external_return,
+                    intrinsic_return=intrinsic_return,
+                    unique_features=len(visited),
+                )
+            )
+            representation_losses.append(representation_loss / max(1, representation_updates))
+            representation_update_counts.append(representation_updates)
+
+        return (
+            _torch_stage_summary(
+                stage=stage,
+                condition=condition,
+                episodes=episodes,
+                first_schema=first_schema,
+                representation_losses=representation_losses,
+                representation_update_counts=representation_update_counts,
+                agent=agent,
+            ),
+            agent,
+            auxiliary_agent,
+            global_episode_start + stage.episodes,
+        )
+    finally:
+        env.close()
+
+
+def _torch_stage_summary(
+    stage: TorchCurriculumStage,
+    condition: Condition,
+    episodes: list[EpisodeMetrics],
+    first_schema: dict[str, Any] | None,
+    representation_losses: list[float],
+    representation_update_counts: list[int],
+    agent: TorchDQNAgent,
+) -> dict[str, Any]:
+    last_window = episodes[-20:] if len(episodes) >= 20 else episodes
+    representation_last_window = (
+        representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
+    )
+    successful_steps = [item.steps for item in episodes if item.success]
+    return {
+        "stage": stage.name,
+        "env_id": stage.env_id,
+        "max_steps": stage.max_steps,
+        "episodes": stage.episodes,
+        "condition_seed": condition.seed,
+        "observation_schema": first_schema or {},
+        "success_rate_all": mean(1.0 if item.success else 0.0 for item in episodes),
+        "success_rate_last_window": mean(1.0 if item.success else 0.0 for item in last_window),
+        "mean_steps_success": mean(successful_steps) if successful_steps else None,
+        "mean_return_last_window": mean(item.external_return for item in last_window),
+        "mean_intrinsic_return_last_window": mean(item.intrinsic_return for item in last_window),
+        "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
+        "mean_representation_loss_last_window": mean(representation_last_window),
+        "representation_updates": sum(representation_update_counts),
+        "updates": agent.updates,
+    }
+
+
 def build_q_network(torch: Any, feature_dim: int, hidden_dim: int, actions: int) -> Any:
     class QNetwork(torch.nn.Module):
         def __init__(self) -> None:
@@ -659,6 +988,7 @@ def write_minigrid_torch_run(report: dict[str, Any], output_dir: Path) -> Path:
 
 def torch_summary_markdown(report: dict[str, Any]) -> str:
     framework = report["framework"]
+    is_curriculum = "stages" in report
     lines = [
         "# baby-model MiniGrid PyTorch DQN summary",
         "",
@@ -669,25 +999,58 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
         f"- device: `{framework['device']}`",
         f"- winner_last_window: `{report['winner_last_window']}`",
         "",
-        "| condition | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
+    if is_curriculum:
+        stage_text = ",".join(f"{stage['name']}:{stage['env_id']}:{stage['episodes']}" for stage in report["stages"])
+        lines.extend(
+            [
+                f"- stages: `{stage_text}`",
+                "",
+                "| condition | active_stages | final_stage | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
+                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "| condition | success_all | success_last | return_last | mean_steps_success | rep_loss | rep_updates | updates | parameters |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
     for row in report["results"]:
         mean_steps = row["mean_steps_success"]
         rep_loss = row.get("mean_representation_loss_last_window", 0.0)
-        lines.append(
-            "| {name} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
-                name=row["name"],
-                all=row["success_rate_all"],
-                last=row["success_rate_last_window"],
-                ret=row["mean_return_last_window"],
-                steps="" if mean_steps is None else f"{mean_steps:.2f}",
-                rep_loss=rep_loss,
-                rep_updates=row.get("representation_updates", 0),
-                updates=row["updates"],
-                params=row["parameter_count"],
+        if is_curriculum:
+            final_stage = row["final_stage"]
+            lines.append(
+                "| {name} | {stages} | {stage} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
+                    name=row["name"],
+                    stages=",".join(row["active_stages"]),
+                    stage=final_stage["stage"],
+                    all=row["success_rate_all"],
+                    last=row["success_rate_last_window"],
+                    ret=row["mean_return_last_window"],
+                    steps="" if mean_steps is None else f"{mean_steps:.2f}",
+                    rep_loss=rep_loss,
+                    rep_updates=row.get("representation_updates", 0),
+                    updates=row["updates"],
+                    params=row["parameter_count"],
+                )
             )
-        )
+        else:
+            lines.append(
+                "| {name} | {all:.3f} | {last:.3f} | {ret:.3f} | {steps} | {rep_loss:.4f} | {rep_updates} | {updates} | {params} |".format(
+                    name=row["name"],
+                    all=row["success_rate_all"],
+                    last=row["success_rate_last_window"],
+                    ret=row["mean_return_last_window"],
+                    steps="" if mean_steps is None else f"{mean_steps:.2f}",
+                    rep_loss=rep_loss,
+                    rep_updates=row.get("representation_updates", 0),
+                    updates=row["updates"],
+                    params=row["parameter_count"],
+                )
+            )
     lines.append("")
     return "\n".join(lines)
 

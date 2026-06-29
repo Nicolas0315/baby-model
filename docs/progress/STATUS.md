@@ -271,11 +271,22 @@ Updated: 2026-06-29 JST
   `success_last=0.000`. `A_torch_hard_only_long` won with
   `success_last=0.050`, so v1.4 should not be escalated to a multi-seed GPU
   sweep.
+- Issue #19 v1.5 curriculum-backed PyTorch AD/DA training is implemented:
+  - `configs/experiments/minigrid-torch-adda-v15.json`
+  - `docs/experiments/minigrid-torch-adda-v15.md`
+  - PyTorch DQN now supports staged curriculum training with stage-level
+    environment IDs, episode counts, active stage selection per condition, and
+    agent carry-over across active stages.
+- Local v1.5 CPU smoke passed in the existing optional PyTorch venv. On the
+  final `BabyAI-Unlock-v0` stage, `Q_torch_curriculum_task_signal_aux_progress`
+  beat `A_torch_hard_only_long` by last-window success (`0.050` vs `0.000`)
+  and return (`0.042` vs `0.000`). This is a positive local smoke signal, but
+  not yet a robust GPU result.
 
 ## Next
 
-- Execute issue #19 by adding a curriculum-backed PyTorch AD/DA design, then
-  run local and bounded CUDA smoke.
+- Run bounded v1.5 CUDA smoke, then escalate to a multi-seed GPU sweep only if
+  the documented decision rule still holds on CUDA.
 
 ## Not Yet Proven
 
