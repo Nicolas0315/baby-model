@@ -45,7 +45,8 @@ Updated: 2026-06-29 JST
   - v0.3 annealed or auxiliary progress reward: `https://github.com/Nicolas0315/baby-model/issues/6` closed
   - harder MiniGrid/BabyAI trained run: `https://github.com/Nicolas0315/baby-model/issues/7` closed
   - v0.4 MiniGrid curriculum to BabyAI Unlock: `https://github.com/Nicolas0315/baby-model/issues/8` closed
-  - v0.5 function approximation pilot: `https://github.com/Nicolas0315/baby-model/issues/9`
+  - v0.5 function approximation pilot: `https://github.com/Nicolas0315/baby-model/issues/9` closed
+  - v0.6 multi-seed linear BabyAI Unlock sweep: `https://github.com/Nicolas0315/baby-model/issues/10`
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -126,12 +127,21 @@ Updated: 2026-06-29 JST
   commit `4077130a2c1d2dcca4dfa39e690f27a77edbf557`; all workers produced the
   same linear table. Exact host-level evidence is kept outside this repository
   in local docs.
+- Multi-seed linear sweep for issue #10 is implemented locally:
+  - `baby_model/minigrid_linear_sweep.py`
+  - optional verifier support via `MINIGRID_LINEAR_SWEEP_CONFIG`
+- Local multi-seed result over seeds `401,402,403`: `A_linear_hard_only` won
+  by win count (`2/3`) after tying `B_linear_encoder_first` on mean and median
+  last-window success (`0.050`). The issue #9 single-seed positive signal is
+  therefore not yet robust enough to treat as a conclusion.
 
 ## Next
 
-- Run a multi-seed linear sweep or a stronger optional neural encoder lane.
+- Replicate the multi-seed linear sweep through fleet tmux while runtime
+  remains lightweight.
 
 ## Not Yet Proven
 
 - Any GPU training result.
+- Fleet replication of the multi-seed linear sweep.
 - Full objective completion.

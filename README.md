@@ -68,5 +68,7 @@ host.
   `docs/experiments/minigrid-curriculum-unlock.md`
 - MiniGrid linear function approximation:
   `docs/experiments/minigrid-linear-unlock.md`
+- MiniGrid linear multi-seed sweep:
+  `docs/experiments/minigrid-linear-sweep.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`

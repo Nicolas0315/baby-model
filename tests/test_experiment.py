@@ -32,6 +32,7 @@ from baby_model.minigrid_linear import (
     parse_minigrid_linear_config,
     run_minigrid_linear_suite,
 )
+from baby_model.minigrid_linear_sweep import aggregate_linear_reports, linear_sweep_summary_markdown
 from baby_model.minigrid_probe import observation_schema, summary_markdown
 from baby_model.sweep import parse_seeds, run_sweep
 
@@ -538,6 +539,69 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(report["winner_last_window"], "linear")
         self.assertGreater(report["results"][0]["nonzero_weights"], 0)
         self.assertIn("linear function approximation", linear_summary_markdown(report))
+
+    def test_minigrid_linear_sweep_aggregate_is_dependency_free(self) -> None:
+        runs = [
+            {
+                "winner_last_window": "B",
+                "results": [
+                    {
+                        "name": "A",
+                        "seed": 1,
+                        "success_rate_all": 0.0,
+                        "success_rate_last_window": 0.0,
+                        "mean_return_last_window": 0.0,
+                        "nonzero_weights": 10,
+                    },
+                    {
+                        "name": "B",
+                        "seed": 2,
+                        "success_rate_all": 0.1,
+                        "success_rate_last_window": 0.2,
+                        "mean_return_last_window": 0.3,
+                        "nonzero_weights": 20,
+                    },
+                ],
+            },
+            {
+                "winner_last_window": "A",
+                "results": [
+                    {
+                        "name": "A",
+                        "seed": 3,
+                        "success_rate_all": 0.2,
+                        "success_rate_last_window": 0.4,
+                        "mean_return_last_window": 0.5,
+                        "nonzero_weights": 30,
+                    },
+                    {
+                        "name": "B",
+                        "seed": 4,
+                        "success_rate_all": 0.0,
+                        "success_rate_last_window": 0.0,
+                        "mean_return_last_window": 0.0,
+                        "nonzero_weights": 40,
+                    },
+                ],
+            },
+        ]
+        aggregate = aggregate_linear_reports(runs, seeds=[101, 102])
+        by_name = {row["name"]: row for row in aggregate}
+        self.assertEqual(by_name["A"]["win_count"], 1)
+        self.assertEqual(by_name["B"]["win_count"], 1)
+        self.assertAlmostEqual(by_name["A"]["mean_success_rate_last_window"], 0.2)
+        self.assertEqual(by_name["B"]["condition_seeds"], [2, 4])
+        summary = linear_sweep_summary_markdown(
+            {
+                "created_at": "2026-06-29T00:00:00+00:00",
+                "hypothesis": "linear sweep",
+                "seeds": [101, 102],
+                "winner_by_mean_success_last_window": "A",
+                "aggregate": aggregate,
+                "runs": runs,
+            }
+        )
+        self.assertIn("Per-Seed Winners", summary)
 
 
 if __name__ == "__main__":

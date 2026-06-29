@@ -11,6 +11,8 @@ MINIGRID_CURRICULUM_CONFIG="${MINIGRID_CURRICULUM_CONFIG:-}"
 MINIGRID_CURRICULUM_SEED="${MINIGRID_CURRICULUM_SEED:-301}"
 MINIGRID_LINEAR_CONFIG="${MINIGRID_LINEAR_CONFIG:-}"
 MINIGRID_LINEAR_SEED="${MINIGRID_LINEAR_SEED:-401}"
+MINIGRID_LINEAR_SWEEP_CONFIG="${MINIGRID_LINEAR_SWEEP_CONFIG:-}"
+MINIGRID_LINEAR_SWEEP_SEEDS="${MINIGRID_LINEAR_SWEEP_SEEDS:-401,402,403}"
 
 if [[ -n "$MINIGRID_EXTRA_CONFIG" ]]; then
   if [[ ! "$MINIGRID_EXTRA_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
@@ -45,6 +47,17 @@ if [[ -n "$MINIGRID_LINEAR_CONFIG" ]]; then
   fi
 fi
 
+if [[ -n "$MINIGRID_LINEAR_SWEEP_CONFIG" ]]; then
+  if [[ ! "$MINIGRID_LINEAR_SWEEP_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
+    echo "invalid MINIGRID_LINEAR_SWEEP_CONFIG: $MINIGRID_LINEAR_SWEEP_CONFIG" >&2
+    exit 2
+  fi
+  if [[ ! "$MINIGRID_LINEAR_SWEEP_SEEDS" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+    echo "invalid MINIGRID_LINEAR_SWEEP_SEEDS: $MINIGRID_LINEAR_SWEEP_SEEDS" >&2
+    exit 2
+  fi
+fi
+
 case "$VERIFY_MINIGRID_DIR" in
   .tmp/verify-minigrid) rm -rf -- "$VERIFY_MINIGRID_DIR" ;;
   *) echo "refusing to remove unexpected path: $VERIFY_MINIGRID_DIR" >&2; exit 2 ;;
@@ -75,4 +88,11 @@ if [[ -n "$MINIGRID_LINEAR_CONFIG" ]]; then
     --config "$MINIGRID_LINEAR_CONFIG" \
     --output-dir "$VERIFY_MINIGRID_DIR/linear" \
     --seed "$MINIGRID_LINEAR_SEED"
+fi
+
+if [[ -n "$MINIGRID_LINEAR_SWEEP_CONFIG" ]]; then
+  python3 -m baby_model.minigrid_linear_sweep \
+    --config "$MINIGRID_LINEAR_SWEEP_CONFIG" \
+    --output-dir "$VERIFY_MINIGRID_DIR/linear-sweep" \
+    --seeds "$MINIGRID_LINEAR_SWEEP_SEEDS"
 fi

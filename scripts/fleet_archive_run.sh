@@ -11,6 +11,8 @@ MINIGRID_CURRICULUM_CONFIG="${MINIGRID_CURRICULUM_CONFIG:-}"
 MINIGRID_CURRICULUM_SEED="${MINIGRID_CURRICULUM_SEED:-301}"
 MINIGRID_LINEAR_CONFIG="${MINIGRID_LINEAR_CONFIG:-}"
 MINIGRID_LINEAR_SEED="${MINIGRID_LINEAR_SEED:-401}"
+MINIGRID_LINEAR_SWEEP_CONFIG="${MINIGRID_LINEAR_SWEEP_CONFIG:-}"
+MINIGRID_LINEAR_SWEEP_SEEDS="${MINIGRID_LINEAR_SWEEP_SEEDS:-401,402,403}"
 RUN_ID="${RUN_ID:-baby-model-fleet-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT" rev-parse --short HEAD)}"
 SESSION="${SESSION:-$RUN_ID}"
 
@@ -22,6 +24,7 @@ Usage:
   MODE=minigrid MINIGRID_EXTRA_CONFIG=configs/experiments/minigrid-babyai-unlock.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   MODE=minigrid MINIGRID_CURRICULUM_CONFIG=configs/experiments/minigrid-curriculum-unlock.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   MODE=minigrid MINIGRID_LINEAR_CONFIG=configs/experiments/minigrid-linear-unlock.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
+  MODE=minigrid MINIGRID_LINEAR_SWEEP_CONFIG=configs/experiments/minigrid-linear-unlock.json MINIGRID_LINEAR_SWEEP_SEEDS=401,402,403 ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   BABY_MODEL_FLEET_HOSTS="mac:host-a wsl:host-b" ./scripts/fleet_archive_run.sh
 
 MODE values:
@@ -77,6 +80,16 @@ if [[ ! "$MINIGRID_LINEAR_SEED" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
+if [[ -n "$MINIGRID_LINEAR_SWEEP_CONFIG" && ! "$MINIGRID_LINEAR_SWEEP_CONFIG" =~ ^configs/experiments/[A-Za-z0-9._-]+\.json$ ]]; then
+  echo "invalid MINIGRID_LINEAR_SWEEP_CONFIG: $MINIGRID_LINEAR_SWEEP_CONFIG" >&2
+  exit 2
+fi
+
+if [[ ! "$MINIGRID_LINEAR_SWEEP_SEEDS" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+  echo "invalid MINIGRID_LINEAR_SWEEP_SEEDS: $MINIGRID_LINEAR_SWEEP_SEEDS" >&2
+  exit 2
+fi
+
 if [[ ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "invalid RUN_ID: $RUN_ID" >&2
   exit 2
@@ -115,6 +128,9 @@ case "$MODE" in
     fi
     if [[ -n "$MINIGRID_LINEAR_CONFIG" ]]; then
       MINIGRID_ENV="${MINIGRID_ENV}MINIGRID_LINEAR_CONFIG=$(printf '%q' "$MINIGRID_LINEAR_CONFIG") MINIGRID_LINEAR_SEED=$(printf '%q' "$MINIGRID_LINEAR_SEED") "
+    fi
+    if [[ -n "$MINIGRID_LINEAR_SWEEP_CONFIG" ]]; then
+      MINIGRID_ENV="${MINIGRID_ENV}MINIGRID_LINEAR_SWEEP_CONFIG=$(printf '%q' "$MINIGRID_LINEAR_SWEEP_CONFIG") MINIGRID_LINEAR_SWEEP_SEEDS=$(printf '%q' "$MINIGRID_LINEAR_SWEEP_SEEDS") "
     fi
     JOB_CMD="if command -v uv >/dev/null 2>&1; then ${MINIGRID_ENV}uv run --with minigrid bash scripts/verify_minigrid.sh; else python3 -m venv .venv-minigrid && . .venv-minigrid/bin/activate && python -m pip install --upgrade pip && python -m pip install minigrid && ${MINIGRID_ENV}./scripts/verify_minigrid.sh; fi; status=\$?; echo exit=\$status; exec bash"
     ;;

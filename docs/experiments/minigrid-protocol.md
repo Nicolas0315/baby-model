@@ -53,6 +53,14 @@ MINIGRID_LINEAR_SEED=401 \
 ./scripts/verify_minigrid.sh
 ```
 
+Run the default probe and smoke plus a multi-seed linear sweep:
+
+```sh
+MINIGRID_LINEAR_SWEEP_CONFIG=configs/experiments/minigrid-linear-unlock.json \
+MINIGRID_LINEAR_SWEEP_SEEDS=401,402,403 \
+./scripts/verify_minigrid.sh
+```
+
 ## Probe Environments
 
 The optional probe starts with:
@@ -128,6 +136,17 @@ Linear function-approximation result on `BabyAI-Unlock-v0`, 60 episodes:
 | `E_linear_progress` | 0.000 | 0.000 | 0.000 |  |
 
 The linear pilot is recorded in `docs/experiments/minigrid-linear-unlock.md`.
+
+Linear multi-seed sweep on `BabyAI-Unlock-v0`, 3 seeds:
+
+| condition | wins | mean_success_last | median_success_last | mean_return_last |
+| --- | ---: | ---: | ---: | ---: |
+| `A_linear_hard_only` | 2 | 0.050 | 0.050 | 0.042 |
+| `B_linear_encoder_first` | 1 | 0.050 | 0.050 | 0.046 |
+| `E_linear_progress` | 0 | 0.000 | 0.000 | 0.000 |
+
+The multi-seed sweep is recorded in
+`docs/experiments/minigrid-linear-sweep.md`.
 
 ## Fleet Verification
 
