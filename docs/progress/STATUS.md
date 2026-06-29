@@ -936,13 +936,28 @@ Updated: 2026-06-30 JST
     (`0.367` vs `0.167`), and target-near (`0.450` vs `0.200`).
   - Treat `ZE` as the current strongest representation-driven baseline
     candidate.
+- Issue #64 v2.40 five-seed CUDA extension for low-beta mission target `ZE`
+  is complete:
+  - `docs/experiments/minigrid-torch-adda-v51.md`
+  - The CUDA sweep ran on `rtx4090` / WSL Ubuntu at source commit
+    `03d58b7ddbfd843414ebd9e57617b60c5346ba9f` with seeds
+    `4101,4102,4103,4104,4105`.
+  - Setup used `NVIDIA GeForce RTX 4090`, driver `610.62`,
+    `torch==2.11.0+cu128`, and `device=cuda`.
+  - Remote artifact:
+    `~/work/baby-model-cuda-03d58b7/.tmp/rtx4090-v64-ze-cuda-5seed/20260629T170242Z/summary.md`.
+  - `ZE_torch_gotoobj_state_plus_mission_target_b005` won four of five seeds
+    and beat `ZU` on aggregate final-window success (`0.290` vs `0.210`),
+    return (`0.177` vs `0.132`), target-visible (`0.620` vs `0.470`),
+    target-center (`0.310` vs `0.240`), and target-near (`0.390` vs `0.270`).
+  - Keep `ZE` as the current strongest representation-driven baseline.
 
 ## Next
 
-- Broaden confirmation around
-  `ZE_torch_gotoobj_state_plus_mission_target_b005`: either extend the CUDA
-  sweep to five seeds or run a longer-horizon check with `ZE` as the baseline
-  to beat.
+- Run a longer-horizon check with
+  `ZE_torch_gotoobj_state_plus_mission_target_b005` as the baseline to beat.
+  The next gate should test whether the `ZE` edge survives beyond the current
+  short `6+12+24` curriculum.
 
 ## Not Yet Proven
 
@@ -970,5 +985,7 @@ Updated: 2026-06-30 JST
   CUDA seed `4101`, but return still lagged `ZU`, so multi-seed CUDA is the
   next gate. v2.39 passed that bounded three-seed CUDA gate and makes `ZE` the
   current strongest representation-driven candidate, but broader confirmation
-  is still needed before calling the overall research objective complete.
+  is still needed before calling the overall research objective complete. v2.40
+  extended the same protocol to five CUDA seeds and preserved the `ZE` edge;
+  the remaining gap is longer-horizon confirmation.
 - Full objective completion.
