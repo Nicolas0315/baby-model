@@ -52,6 +52,7 @@ def run_condition(
     )
     encoder = FeatureEncoder(size=size, mode=condition.encoder_mode)
     agent = QAgent(seed=condition.seed)
+    auxiliary_agent = QAgent(seed=condition.seed + 100_003, epsilon=0.0)
     transition = TransitionSurprise()
     episodes: list[EpisodeMetrics] = []
 
@@ -65,18 +66,20 @@ def run_condition(
 
         for _ in range(max_steps):
             force_random = episode < condition.decoder_delay_episodes
-            action = agent.choose(feature, force_random=force_random)
+            action_bonus = None
+            if condition.intrinsic_target == "auxiliary" and not force_random:
+                action_bonus = auxiliary_agent.action_values(feature)
+            action = agent.choose(feature, force_random=force_random, action_bonus=action_bonus)
             result = env.step(action)
             next_feature = encoder.encode(result.observation)
             intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature, action, next_feature)
-            intrinsic_beta = _effective_intrinsic_beta(condition, episode)
-            if condition.intrinsic_gate == "external_flat" and result.reward > 0.0:
-                intrinsic_beta = 0.0
-            intrinsic = intrinsic_beta * intrinsic_signal
-            total_reward = result.reward if condition.intrinsic_target == "auxiliary" else result.reward + intrinsic
+            intrinsic = _intrinsic_reward(condition, episode, result.reward, intrinsic_signal)
+            total_reward = _q_target_reward(condition, result.reward, intrinsic)
 
             if not force_random:
                 agent.update(feature, action, total_reward, next_feature, result.done)
+                if condition.intrinsic_target == "auxiliary":
+                    auxiliary_agent.update(feature, action, intrinsic, next_feature, result.done)
             transition.update(feature, action, next_feature)
 
             external_return += result.reward
@@ -257,6 +260,19 @@ def _intrinsic_signal(
     if mode == "progress":
         return transition.learning_progress(feature, action, next_feature)
     raise ValueError(f"unknown intrinsic mode: {mode}")
+
+
+def _intrinsic_reward(condition: Condition, episode: int, external_reward: float, intrinsic_signal: float) -> float:
+    intrinsic_beta = _effective_intrinsic_beta(condition, episode)
+    if condition.intrinsic_gate == "external_flat" and external_reward > 0.0:
+        intrinsic_beta = 0.0
+    return intrinsic_beta * intrinsic_signal
+
+
+def _q_target_reward(condition: Condition, external_reward: float, intrinsic_reward: float) -> float:
+    if condition.intrinsic_target == "auxiliary":
+        return external_reward
+    return external_reward + intrinsic_reward
 
 
 def _effective_intrinsic_beta(condition: Condition, episode: int) -> float:

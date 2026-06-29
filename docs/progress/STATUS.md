@@ -65,11 +65,12 @@ Updated: 2026-06-29 JST
   - `configs/experiments/v03-sweep.json`
   - `intrinsic_schedule`, `intrinsic_gate`, and `intrinsic_target` condition fields
   - `./scripts/verify.sh` includes v0.3 config and two-seed sweep smoke tests
-- Local tmux sweep `baby-model-v03b` completed:
-  - `runs/v03-sweeps/20260629T004505Z/summary.md`
-- v0.3 result: `B_encoder_first` still won by mean last-window success, but
-  `G_progress_aux` was close (`0.780` vs `0.800`) and outperformed direct
-  reward shaping.
+- Local tmux sweep `baby-model-v03-aux` completed after implementing a real
+  auxiliary action-value path:
+  - `runs/v03-sweeps/20260629T005034Z/summary.md`
+- v0.3 result: `B_encoder_first` still won by mean last-window success.
+  `E_progress_anneal` was the best intrinsic variant; `G_progress_aux`
+  underperformed direct reward shaping in this tiny grid.
 
 ## Next
 

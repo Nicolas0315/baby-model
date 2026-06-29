@@ -35,13 +35,29 @@ class QAgent:
         self.rng = Random(seed)
         self.q: dict[tuple[Feature, int], float] = defaultdict(float)
 
-    def choose(self, feature: Feature, force_random: bool = False) -> int:
+    def choose(
+        self,
+        feature: Feature,
+        force_random: bool = False,
+        action_bonus: dict[int, float] | None = None,
+        bonus_weight: float = 1.0,
+    ) -> int:
         if force_random or self.rng.random() < self.epsilon:
             return self.rng.randrange(self.actions)
-        values = [(self.q[(feature, action)], action) for action in range(self.actions)]
+        values = [
+            (
+                self.q[(feature, action)]
+                + bonus_weight * (0.0 if action_bonus is None else action_bonus.get(action, 0.0)),
+                action,
+            )
+            for action in range(self.actions)
+        ]
         best_value = max(value for value, _ in values)
         best_actions = [action for value, action in values if value == best_value]
         return self.rng.choice(best_actions)
+
+    def action_values(self, feature: Feature) -> dict[int, float]:
+        return {action: self.q[(feature, action)] for action in range(self.actions)}
 
     def update(
         self,
