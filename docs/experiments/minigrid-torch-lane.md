@@ -166,7 +166,8 @@ The runner/config/verifier hook and local CPU/MPS smoke are implemented. The
 bounded fleet run is partially proven, with host-level evidence kept outside
 this repository.
 
-The fleet environment setup path was hardened after the partial run:
+The fleet environment setup path was hardened after the partial run and
+re-tested at source commit `c25dc648a938629938a809de382e293541e407e3`:
 
 - `scripts/setup_minigrid_env.sh` now supports `venv` and `uv` backends.
 - `scripts/fleet_archive_run.sh` forwards setup controls and can perform an
@@ -175,6 +176,8 @@ The fleet environment setup path was hardened after the partial run:
   remaining dependency-free.
 - A local non-torch setup smoke completed with `uv`, Python 3.12, and
   `minigrid==3.1.0`.
+- The two previously blocked Windows/WSL workers now produce PyTorch training
+  summaries through CPU fallback or CPU-only wheel setup.
 
 ## Fleet Verification
 
@@ -202,13 +205,27 @@ The completed remote CPU/MPS/CUDA smoke summaries all matched the local CPU
 table: `A_torch_hard_only` reached `success_last=0.083`, while
 `B_torch_encoder_first` and `E_torch_progress` stayed at `0.000`.
 
+Follow-up worker coverage at commit
+`c25dc648a938629938a809de382e293541e407e3`:
+
+- The newer-GPU Windows/WSL worker still failed CUDA because its driver was too
+  old for the cu132 wheel, but scripted CPU fallback completed with
+  `torch==2.12.1+cu132`, `device=cpu`, and winner `A_torch_hard_only`.
+- The remaining Windows/WSL worker still did not finish the cu126 CUDA wheel
+  install within a bounded smoke window, but a CPU-only wheel run completed with
+  `torch==2.12.1+cpu`, `device=cpu`, and winner `A_torch_hard_only`.
+- Both completed follow-up smoke summaries matched the local CPU table:
+  `A_torch_hard_only success_last=0.083`; `B_torch_encoder_first` and
+  `E_torch_progress` stayed at `0.000`.
+
 Remaining blockers:
 
-- Full-fleet PyTorch coverage is not complete.
+- Full-fleet PyTorch training-summary coverage is complete, but not all of it
+  is GPU-backed.
 - One newer-GPU worker needs a compatible driver/wheel combination before CUDA
   can be treated as proven.
-- One Windows/WSL worker did not complete dependency installation before the
-  clean stop point, so it has no PyTorch training summary.
+- One Windows/WSL worker's CUDA wheel install is too slow for a bounded smoke
+  lane, so it is currently proven only through the CPU wheel path.
 
 This is enough to prove the optional runner and device-selection path, but not
 enough to claim a robust GPU training result.

@@ -180,14 +180,25 @@ Updated: 2026-06-29 JST
   - `./scripts/verify.sh` now covers shell syntax and setup dry-run checks
     without installing optional dependencies.
   - Local setup smoke passed with `uv`, Python 3.12, and `minigrid==3.1.0`.
+- Follow-up issue #12 blocker-worker rerun at commit
+  `c25dc648a938629938a809de382e293541e407e3` completed:
+  - the newer-GPU Windows/WSL worker still failed CUDA due driver/wheel
+    mismatch, then completed scripted CPU fallback with `torch==2.12.1+cu132`;
+  - the remaining Windows/WSL worker did not finish the cu126 CUDA wheel install
+    within a bounded smoke window, then completed CPU-only PyTorch smoke with
+    `torch==2.12.1+cpu`;
+  - both follow-up summaries matched the local CPU result:
+    `A_torch_hard_only success_last=0.083`, `B_torch_encoder_first=0.000`,
+    `E_torch_progress=0.000`.
 
 ## Next
 
-- Rerun the issue #12 blocker workers with `MINIGRID_ENV_BACKEND=uv`,
-  `MINIGRID_PYTHON=3.12`, and explicit CPU fallback for non-GPU evidence.
+- Decide whether issue #12 should close as "optional PyTorch lane attempted and
+  full-fleet non-GPU-backed coverage recorded", or stay open for driver-level
+  full-fleet GPU proof.
 
 ## Not Yet Proven
 
-- Full-fleet PyTorch/GPU smoke for issue #12.
+- Full-fleet GPU smoke for issue #12.
 - Any robust GPU training result.
 - Full objective completion.
