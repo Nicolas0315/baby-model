@@ -80,15 +80,17 @@ MINIGRID_TORCH_CPU_FALLBACK=1
   and `E_torch_progress` stayed at `0.000`.
 - `gpu-worker-b` is blocked for CUDA by driver/wheel compatibility and should
   not be counted as GPU-proven until that external state changes.
-- `gpu-worker-c` has a CUDA 13-capable driver path, but the strict `cu132`
-  smoke did not reach training because `uv pip install torch` stalled in the
-  bounded smoke window after preparing the wheel stack. A resume attempt reused
-  a partial environment and reached `torch` import, but failed with missing
-  `libtorch_global_deps.so`. It remains an install-path blocker, not a driver
-  blocker. Use `MINIGRID_ENV_CLEAR=1` for future strict GPU retries so partial
-  wheel installs are not trusted. The fleet launcher now starts tmux panes in
-  the extracted run directory and prepends an explicit `cd`/`pwd` to worker
-  jobs, making WSL execution paths auditable before dependency installation.
+- `gpu-worker-c` has a CUDA 13-capable driver path, but strict `cu132` smoke
+  has not reached training. The first attempt stalled in `uv pip install torch`;
+  a resume reused a partial environment and failed `import torch` with missing
+  `libtorch_global_deps.so`. A clean retry at commit `5a803ac` confirmed
+  execution from the extracted `/home` run directory and installed MiniGrid,
+  but still left a partial Torch environment where `import torch` failed with
+  `ModuleNotFoundError: No module named 'torch.version'`. This remains an
+  install-path blocker, not a driver blocker. Use a prewarmed validated venv or
+  a different wheel install path before counting this worker as GPU-proven.
+  The fleet launcher now prepends explicit `cd`/`pwd` logging so WSL execution
+  paths are auditable before dependency installation.
 
 ## Acceptance For Issue #13
 

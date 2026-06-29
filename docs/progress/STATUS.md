@@ -204,19 +204,20 @@ Updated: 2026-06-29 JST
   - `gpu-worker-b` remains driver/wheel blocked for CUDA 13 and was not rerun
     as strict GPU in this turn.
   - `gpu-worker-c` is driver-compatible for CUDA 13, but strict `cu132` did not
-    reach training because wheel installation stalled inside the bounded smoke
-    window. A resume attempt reached `torch` import but failed from a partial
-    environment with missing `libtorch_global_deps.so`; future retries should
-    use `MINIGRID_ENV_CLEAR=1`. The fleet launcher now starts tmux panes in the
-    extracted run directory and prepends explicit `cd`/`pwd` logging so WSL
-    execution paths are auditable before dependency installation. Host-level
-    evidence is kept outside this repository.
+    reach training. The original bounded attempt stalled during Torch install;
+    a resume failed `import torch` from a partial environment. A clean retry at
+    commit `5a803ac` confirmed execution from the extracted `/home` run
+    directory and installed MiniGrid, but still left a partial Torch
+    environment where `import torch` failed with
+    `ModuleNotFoundError: No module named 'torch.version'`. Host-level evidence
+    is kept outside this repository.
 
 ## Next
 
-- For issue #13, clear/rebuild or prewarm the `gpu-worker-c` CUDA 13
-  environment and rerun strict CUDA smoke; do not count `gpu-worker-b` as
-  GPU-proven until the driver/wheel compatibility path changes.
+- For issue #13, prewarm a validated `gpu-worker-c` CUDA 13 Torch environment
+  or switch the wheel install path, then rerun strict CUDA smoke; do not count
+  `gpu-worker-b` as GPU-proven until the driver/wheel compatibility path
+  changes.
 
 ## Not Yet Proven
 
