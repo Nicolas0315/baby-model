@@ -187,10 +187,6 @@ install_with_venv() {
 }
 
 install_with_uv() {
-  if ! command -v uv >/dev/null 2>&1; then
-    echo "uv_not_found" >&2
-    exit 2
-  fi
   export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
   echo "minigrid_env_backend=uv"
   echo "python_request=$MINIGRID_PYTHON"
@@ -202,6 +198,10 @@ install_with_uv() {
   if [[ "$MINIGRID_SETUP_DRY_RUN" == "1" ]]; then
     echo "dry_run=1"
     return
+  fi
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "uv_not_found" >&2
+    exit 2
   fi
   if [[ "$MINIGRID_ENV_CLEAR" == "1" ]]; then
     uv venv --seed --clear --python "$MINIGRID_PYTHON" "$MINIGRID_VENV_DIR"
