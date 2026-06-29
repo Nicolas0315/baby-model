@@ -61,11 +61,19 @@ Updated: 2026-06-29 JST
   `git archive | ssh | tmux`; all workers produced the same aggregate winner,
   `B_encoder_first`. Exact host-level evidence is kept outside this repository
   in local docs.
+- v0.3 annealed/gated/auxiliary progress controls are implemented locally:
+  - `configs/experiments/v03-sweep.json`
+  - `intrinsic_schedule`, `intrinsic_gate`, and `intrinsic_target` condition fields
+  - `./scripts/verify.sh` includes v0.3 config and two-seed sweep smoke tests
+- Local tmux sweep `baby-model-v03b` completed:
+  - `runs/v03-sweeps/20260629T004505Z/summary.md`
+- v0.3 result: `B_encoder_first` still won by mean last-window success, but
+  `G_progress_aux` was close (`0.780` vs `0.800`) and outperformed direct
+  reward shaping.
 
 ## Next
 
-- Implement issue #6 for annealed, gated, or auxiliary prediction-progress
-  learning.
+- Replicate v0.3 under fleet worker tmux lanes and update issue #6.
 
 ## Not Yet Proven
 

@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="${MODE:-both}"
 SEEDS="${SEEDS:-101,102,103,104,105}"
+CONFIG="${CONFIG:-configs/experiments/v02-sweep.json}"
 RUN_ID="${RUN_ID:-baby-model-fleet-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT" rev-parse --short HEAD)}"
 SESSION="${SESSION:-$RUN_ID}"
 
@@ -11,6 +12,7 @@ usage() {
   cat >&2 <<'EOF'
 Usage:
   MODE=both SEEDS=101,102,103 ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
+  MODE=both CONFIG=configs/experiments/v03-sweep.json ./scripts/fleet_archive_run.sh mac:host-a wsl:host-b
   BABY_MODEL_FLEET_HOSTS="mac:host-a wsl:host-b" ./scripts/fleet_archive_run.sh
 
 MODE values:
@@ -27,6 +29,11 @@ esac
 
 if [[ ! "$SEEDS" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
   echo "invalid SEEDS: $SEEDS" >&2
+  exit 2
+fi
+
+if [[ ! "$CONFIG" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+  echo "invalid CONFIG: $CONFIG" >&2
   exit 2
 fi
 
@@ -56,10 +63,10 @@ case "$MODE" in
     JOB_CMD='./scripts/verify.sh; status=$?; echo exit=$status; exec bash'
     ;;
   sweep)
-    JOB_CMD="SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"
+    JOB_CMD="CONFIG=$CONFIG SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"
     ;;
   both)
-    JOB_CMD="./scripts/verify.sh && SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"
+    JOB_CMD="./scripts/verify.sh && CONFIG=$CONFIG SEEDS=$SEEDS OUTPUT_DIR=runs/fleet-sweeps ./scripts/run_beta_sweep.sh; status=\$?; echo exit=\$status; exec bash"
     ;;
 esac
 

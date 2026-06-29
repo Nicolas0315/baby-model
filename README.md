@@ -52,5 +52,6 @@ host.
 - Source notes: `docs/research/sources.md`
 - Experiment protocol: `docs/experiments/v0-protocol.md`
 - v0.2 sweep result: `docs/experiments/v02-sweep.md`
+- v0.3 sweep result: `docs/experiments/v03-sweep.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`

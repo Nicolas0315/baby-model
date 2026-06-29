@@ -1,5 +1,5 @@
 {
-  "hypothesis": "Baby-AD/DA v0.2 beta sweep",
+  "hypothesis": "Baby-AD/DA v0.3 annealed/auxiliary progress sweep",
   "environment": {
     "size": 9,
     "max_steps": 100,
@@ -24,27 +24,32 @@
       "intrinsic_mode": "progress"
     },
     {
-      "name": "D_progress_b010",
+      "name": "E_progress_anneal",
       "encoder_mode": "coarse",
       "episodes": 120,
       "decoder_delay_episodes": 24,
-      "intrinsic_beta": 0.1,
+      "intrinsic_beta": 0.05,
+      "intrinsic_beta_end": 0.0,
+      "intrinsic_anneal_episodes": 72,
+      "intrinsic_schedule": "linear_anneal",
       "intrinsic_mode": "progress"
     },
     {
-      "name": "D_progress_b020",
+      "name": "F_progress_gate",
       "encoder_mode": "coarse",
       "episodes": 120,
       "decoder_delay_episodes": 24,
-      "intrinsic_beta": 0.2,
+      "intrinsic_beta": 0.05,
+      "intrinsic_gate": "external_flat",
       "intrinsic_mode": "progress"
     },
     {
-      "name": "D_progress_b040",
+      "name": "G_progress_aux",
       "encoder_mode": "coarse",
       "episodes": 120,
       "decoder_delay_episodes": 24,
-      "intrinsic_beta": 0.4,
+      "intrinsic_beta": 0.05,
+      "intrinsic_target": "auxiliary",
       "intrinsic_mode": "progress"
     }
   ]

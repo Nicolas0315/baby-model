@@ -50,7 +50,7 @@ def run_sweep(config: dict[str, Any], seeds: list[int]) -> dict[str, Any]:
 
     return {
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "hypothesis": "Baby-AD/DA v0.2 beta sweep",
+        "hypothesis": str(config.get("hypothesis", "Baby-AD/DA experiment sweep")),
         "seeds": seeds,
         "aggregate": aggregate,
         "reports": reports,

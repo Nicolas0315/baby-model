@@ -76,6 +76,51 @@ class ExperimentTest(unittest.TestCase):
                 }
             )
 
+    def test_validate_config_accepts_v03_intrinsic_controls(self) -> None:
+        report = run_suite(
+            config={
+                "environment": {"size": 5, "max_steps": 20, "obstacle_count": 3, "toy_count": 1},
+                "conditions": [
+                    {
+                        "name": "anneal",
+                        "encoder_mode": "coarse",
+                        "episodes": 4,
+                        "decoder_delay_episodes": 1,
+                        "intrinsic_beta": 0.05,
+                        "intrinsic_beta_end": 0.0,
+                        "intrinsic_anneal_episodes": 2,
+                        "intrinsic_schedule": "linear_anneal",
+                        "intrinsic_gate": "external_flat",
+                        "intrinsic_target": "auxiliary",
+                        "intrinsic_mode": "progress",
+                    }
+                ],
+            },
+            seed=2,
+        )
+        row = report["results"][0]
+        self.assertEqual(row["intrinsic_schedule"], "linear_anneal")
+        self.assertEqual(row["intrinsic_gate"], "external_flat")
+        self.assertEqual(row["intrinsic_target"], "auxiliary")
+
+    def test_validate_config_rejects_invalid_intrinsic_target(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_config(
+                {
+                    "conditions": [
+                        {
+                            "name": "bad-target",
+                            "encoder_mode": "coarse",
+                            "episodes": 4,
+                            "decoder_delay_episodes": 1,
+                            "intrinsic_beta": 0.05,
+                            "intrinsic_target": "actor_loss",
+                            "intrinsic_mode": "progress",
+                        }
+                    ]
+                }
+            )
+
     def test_obstacle_grid_has_walls_and_remains_runnable(self) -> None:
         env = BabyGrid(size=6, max_steps=20, seed=5, obstacle_count=6, toy_count=2)
         observation = env.reset(seed=5)

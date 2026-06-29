@@ -20,6 +20,11 @@ class Condition:
     intrinsic_beta: float
     intrinsic_mode: str
     seed: int
+    intrinsic_beta_end: float | None = None
+    intrinsic_anneal_episodes: int = 0
+    intrinsic_schedule: str = "constant"
+    intrinsic_gate: str = "none"
+    intrinsic_target: str = "reward"
 
 
 def default_conditions(seed: int = 7) -> list[Condition]:
@@ -64,8 +69,11 @@ def run_condition(
             result = env.step(action)
             next_feature = encoder.encode(result.observation)
             intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature, action, next_feature)
-            intrinsic = condition.intrinsic_beta * intrinsic_signal
-            total_reward = result.reward + intrinsic
+            intrinsic_beta = _effective_intrinsic_beta(condition, episode)
+            if condition.intrinsic_gate == "external_flat" and result.reward > 0.0:
+                intrinsic_beta = 0.0
+            intrinsic = intrinsic_beta * intrinsic_signal
+            total_reward = result.reward if condition.intrinsic_target == "auxiliary" else result.reward + intrinsic
 
             if not force_random:
                 agent.update(feature, action, total_reward, next_feature, result.done)
@@ -98,6 +106,11 @@ def run_condition(
         "episodes": condition.episodes,
         "decoder_delay_episodes": condition.decoder_delay_episodes,
         "intrinsic_beta": condition.intrinsic_beta,
+        "intrinsic_beta_end": condition.intrinsic_beta_end,
+        "intrinsic_anneal_episodes": condition.intrinsic_anneal_episodes,
+        "intrinsic_schedule": condition.intrinsic_schedule,
+        "intrinsic_gate": condition.intrinsic_gate,
+        "intrinsic_target": condition.intrinsic_target,
         "intrinsic_mode": condition.intrinsic_mode,
         "seed": condition.seed,
         "success_rate_all": mean(1.0 if item.success else 0.0 for item in episodes),
@@ -124,6 +137,13 @@ def run_suite(config: dict[str, Any] | None = None, seed: int = 7) -> dict[str, 
                 intrinsic_beta=float(item["intrinsic_beta"]),
                 intrinsic_mode=str(item.get("intrinsic_mode", "none")),
                 seed=seed + i,
+                intrinsic_beta_end=(
+                    float(item["intrinsic_beta_end"]) if "intrinsic_beta_end" in item else None
+                ),
+                intrinsic_anneal_episodes=int(item.get("intrinsic_anneal_episodes", 0)),
+                intrinsic_schedule=str(item.get("intrinsic_schedule", "constant")),
+                intrinsic_gate=str(item.get("intrinsic_gate", "none")),
+                intrinsic_target=str(item.get("intrinsic_target", "reward")),
             )
             for i, item in enumerate(condition_cfgs)
         ]
@@ -199,15 +219,28 @@ def validate_config(config: dict[str, Any]) -> None:
         intrinsic_mode = str(item.get("intrinsic_mode", "none"))
         if intrinsic_mode not in {"none", "surprise", "progress"}:
             raise ValueError(f"invalid intrinsic_mode for {name}")
+        intrinsic_schedule = str(item.get("intrinsic_schedule", "constant"))
+        if intrinsic_schedule not in {"constant", "linear_anneal"}:
+            raise ValueError(f"invalid intrinsic_schedule for {name}")
+        intrinsic_gate = str(item.get("intrinsic_gate", "none"))
+        if intrinsic_gate not in {"none", "external_flat"}:
+            raise ValueError(f"invalid intrinsic_gate for {name}")
+        intrinsic_target = str(item.get("intrinsic_target", "reward"))
+        if intrinsic_target not in {"reward", "auxiliary"}:
+            raise ValueError(f"invalid intrinsic_target for {name}")
         episodes = int(item.get("episodes", 0))
         delay = int(item.get("decoder_delay_episodes", 0))
         beta = float(item.get("intrinsic_beta", 0.0))
+        beta_end = float(item.get("intrinsic_beta_end", beta))
+        anneal_episodes = int(item.get("intrinsic_anneal_episodes", 0))
         if episodes < 1:
             raise ValueError(f"episodes must be positive for {name}")
         if delay < 0 or delay > episodes:
             raise ValueError(f"decoder_delay_episodes out of range for {name}")
-        if beta < 0:
+        if beta < 0 or beta_end < 0:
             raise ValueError(f"intrinsic_beta must be non-negative for {name}")
+        if anneal_episodes < 0 or anneal_episodes > episodes:
+            raise ValueError(f"intrinsic_anneal_episodes out of range for {name}")
 
 
 def _intrinsic_signal(
@@ -224,6 +257,20 @@ def _intrinsic_signal(
     if mode == "progress":
         return transition.learning_progress(feature, action, next_feature)
     raise ValueError(f"unknown intrinsic mode: {mode}")
+
+
+def _effective_intrinsic_beta(condition: Condition, episode: int) -> float:
+    if condition.intrinsic_schedule == "constant":
+        return condition.intrinsic_beta
+    if condition.intrinsic_schedule == "linear_anneal":
+        beta_end = condition.intrinsic_beta if condition.intrinsic_beta_end is None else condition.intrinsic_beta_end
+        horizon = condition.intrinsic_anneal_episodes
+        if horizon <= 0:
+            horizon = max(1, condition.episodes - condition.decoder_delay_episodes)
+        progress_episode = max(0, episode - condition.decoder_delay_episodes)
+        fraction = min(1.0, progress_episode / horizon)
+        return condition.intrinsic_beta + (beta_end - condition.intrinsic_beta) * fraction
+    raise ValueError(f"unknown intrinsic_schedule: {condition.intrinsic_schedule}")
 
 
 def _summary_markdown(report: dict[str, Any]) -> str:
