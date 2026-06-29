@@ -1200,6 +1200,8 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(by_name["A"]["win_count"], 1)
         self.assertEqual(by_name["B"]["win_count"], 1)
         self.assertAlmostEqual(by_name["B"]["mean_success_rate_last_window"], 0.2)
+        self.assertAlmostEqual(by_name["A"]["median_return_last_window"], 0.15)
+        self.assertAlmostEqual(by_name["B"]["median_return_last_window"], 0.25)
         self.assertEqual(by_name["A"]["condition_seeds"], [601, 603])
         summary = torch_sweep_summary_markdown(
             {
@@ -1213,6 +1215,8 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         self.assertIn("PyTorch sweep", summary)
+        self.assertIn("median_return_last", summary)
+        self.assertIn("| A | 1 | 0.050 | 0.100 | 0.100 | 0.150 | 0.150 | 8.0 | 20 |", summary)
         self.assertIn("Per-Seed Winners", summary)
 
     def test_gpu_compat_policy_is_dependency_free(self) -> None:

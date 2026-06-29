@@ -83,6 +83,7 @@ def aggregate_torch_reports(runs: list[dict[str, Any]], seeds: list[int]) -> lis
                 "mean_success_rate_last_window": mean(success_last),
                 "median_success_rate_last_window": median(success_last),
                 "mean_return_last_window": mean(returns),
+                "median_return_last_window": median(returns),
                 "mean_updates": mean(updates),
                 "mean_parameter_count": mean(parameters),
             }
@@ -116,18 +117,19 @@ def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:
         f"- devices: `{','.join(devices)}`",
         f"- winner_by_mean_success_last_window: `{report['winner_by_mean_success_last_window']}`",
         "",
-        "| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | mean_updates | parameters |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | median_return_last | mean_updates | parameters |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in report["aggregate"]:
         lines.append(
-            "| {name} | {wins} | {all:.3f} | {last:.3f} | {median:.3f} | {ret:.3f} | {updates:.1f} | {params:.0f} |".format(
+            "| {name} | {wins} | {all:.3f} | {last:.3f} | {median:.3f} | {ret:.3f} | {median_ret:.3f} | {updates:.1f} | {params:.0f} |".format(
                 name=row["name"],
                 wins=row["win_count"],
                 all=row["mean_success_rate_all"],
                 last=row["mean_success_rate_last_window"],
                 median=row["median_success_rate_last_window"],
                 ret=row["mean_return_last_window"],
+                median_ret=row["median_return_last_window"],
                 updates=row["mean_updates"],
                 params=row["mean_parameter_count"],
             )

@@ -93,5 +93,33 @@ A bounded CUDA smoke for the corrected action-prior label completed on
 
 CUDA conclusion: `R_torch_action_prior_delay` met the v1.6 escalation rule by
 beating the hard-only baseline on final-stage last-window success (`0.050` vs
-`0.000`) and return (`0.044` vs `0.000`). Escalate this condition family to a
-three-seed CUDA sweep before treating the result as robust.
+`0.000`) and return (`0.044` vs `0.000`). This triggered the three-seed CUDA
+sweep below before treating the result as robust.
+
+## Three-Seed CUDA Sweep
+
+A three-seed CUDA sweep completed on `gpu-worker-c` at source commit
+`b66e1c591dea7afdddfeb362e49303de9b051e5b` with
+`torch==2.12.1+cu132`, `torch_cuda_available=True`, and `device=cuda`.
+
+Seeds: `1201,1202,1203`
+
+| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | median_return_last |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only_long` | 1 | 0.007 | 0.000 | 0.000 | 0.000 | 0.000 |
+| `R_torch_action_prior_delay` | 1 | 0.007 | 0.017 | 0.000 | 0.015 | 0.000 |
+| `S_torch_action_prior_policy_mix` | 1 | 0.007 | 0.017 | 0.000 | 0.016 | 0.000 |
+
+Per-seed winners:
+
+- `1201`: `R_torch_action_prior_delay`
+- `1202`: `A_torch_hard_only_long`
+- `1203`: `S_torch_action_prior_policy_mix`
+
+Sweep conclusion: `R_torch_action_prior_delay` remained in the top group by
+mean final-window success, but it did not stay ahead across seeds. `R` and `S`
+tied on mean final-window success (`0.017`), all conditions had median
+final-window success and median return of `0.000`, and each condition won one
+seed. This completes the v1.6 follow-up as non-robust evidence; do not escalate
+the current action-prior design further without a stronger signal or task
+redesign.

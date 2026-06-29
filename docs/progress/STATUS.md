@@ -305,13 +305,21 @@ Updated: 2026-06-29 JST
   `ff9ef00afb7c6d79b8f580db4cde8cc8c8cab0fc`. The run was executable on
   `torch==2.12.1+cu132` and `device=cuda`. `R_torch_action_prior_delay` beat
   the hard-only baseline on final-stage last-window success (`0.050` vs
-  `0.000`) and return (`0.044` vs `0.000`). This meets the v1.6 escalation
-  rule; run a multi-seed CUDA sweep before treating the result as robust.
+  `0.000`) and return (`0.044` vs `0.000`). This met the v1.6 escalation rule
+  and triggered the multi-seed CUDA sweep below.
+- The v1.6 three-seed CUDA sweep completed on `gpu-worker-c` at commit
+  `b66e1c591dea7afdddfeb362e49303de9b051e5b` with seeds `1201,1202,1203`.
+  `R_torch_action_prior_delay` and `S_torch_action_prior_policy_mix` tied on
+  mean final-window success (`0.017`), while `S` had slightly higher mean
+  final-window return (`0.016` vs `0.015`). All conditions had median
+  final-window success and median return of `0.000`, and each condition won one
+  seed. Treat v1.6 as non-robust evidence; do not escalate the current
+  action-prior design further without changing the signal or task family.
 
 ## Next
 
-- Open and execute the v1.6 multi-seed CUDA sweep follow-up for
-  `R_torch_action_prior_delay`.
+- Open the next AD/DA redesign issue for a stronger v1.7 signal or task family,
+  using v1.6 as evidence that the current heuristic action-prior is not robust.
 
 ## Not Yet Proven
 
