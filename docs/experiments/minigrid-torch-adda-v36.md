@@ -108,3 +108,41 @@ Conclusion: v2.16 now has positive CPU-first RL integration evidence and a
 matching bounded CUDA replication on `gpu-worker-c`. It still does not prove
 multi-seed stability; the next step should be a CUDA multi-seed matched sweep
 before promoting the objective as a stable RL result.
+
+## CUDA Multi-Seed Sweep
+
+A bounded three-seed CUDA sweep completed on `gpu-worker-c` at source commit
+`b3472a04c91205b263c5f7ea308cecc94da0f69e` with `torch==2.12.1+cu132`,
+`torch_cuda_available=True`, and `devices=cuda`.
+
+Summary artifact on the worker:
+
+`.tmp/verify-minigrid/torch-sweep/20260629T133005Z/summary.md`
+
+Seeds: `3001,3002,3003`
+
+| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | median_return_last |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ZK_torch_gotoobj_curriculum_no_repr_delay` | 0 | 0.111 | 0.100 | 0.100 | 0.059 | 0.063 |
+| `ZM_torch_gotoobj_state_plus_delta_matched_delay` | 2 | 0.264 | 0.283 | 0.300 | 0.158 | 0.179 |
+| `ZN_torch_gotoobj_target_visibility_matched_delay` | 1 | 0.250 | 0.283 | 0.300 | 0.185 | 0.221 |
+
+Per-seed winners:
+
+- `3001`: `ZN_torch_gotoobj_target_visibility_matched_delay`
+- `3002`: `ZM_torch_gotoobj_state_plus_delta_matched_delay`
+- `3003`: `ZM_torch_gotoobj_state_plus_delta_matched_delay`
+
+Decision: the semantic-transition condition passed the multi-seed rule against
+the matched no-representation curriculum: it improved mean final-window
+success and return, and its median final-window success was not worse. It did
+not become a clear single-condition winner against `state_plus_delta`: `ZN`
+tied `ZM` on mean and median final-window success, improved return, but lost
+seed win count (`1` vs `2`).
+
+Conclusion: v2.18 is positive representation-vs-no-repr multi-seed CUDA
+evidence for the semantic transition signal, but not proof that this semantic
+objective is the stable best representation target. The next lane should test
+whether `state_plus_delta` and `target_visibility_transition` are
+complementary, or add a direct mission-preservation probe to separate reward
+return from mission-signal retention.

@@ -609,16 +609,31 @@ Updated: 2026-06-29 JST
     vs `0.031`) with `1997` representation updates.
   - Treat v2.16 as positive single-seed CUDA replication evidence, not yet
     multi-seed proof.
+- Issue #43 v2.18 CUDA multi-seed semantic-transition sweep is complete:
+  - The sweep ran on `gpu-worker-c` with seeds `3001,3002,3003`,
+    `torch==2.12.1+cu132`, and `devices=cuda`.
+  - `ZN_torch_gotoobj_target_visibility_matched_delay` beat the matched
+    no-representation curriculum on mean final-stage last-window success
+    (`0.283` vs `0.100`) and mean return (`0.185` vs `0.059`), with equal-or-
+    better median success (`0.300` vs `0.100`).
+  - `ZN` did not become a clear single-condition winner against
+    `ZM_torch_gotoobj_state_plus_delta_matched_delay`: both had
+    `0.283` mean final-window success and `0.300` median final-window success;
+    `ZN` had higher mean return (`0.185` vs `0.158`), but `ZM` won more seeds
+    (`2` vs `1`).
+  - Treat v2.18 as positive representation-vs-no-repr multi-seed CUDA evidence,
+    not proof that semantic transition is the stable best representation target.
 
 ## Next
 
-- Run a CUDA multi-seed matched sweep for the v2.16 semantic-transition RL
-  condition before promoting it as a stable RL result.
+- Test whether `state_plus_delta` and `target_visibility_transition` are
+  complementary, or add a direct mission-preservation probe to separate reward
+  return from mission-signal retention.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
-- A stable representation-driven AD/DA winner across multiple CUDA seeds.
-- Multi-seed proof for the positive semantic-transition RL condition.
+- A stable best representation-driven AD/DA winner across multiple CUDA seeds.
+- Direct mission-preservation probe inside the RL runner.
 - Full objective completion.
