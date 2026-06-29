@@ -53,7 +53,8 @@ Updated: 2026-06-29 JST
   - v1.0 multi-seed GPU PyTorch sweep: `https://github.com/Nicolas0315/baby-model/issues/14` closed
   - v1.1 revise PyTorch AD/DA conditions: `https://github.com/Nicolas0315/baby-model/issues/15` closed
   - v1.2 longer-window PyTorch AD/DA training design: `https://github.com/Nicolas0315/baby-model/issues/16` closed
-  - v1.3 predictive representation objective: `https://github.com/Nicolas0315/baby-model/issues/17` open
+  - v1.3 predictive representation objective: `https://github.com/Nicolas0315/baby-model/issues/17` closed
+  - v1.4 predictive target and curriculum redesign: `https://github.com/Nicolas0315/baby-model/issues/18` open
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -260,9 +261,9 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Close issue #17 after push and green CI, then open the next experiment issue
-  around revising the representation target or pairing it with a task
-  curriculum.
+- Execute issue #18 by revising the predictive target or pairing the
+  representation objective with a task curriculum, then run a bounded CUDA
+  smoke.
 
 ## Not Yet Proven
 
