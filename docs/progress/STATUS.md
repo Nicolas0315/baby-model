@@ -784,11 +784,24 @@ Updated: 2026-06-29 JST
     `target_near_last=0.583`.
   - Treat `ZU` beta `0.075` as the current strongest beta-neighborhood
     candidate and the next baseline to beat.
+- Issue #54 v2.30 longer-horizon ZU probe gate has a CPU result:
+  - `configs/experiments/minigrid-torch-adda-v41.json`
+  - `docs/experiments/minigrid-torch-adda-v41.md`
+  - Doubled the short beta-sweep stage lengths and compared the no-repr
+    curriculum against beta `0.05`, `0.075`, and `0.1` combined objectives.
+  - Local CPU smoke on seed `3601` completed with `torch==2.12.1` and
+    `device=cpu`.
+  - The result was mixed, not a CUDA escalation signal:
+    `ZK_torch_gotoobj_curriculum_no_repr_delay_long` won final-window success
+    (`0.550` vs `ZU` at `0.500`), while `ZU` beat `ZK` on return
+    (`0.367` vs `0.262`) and `target_near_last` (`0.600` vs `0.550`).
+  - Do not open a CUDA follow-up from v2.30 alone.
 
 ## Next
 
-- Start the next branch from `ZU` beta `0.075`: either a true two-head
-  implementation or a longer-horizon probe-gated run.
+- Start a true two-head objective branch from the `ZU` beta `0.075` baseline,
+  because longer-horizon scalar beta tuning did not cleanly beat the no-repr
+  curriculum on success.
 
 ## Not Yet Proven
 
@@ -800,5 +813,6 @@ Updated: 2026-06-29 JST
   v2.23's single-head mission-conditioned target did not pass this gate, while
   v2.24 beta `0.1` passed CPU, CUDA replication, and bounded three-seed CUDA
   gates. v2.29 beta `0.075` is now the strongest beta-neighborhood candidate
-  from a bounded three-seed CUDA sweep.
+  from a bounded three-seed CUDA sweep, but v2.30 did not preserve that edge
+  cleanly under a longer CPU horizon.
 - Full objective completion.

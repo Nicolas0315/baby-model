@@ -1513,6 +1513,37 @@ class ExperimentTest(unittest.TestCase):
             self.assertEqual(condition.episodes, 42)
             self.assertEqual(condition.decoder_delay_episodes, 4)
 
+    def test_minigrid_torch_v41_longer_horizon_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v41.json")
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")),
+            seed=3601,
+        )
+        self.assertEqual(parsed.agent.device, "cpu")
+        self.assertEqual(parsed.env_id, "BabyAI-GoToObj-v0")
+        self.assertEqual(
+            [(stage.name, stage.episodes) for stage in parsed.stages],
+            [("empty_warmup", 12), ("goto_red_ball_warmup", 24), ("goto_obj_eval", 48)],
+        )
+        self.assertEqual(
+            [condition.name for condition in parsed.conditions],
+            [
+                "ZK_torch_gotoobj_curriculum_no_repr_delay_long",
+                "ZT_torch_gotoobj_state_plus_target_visibility_b005_long",
+                "ZU_torch_gotoobj_state_plus_target_visibility_b0075_long",
+                "ZR_torch_gotoobj_state_plus_target_visibility_b010_long",
+            ],
+        )
+        beta_by_name = {condition.name: condition.representation_beta for condition in parsed.conditions}
+        self.assertEqual(beta_by_name["ZT_torch_gotoobj_state_plus_target_visibility_b005_long"], 0.05)
+        self.assertEqual(beta_by_name["ZU_torch_gotoobj_state_plus_target_visibility_b0075_long"], 0.075)
+        self.assertEqual(beta_by_name["ZR_torch_gotoobj_state_plus_target_visibility_b010_long"], 0.1)
+        for condition in parsed.conditions:
+            self.assertEqual(condition.episodes, 84)
+            self.assertEqual(condition.decoder_delay_episodes, 8)
+        for condition in parsed.conditions[1:]:
+            self.assertEqual(condition.representation_objective, "state_plus_target_visibility")
+
     def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")
         parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
