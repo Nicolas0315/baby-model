@@ -50,7 +50,8 @@ Updated: 2026-06-29 JST
   - v0.7 optional neural encoder pilot: `https://github.com/Nicolas0315/baby-model/issues/11` closed
   - v0.8 optional deep-learning/GPU lane: `https://github.com/Nicolas0315/baby-model/issues/12` closed
   - v0.9 full-fleet GPU-ready PyTorch lane: `https://github.com/Nicolas0315/baby-model/issues/13`
-  - v1.0 multi-seed GPU PyTorch sweep: `https://github.com/Nicolas0315/baby-model/issues/14` open
+  - v1.0 multi-seed GPU PyTorch sweep: `https://github.com/Nicolas0315/baby-model/issues/14` closed
+  - v1.1 revise PyTorch AD/DA conditions: `https://github.com/Nicolas0315/baby-model/issues/15` open
 - GitHub tracking:
   - milestone: `v0.1 Baby AD/DA`
   - labels: `experiment`, `fleet`, `ci-blocker`, `research-framework`
@@ -224,9 +225,8 @@ Updated: 2026-06-29 JST
 
 ## Next
 
-- Close issue #14 after push and green CI. The next research issue should focus
-  on changing the AD/DA PyTorch conditions, not just rerunning the same smoke
-  config.
+- Execute issue #15 by changing the PyTorch AD/DA condition design, not just
+  rerunning the current negative sweep.
 
 ## Not Yet Proven
 
