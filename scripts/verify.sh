@@ -10,6 +10,8 @@ python3 -m baby_model.cli verify-config configs/experiments/v0-smoke.json
 python3 -m baby_model.cli verify-config configs/experiments/v02-sweep.json
 python3 -m baby_model.cli verify-config configs/experiments/v03-sweep.json
 python3 -m json.tool configs/experiments/minigrid-torch-unlock-smoke.json >/dev/null
+python3 -m json.tool configs/fleet/gpu-wheel-policy.json >/dev/null
+python3 -m baby_model.gpu_compat --config configs/fleet/gpu-wheel-policy.json >/dev/null
 bash -n scripts/*.sh
 MINIGRID_SETUP_DRY_RUN=1 \
 MINIGRID_ENV_BACKEND=venv \

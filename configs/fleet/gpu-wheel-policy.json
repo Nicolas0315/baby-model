@@ -1,0 +1,33 @@
+{
+  "created_at": "2026-06-29 JST",
+  "source_commit": "15fb966308f642f282f03fe35888a51a0179c172",
+  "workers": [
+    {
+      "worker_class": "gpu-worker-a",
+      "driver_version": "596.21",
+      "cuda_umd": "13.2",
+      "requires_cuda13_wheel": false,
+      "primary_wheel": "cu132",
+      "fallback_wheel": "cpu",
+      "fallback_device": "cpu"
+    },
+    {
+      "worker_class": "gpu-worker-b",
+      "driver_version": "576.88",
+      "cuda_umd": "12.9",
+      "requires_cuda13_wheel": true,
+      "primary_wheel": "cu132",
+      "fallback_wheel": "cpu",
+      "fallback_device": "cpu"
+    },
+    {
+      "worker_class": "gpu-worker-c",
+      "driver_version": "610.62",
+      "cuda_umd": "13.3",
+      "requires_cuda13_wheel": false,
+      "primary_wheel": "cu132",
+      "fallback_wheel": "cpu",
+      "fallback_device": "cpu"
+    }
+  ]
+}

@@ -18,6 +18,7 @@ from baby_model.experiment import (
     validate_config,
     write_run,
 )
+from baby_model.gpu_compat import DriverVersion, build_report, evaluate_worker, parse_worker_policy
 from baby_model.envs import BabyGrid
 from baby_model.minigrid_curriculum import (
     curriculum_summary_markdown,
@@ -784,6 +785,54 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         self.assertIn("PyTorch DQN", summary)
+
+    def test_gpu_compat_policy_is_dependency_free(self) -> None:
+        self.assertLess(DriverVersion.parse("576.88"), DriverVersion.parse("580.0"))
+        self.assertLess(DriverVersion.parse("560.99"), DriverVersion.parse("580.0"))
+
+        ready = evaluate_worker(
+            parse_worker_policy(
+                {
+                    "worker_class": "ready",
+                    "driver_version": "596.21",
+                    "cuda_umd": "13.2",
+                    "primary_wheel": "cu132",
+                }
+            )
+        )
+        self.assertEqual(ready["status"], "gpu_candidate")
+        self.assertEqual(ready["primary_index_url"], "https://download.pytorch.org/whl/cu132")
+
+        blocked = evaluate_worker(
+            parse_worker_policy(
+                {
+                    "worker_class": "driver-blocked",
+                    "driver_version": "576.88",
+                    "cuda_umd": "12.9",
+                    "requires_cuda13_wheel": True,
+                    "primary_wheel": "cu132",
+                }
+            )
+        )
+        self.assertEqual(blocked["status"], "fallback_required")
+        self.assertIn("below", blocked["reason"])
+        self.assertIn("CUDA UMD 12", blocked["reason"])
+
+        report = build_report(
+            {
+                "created_at": "2026-06-29 JST",
+                "source_commit": "test",
+                "workers": [
+                    {
+                        "worker_class": "legacy-cuda",
+                        "driver_version": "596.21",
+                        "cuda_umd": "13.2",
+                        "primary_wheel": "cu126",
+                    }
+                ],
+            }
+        )
+        self.assertEqual(report["results"][0]["status"], "gpu_candidate")
 
 
 if __name__ == "__main__":

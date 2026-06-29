@@ -191,11 +191,18 @@ Updated: 2026-06-29 JST
   - both follow-up summaries matched the local CPU result:
     `A_torch_hard_only success_last=0.083`, `B_torch_encoder_first=0.000`,
     `E_torch_progress=0.000`.
+- Issue #13 GPU compatibility planning is implemented locally:
+  - `baby_model/gpu_compat.py`
+  - `configs/fleet/gpu-wheel-policy.json`
+  - `docs/experiments/gpu-compatibility-plan.md`
+  The policy keeps repo-visible worker names anonymous and classifies each GPU
+  worker into CUDA candidate vs. CPU-fallback-required using current driver,
+  CUDA UMD, and PyTorch wheel family constraints.
 
 ## Next
 
-- Work issue #13: full-fleet GPU-ready PyTorch lane with explicit driver/wheel
-  compatibility evidence and per-worker GPU fallback rules.
+- Run bounded strict `cu132` CUDA smoke for the GPU-candidate workers from
+  issue #13, and keep raw host-level evidence outside this repository.
 
 ## Not Yet Proven
 

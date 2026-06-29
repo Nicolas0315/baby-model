@@ -1,0 +1,91 @@
+# GPU Compatibility Plan
+
+Date: 2026-06-29 JST
+Issue: https://github.com/Nicolas0315/baby-model/issues/13
+
+## Purpose
+
+Issue #13 separates "PyTorch smoke exists everywhere" from "CUDA is proven on
+every GPU worker." The repository records anonymous worker classes only; exact
+hostnames, GPU model names, bus IDs, and raw `nvidia-smi` evidence stay outside
+this repository.
+
+## Source Check
+
+Retrieved: 2026-06-29 JST
+
+- PyTorch Start Locally: https://pytorch.org/get-started/locally/
+- PyTorch CUDA availability:
+  https://docs.pytorch.org/docs/2.12/generated/torch.cuda.is_available.html
+- NVIDIA CUDA Toolkit Release Notes:
+  https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html
+- NVIDIA CUDA Compatibility:
+  https://docs.nvidia.com/deploy/cuda-compatibility/
+
+Working interpretation:
+
+- PyTorch wheel indices remain explicit: CPU, `cu126`, `cu130`, and `cu132`.
+- CUDA 13-family wheels require a CUDA 13-capable driver branch; workers with a
+  CUDA 12 UMD must use CPU fallback until the driver path is changed.
+- A newer architecture that failed with `no kernel image is available` on a
+  CUDA 12.6 wheel is treated as CUDA 13-wheel-only for this lane.
+
+## Anonymous Worker Policy
+
+Policy source: `configs/fleet/gpu-wheel-policy.json`
+
+Generate the current policy report:
+
+```sh
+python3 -m baby_model.gpu_compat \
+  --config configs/fleet/gpu-wheel-policy.json
+```
+
+Current anonymous policy:
+
+| worker_class | primary | fallback | status |
+| --- | --- | --- | --- |
+| `gpu-worker-a` | `cu132` | `cpu` | GPU candidate |
+| `gpu-worker-b` | `cu132` after driver compatibility work | `cpu` | fallback required |
+| `gpu-worker-c` | `cu132` | `cpu` | GPU candidate |
+
+## Bounded Smoke Rule
+
+For strict GPU proof, run without CPU fallback:
+
+```sh
+MODE=minigrid \
+MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
+MINIGRID_TORCH_SEED=601 \
+MINIGRID_TORCH_DEVICE=cuda \
+MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cu132 \
+MINIGRID_ENV_BACKEND=uv \
+MINIGRID_PYTHON=3.12 \
+MINIGRID_VENV_DIR=.venv-minigrid-gpu \
+./scripts/fleet_archive_run.sh wsl:host
+```
+
+For non-GPU evidence, allow CPU fallback:
+
+```sh
+MINIGRID_TORCH_CPU_FALLBACK=1
+```
+
+## Current State
+
+- `gpu-worker-a` already completed a CUDA smoke under issue #12 with `cu126`.
+  It should be re-tested with `cu132` for policy consistency.
+- `gpu-worker-b` is blocked for CUDA by driver/wheel compatibility and should
+  not be counted as GPU-proven until that external state changes.
+- `gpu-worker-c` has a CUDA 13-capable driver path but needs a bounded `cu132`
+  smoke because the previous `cu126` install lane was too slow for GPU proof.
+
+## Acceptance For Issue #13
+
+- `gpu-worker-a` and `gpu-worker-c` complete strict CUDA smoke with `cu132`, or
+  each has a command-output blocker.
+- `gpu-worker-b` remains documented as driver-blocked unless a driver update is
+  explicitly approved and verified separately.
+- Default `./scripts/verify.sh` and GitHub Actions remain green.
+- Host-level evidence stays outside this repository.
+
