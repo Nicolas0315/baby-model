@@ -26,6 +26,7 @@ CONTROLLABILITY_DIM = 1
 AFFORDANCE_PROGRESS_DIM = 16
 TRANSITION_GROUP_DIM = 16
 SUBGOAL_PROGRESS_DIM = 10
+STATE_PLUS_DELTA_DIM = AFFORDANCE_PROGRESS_DIM + AFFORDANCE_PROGRESS_DIM + TRANSITION_GROUP_DIM + SUBGOAL_PROGRESS_DIM
 ACTION_LEFT = 0
 ACTION_RIGHT = 1
 ACTION_FORWARD = 2
@@ -105,6 +106,7 @@ class TorchDQNAgent:
             "affordance_progress",
             "transition_group",
             "subgoal_progress",
+            "state_plus_delta",
         }:
             target_dim = _representation_target_dim(representation_objective, config.feature_dim)
             self.representation_predictor = build_next_feature_predictor(
@@ -200,6 +202,7 @@ class TorchDQNAgent:
             "affordance_progress",
             "transition_group",
             "subgoal_progress",
+            "state_plus_delta",
         } or self.representation_predictor is None:
             raise ValueError(f"unsupported representation objective: {self.representation_objective}")
 
@@ -455,6 +458,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             "affordance_progress",
             "transition_group",
             "subgoal_progress",
+            "state_plus_delta",
         }:
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
@@ -1016,6 +1020,8 @@ def _representation_target_dim(representation_objective: str, feature_dim: int) 
         return TRANSITION_GROUP_DIM
     if representation_objective == "subgoal_progress":
         return SUBGOAL_PROGRESS_DIM
+    if representation_objective == "state_plus_delta":
+        return STATE_PLUS_DELTA_DIM
     raise ValueError(f"unsupported representation objective: {representation_objective}")
 
 
@@ -1040,6 +1046,8 @@ def representation_target_for_objective(
         return transition_group_vector(observation, next_observation)
     if condition.representation_objective == "subgoal_progress":
         return subgoal_progress_vector(observation, next_observation)
+    if condition.representation_objective == "state_plus_delta":
+        return state_plus_delta_vector(observation, next_observation)
     if condition.representation_objective == "action_prior":
         return action_prior_label(observation, actions)
     return []
@@ -1148,6 +1156,14 @@ def subgoal_progress_vector(observation: Any, next_observation: Any) -> list[flo
         1.0 if front_became_goal else 0.0,
         1.0 if unlock_chain_progress else 0.0,
     ]
+
+
+def state_plus_delta_vector(observation: Any, next_observation: Any) -> list[float]:
+    current_state = affordance_progress_vector(observation)
+    next_state = affordance_progress_vector(next_observation)
+    transition_delta = transition_group_vector(observation, next_observation)
+    subgoal_delta = subgoal_progress_vector(observation, next_observation)
+    return current_state + next_state + transition_delta + subgoal_delta
 
 
 def _subgoal_snapshot(observation: Any) -> dict[str, Any]:

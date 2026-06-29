@@ -385,11 +385,23 @@ Updated: 2026-06-29 JST
   subgoal-progress conditions ran non-zero representation updates but did not
   improve final-stage reward. Treat v2.1 as negative evidence for a sparse
   explicit subgoal event target under the current ladder.
+- Issue #27 v2.2 state-plus-delta representation target is implemented:
+  - `configs/experiments/minigrid-torch-adda-v22.json`
+  - `docs/experiments/minigrid-torch-adda-v22.md`
+  - PyTorch DQN now supports a `state_plus_delta` representation objective that
+    predicts current affordance state, next affordance state, transition mask,
+    and subgoal-progress events as one 58-dimensional target.
+- Local v2.2 CPU smoke passed in the existing optional PyTorch venv with
+  `torch==2.12.1` and `device=cpu`, but did not meet the CUDA escalation rule.
+  `ZD_torch_state_plus_delta_delay` reached one all-window final-stage success
+  (`success_all=0.021`), but both state-plus-delta conditions had final-stage
+  last-window success and return of `0.000`. Treat v2.2 as weak but
+  non-escalating target evidence.
 
 ## Next
 
-- Design a richer state-plus-delta representation target or a denser task ladder
-  with more observable key/door transitions before the final unlock stage.
+- Design a denser key-door ladder with more observable key pickup, locked-door,
+  open-door, and goal transitions before the final unlock stage.
 
 ## Not Yet Proven
 

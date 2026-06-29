@@ -54,6 +54,7 @@ from baby_model.minigrid_torch import (
     parse_minigrid_torch_config,
     run_minigrid_torch_curriculum_condition,
     select_torch_device,
+    state_plus_delta_vector,
     subgoal_progress_vector,
     task_signal_vector,
     torch_summary_markdown,
@@ -948,6 +949,27 @@ class ExperimentTest(unittest.TestCase):
         )
         self.assertEqual(approach, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
 
+    def test_minigrid_torch_state_plus_delta_vector_is_dependency_free(self) -> None:
+        before = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        after = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
+        before[0][0] = [5, 0, 0]
+        before[1][0] = [4, 0, 2]
+        after[1][0] = [4, 0, 0]
+        after[2][0] = [8, 0, 0]
+        before_observation = {"direction": 0, "mission": "unlock the door with the key", "image": before}
+        after_observation = {"direction": 1, "mission": "unlock the door with the key", "image": after}
+        vector = state_plus_delta_vector(before_observation, after_observation)
+        current = affordance_progress_vector(before_observation)
+        next_state = affordance_progress_vector(after_observation)
+        transition = transition_group_vector(before_observation, after_observation)
+        subgoal = subgoal_progress_vector(before_observation, after_observation)
+
+        self.assertEqual(len(vector), 58)
+        self.assertEqual(vector[:16], current)
+        self.assertEqual(vector[16:32], next_state)
+        self.assertEqual(vector[32:48], transition)
+        self.assertEqual(vector[48:], subgoal)
+
     def test_minigrid_torch_v14_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v14.json")
         parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1001)
@@ -1104,6 +1126,23 @@ class ExperimentTest(unittest.TestCase):
             ],
         )
         self.assertEqual(parsed.conditions[2].representation_objective, "subgoal_progress")
+        self.assertEqual(parsed.conditions[2].representation_beta, 0.3)
+        self.assertEqual(parsed.conditions[3].intrinsic_target, "auxiliary")
+
+    def test_minigrid_torch_v22_state_plus_delta_config_is_dependency_free(self) -> None:
+        config_path = Path("configs/experiments/minigrid-torch-adda-v22.json")
+        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1801)
+        names = [condition.name for condition in parsed.conditions]
+        self.assertEqual(
+            names,
+            [
+                "A_torch_hard_only_long",
+                "T_torch_controllability_delay",
+                "ZD_torch_state_plus_delta_delay",
+                "ZE_torch_state_plus_delta_aux_progress",
+            ],
+        )
+        self.assertEqual(parsed.conditions[2].representation_objective, "state_plus_delta")
         self.assertEqual(parsed.conditions[2].representation_beta, 0.3)
         self.assertEqual(parsed.conditions[3].intrinsic_target, "auxiliary")
 
