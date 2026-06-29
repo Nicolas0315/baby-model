@@ -639,18 +639,29 @@ Updated: 2026-06-29 JST
     `0.350` success_last; `0.376` vs `0.219` return_last).
   - Treat v2.19 as positive CPU-first evidence for combining state-plus-delta
     and semantic target-visibility signals, not yet CUDA or multi-seed proof.
+- Issue #45 v2.20 CUDA replication for the combined objective is complete:
+  - A bounded CUDA smoke on `gpu-worker-c` at commit
+    `b94f765331d807f89fde8f119e02461641e9218d` reproduced the same winner with
+    `torch==2.12.1+cu132`, `torch_cuda_available=True`, and `device=cuda`.
+  - CUDA `ZO_torch_gotoobj_state_plus_target_visibility_delay` beat `ZM` and
+    `ZN` on final-stage last-window success (`0.600` vs `0.300` and `0.100`)
+    and return (`0.376` vs `0.157` and `0.062`) with `1760` representation
+    updates.
+  - CUDA `ZO` also beat the matched no-representation curriculum (`0.600` vs
+    `0.350` success_last; `0.376` vs `0.219` return_last).
+  - Treat v2.20 as positive single-seed CUDA replication evidence, not yet
+    multi-seed proof.
 
 ## Next
 
-- Run a bounded CUDA replication for the v2.19 combined
-  `state_plus_target_visibility` objective before multi-seed escalation.
+- Run a CUDA multi-seed sweep for the combined `state_plus_target_visibility`
+  objective before treating it as a stable representation winner.
 
 ## Not Yet Proven
 
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
   compatibility and needs an explicit external state change before rerun.
 - A stable best representation-driven AD/DA winner across multiple CUDA seeds.
-- CUDA and multi-seed proof for the combined `state_plus_target_visibility`
-  objective.
+- Multi-seed proof for the combined `state_plus_target_visibility` objective.
 - Direct mission-preservation probe inside the RL runner.
 - Full objective completion.

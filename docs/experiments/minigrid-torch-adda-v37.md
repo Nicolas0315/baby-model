@@ -78,3 +78,28 @@ in this smoke.
 Conclusion: the combined `state_plus_target_visibility` objective is promising
 enough for a bounded CUDA replication lane. This is still single-seed CPU
 evidence, not CUDA or multi-seed proof.
+
+## CUDA Replication
+
+A bounded single-seed CUDA smoke completed on `gpu-worker-c` at source commit
+`b94f765331d807f89fde8f119e02461641e9218d` with `torch==2.12.1+cu132`,
+`torch_cuda_available=True`, and `device=cuda`.
+
+Summary artifact on the worker:
+
+`.tmp/verify-minigrid/torch/20260629T134438Z/summary.md`
+
+| condition | final_stage | success_all | success_last | return_last | rep_loss | rep_updates | updates |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ZK_torch_gotoobj_curriculum_no_repr_delay` | `goto_obj_eval` | 0.417 | 0.350 | 0.219 | 0.0000 | 0 | 1882 |
+| `ZM_torch_gotoobj_state_plus_delta_matched_delay` | `goto_obj_eval` | 0.292 | 0.300 | 0.157 | 0.0044 | 2185 | 2050 |
+| `ZN_torch_gotoobj_target_visibility_matched_delay` | `goto_obj_eval` | 0.083 | 0.100 | 0.062 | 0.0031 | 2331 | 2196 |
+| `ZO_torch_gotoobj_state_plus_target_visibility_delay` | `goto_obj_eval` | 0.542 | 0.600 | 0.376 | 0.0060 | 1760 | 1625 |
+
+Decision: v2.20 met the CUDA replication rule. `ZO` beat both `ZM` and `ZN`
+on final-stage last-window success and return, beat the matched
+no-representation curriculum, and ran non-zero representation updates.
+
+Conclusion: v2.20 is positive single-seed CUDA replication evidence for the
+combined `state_plus_target_visibility` objective. It still does not prove
+multi-seed stability; the next step should be a bounded CUDA multi-seed sweep.
