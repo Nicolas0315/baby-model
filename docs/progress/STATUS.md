@@ -711,11 +711,24 @@ Updated: 2026-06-29 JST
     `target_near_last=0.700`.
   - This is enough to justify bounded CUDA replication for the beta `0.1`
     combined objective, not enough to claim stability.
+- Issue #49 v2.25 CUDA replication for the beta `0.1` combined objective is
+  complete:
+  - A bounded CUDA smoke ran on `gpu-worker-c` at commit
+    `cabadbebd418872ecc6c839a56fdd3e0a703b5c3`.
+  - Setup proved `torch==2.12.1+cu132`, `torch_cuda_available=True`,
+    `torch_cuda_device_count=1`, and `device=cuda`.
+  - CUDA reproduced the same seed-`3401` table as the CPU gate.
+  - `ZR_torch_gotoobj_state_plus_target_visibility_b010` again won:
+    `success_last=0.450`, `return_last=0.247`,
+    `target_visible_last=0.900`, `target_center_last=0.550`,
+    `target_near_last=0.700`.
+  - Treat v2.25 as positive single-seed CUDA replication evidence, not
+    multi-seed stability proof.
 
 ## Next
 
-- Open and run a bounded CUDA replication for the v2.24 beta `0.1`
-  combined objective before any multi-seed CUDA sweep.
+- Run a bounded multi-seed CUDA sweep for the v2.24 beta `0.1` combined
+  objective before treating it as a stable representation winner.
 
 ## Not Yet Proven
 
@@ -725,5 +738,5 @@ Updated: 2026-06-29 JST
 - A redesigned objective that beats the no-representation curriculum and the
   current best representation baselines under the mission-preservation probe.
   v2.23's single-head mission-conditioned target did not pass this gate, while
-  v2.24 beta `0.1` passed only a single CPU seed so far.
+  v2.24 beta `0.1` has passed one CPU seed and one matching CUDA seed.
 - Full objective completion.

@@ -57,3 +57,36 @@ single-objective representation baselines on:
 
 This is sufficient to open a bounded CUDA replication issue for the beta 0.1
 combined objective. It is not multi-seed proof.
+
+## CUDA Replication
+
+Issue: https://github.com/Nicolas0315/baby-model/issues/49
+
+A bounded CUDA smoke completed on `gpu-worker-c` at source commit
+`cabadbebd418872ecc6c839a56fdd3e0a703b5c3`. Setup proved:
+
+- `torch_version=2.12.1+cu132`
+- `torch_cuda_available=True`
+- `torch_cuda_device_count=1`
+- `device=cuda`
+
+Host-level evidence is kept outside the repository at:
+
+`/Users/s30519/work/docs/research/baby-model/fleet-torch-adda-v39-2026-06-29.md`
+
+CUDA artifact:
+
+`.tmp/verify-minigrid/torch/20260629T142743Z/summary.md`
+
+| condition | beta | success_last | return_last | target_visible_last | target_center_last | target_near_last | rep_updates |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ZK_torch_gotoobj_curriculum_no_repr_delay` | 0.0 | 0.150 | 0.063 | 0.250 | 0.150 | 0.200 | 0 |
+| `ZM_torch_gotoobj_state_plus_delta_matched_delay` | 0.3 | 0.100 | 0.050 | 0.350 | 0.100 | 0.200 | 2321 |
+| `ZN_torch_gotoobj_target_visibility_matched_delay` | 0.3 | 0.100 | 0.083 | 0.450 | 0.100 | 0.300 | 2339 |
+| `ZR_torch_gotoobj_state_plus_target_visibility_b010` | 0.1 | 0.450 | 0.247 | 0.900 | 0.550 | 0.700 | 1991 |
+| `ZO_torch_gotoobj_state_plus_target_visibility_b030` | 0.3 | 0.200 | 0.118 | 0.550 | 0.250 | 0.250 | 2344 |
+| `ZS_torch_gotoobj_state_plus_target_visibility_b050` | 0.5 | 0.350 | 0.207 | 0.650 | 0.450 | 0.400 | 2172 |
+
+CUDA decision: `ZR` reproduced the CPU-positive direction on the same seed.
+This justifies a bounded multi-seed CUDA sweep, but still does not prove
+stability.
