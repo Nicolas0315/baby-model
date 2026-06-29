@@ -62,6 +62,8 @@ or task family.
 
 ## Current Result
 
+Source commit: `083069c13d40326a5312d7ffe44ea0b297fe1f2a`
+
 A local CPU smoke passed in the existing optional PyTorch venv with
 `torch==2.12.1` and `device=cpu`.
 
@@ -79,3 +81,18 @@ Local conclusion: `Q_torch_curriculum_task_signal_aux_progress` met the
 decision rule on CPU by beating the hard-only baseline on final-stage
 last-window success. Treat this as a positive smoke signal only; require bounded
 CUDA smoke before escalating to a multi-seed GPU sweep.
+
+A bounded CUDA smoke completed on `gpu-worker-c` with `torch==2.12.1+cu132`,
+`torch_cuda_available=True`, and `device=cuda`.
+
+| condition | final_stage | success_all | success_last | return_last | rep_loss | rep_updates | updates |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `A_torch_hard_only_long` | `unlock_eval` | 0.021 | 0.050 | 0.045 | 0.0000 | 0 | 5691 |
+| `P_torch_curriculum_task_signal_delay` | `unlock_eval` | 0.000 | 0.000 | 0.000 | 0.0065 | 7511 | 7264 |
+| `Q_torch_curriculum_task_signal_aux_progress` | `unlock_eval` | 0.021 | 0.050 | 0.042 | 0.0064 | 7441 | 7186 |
+
+CUDA conclusion: `Q_torch_curriculum_task_signal_aux_progress` tied the
+hard-only baseline on last-window and all-window success, but had slightly
+lower final-stage return. This does not meet the escalation rule. Do not run a
+multi-seed GPU sweep for v1.5; use this as evidence that the current curriculum
+can recover isolated success but does not yet robustly beat the hard-only DQN.

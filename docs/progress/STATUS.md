@@ -282,11 +282,18 @@ Updated: 2026-06-29 JST
   beat `A_torch_hard_only_long` by last-window success (`0.050` vs `0.000`)
   and return (`0.042` vs `0.000`). This is a positive local smoke signal, but
   not yet a robust GPU result.
+- A bounded v1.5 CUDA smoke completed on `gpu-worker-c` at commit
+  `083069c13d40326a5312d7ffe44ea0b297fe1f2a`. The run was executable on
+  `torch==2.12.1+cu132` and `device=cuda`. `Q_torch_curriculum_task_signal_aux_progress`
+  tied the hard-only baseline on final-stage last-window success (`0.050`) and
+  all-window success (`0.021`), but had lower final-stage return (`0.042` vs
+  `0.045`). This does not meet the v1.5 escalation rule, so do not run a
+  multi-seed GPU sweep for this condition family.
 
 ## Next
 
-- Run bounded v1.5 CUDA smoke, then escalate to a multi-seed GPU sweep only if
-  the documented decision rule still holds on CUDA.
+- Close issue #19 after push/green CI, then open the next issue for a v1.6
+  AD/DA redesign beyond this curriculum-backed task-signal condition family.
 
 ## Not Yet Proven
 
