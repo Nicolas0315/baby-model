@@ -16,3 +16,7 @@ Repo-specific rules:
 - Do not store API keys, SSH material, tokens, cookies, or personal data in this
   repository.
 
+
+---
+
+グローバル基準は `~/work/agent-context/AGENTS.MD` を継承。上記はリポ固有差分。
