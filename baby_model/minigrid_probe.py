@@ -68,7 +68,9 @@ def write_probe(report: dict[str, Any], output_dir: Path) -> Path:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "probe.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "probe.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (run_dir / "summary.md").write_text(summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():
@@ -121,7 +123,9 @@ def _probe_env(gym: Any, env_id: str, episodes: int, max_steps: int, seed: int) 
             total_return = 0.0
             steps = 0
             for _ in range(max_steps):
-                observation, reward, terminated, truncated, _info = env.step(env.action_space.sample())
+                observation, reward, terminated, truncated, _info = env.step(
+                    env.action_space.sample()
+                )
                 total_return += float(reward)
                 steps += 1
                 if float(reward) > 0.0:

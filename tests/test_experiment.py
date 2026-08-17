@@ -27,7 +27,11 @@ from baby_model.minigrid_curriculum import (
     parse_minigrid_curriculum_config,
     run_minigrid_curriculum_suite,
 )
-from baby_model.minigrid_experiment import encode_observation, parse_minigrid_config, run_minigrid_suite
+from baby_model.minigrid_experiment import (
+    encode_observation,
+    parse_minigrid_config,
+    run_minigrid_suite,
+)
 from baby_model.minigrid_linear import (
     LinearQAgent,
     linear_features,
@@ -112,14 +116,14 @@ class ExperimentTest(unittest.TestCase):
             config={
                 "environment": {"size": 5, "max_steps": 20},
                 "conditions": [
-                        {
-                            "name": "tiny",
-                            "encoder_mode": "coarse",
-                            "episodes": 4,
-                            "decoder_delay_episodes": 1,
-                            "intrinsic_beta": 0.01,
-                            "intrinsic_mode": "progress",
-                        }
+                    {
+                        "name": "tiny",
+                        "encoder_mode": "coarse",
+                        "episodes": 4,
+                        "decoder_delay_episodes": 1,
+                        "intrinsic_beta": 0.01,
+                        "intrinsic_mode": "progress",
+                    }
                 ],
             },
             seed=1,
@@ -378,7 +382,9 @@ class ExperimentTest(unittest.TestCase):
                 print("fake-reset")
                 return observation, {}
 
-            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+            def step(
+                self, action: int
+            ) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
                 print("fake-step")
                 return observation, 0.0, True, False, {}
 
@@ -482,7 +488,9 @@ class ExperimentTest(unittest.TestCase):
             def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
                 return observation, {}
 
-            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+            def step(
+                self, action: int
+            ) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
                 reward = 1.0 if self.env_id == "FakeEval-v0" else 0.0
                 return observation, reward, True, False, {}
 
@@ -549,7 +557,9 @@ class ExperimentTest(unittest.TestCase):
                 return [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
 
         observation = {"image": FakeImage(), "direction": 1, "mission": "unlock red door"}
-        self.assertEqual(linear_features(observation, "raw", 256), linear_features(observation, "raw", 256))
+        self.assertEqual(
+            linear_features(observation, "raw", 256), linear_features(observation, "raw", 256)
+        )
         self.assertLessEqual(max(linear_features(observation, "raw", 256)), 255)
 
         class FakeActionSpace:
@@ -564,7 +574,9 @@ class ExperimentTest(unittest.TestCase):
             def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
                 return observation, {}
 
-            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+            def step(
+                self, action: int
+            ) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
                 return observation, 1.0, True, False, {}
 
             def close(self) -> None:
@@ -717,7 +729,9 @@ class ExperimentTest(unittest.TestCase):
             def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
                 return observation, {}
 
-            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+            def step(
+                self, action: int
+            ) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
                 return observation, 1.0, True, False, {}
 
             def close(self) -> None:
@@ -800,9 +814,18 @@ class ExperimentTest(unittest.TestCase):
             def device(self, name: str) -> str:
                 return f"device:{name}"
 
-        self.assertEqual(select_torch_device(FakeTorch(cuda_available=True, mps_available=True), "auto"), "device:cuda")
-        self.assertEqual(select_torch_device(FakeTorch(cuda_available=False, mps_available=True), "auto"), "device:mps")
-        self.assertEqual(select_torch_device(FakeTorch(cuda_available=False, mps_available=False), "auto"), "device:cpu")
+        self.assertEqual(
+            select_torch_device(FakeTorch(cuda_available=True, mps_available=True), "auto"),
+            "device:cuda",
+        )
+        self.assertEqual(
+            select_torch_device(FakeTorch(cuda_available=False, mps_available=True), "auto"),
+            "device:mps",
+        )
+        self.assertEqual(
+            select_torch_device(FakeTorch(cuda_available=False, mps_available=False), "auto"),
+            "device:cpu",
+        )
 
         summary = torch_summary_markdown(
             {
@@ -829,7 +852,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v11_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v11.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=601)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=601
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -847,7 +872,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v12_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v12.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=701)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=701
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -868,7 +895,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v13_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v13.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=901)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=901
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -903,7 +932,9 @@ class ExperimentTest(unittest.TestCase):
         self.assertAlmostEqual(vector[13], 0.25)
 
     def test_minigrid_torch_action_prior_label_is_dependency_free(self) -> None:
-        def observation_with_front(front_cell: list[int], mission: str = "unlock the door with the key") -> dict[str, object]:
+        def observation_with_front(
+            front_cell: list[int], mission: str = "unlock the door with the key"
+        ) -> dict[str, object]:
             image = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
             image[2][3] = [2, 0, 0]
             image[3][5] = front_cell
@@ -912,7 +943,12 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(action_prior_label(observation_with_front([5, 0, 0]), actions=7), 3)
         self.assertEqual(action_prior_label(observation_with_front([4, 0, 2]), actions=7), 5)
         self.assertEqual(action_prior_label(observation_with_front([2, 0, 0]), actions=7), 0)
-        self.assertEqual(action_prior_label(observation_with_front([8, 0, 0], mission="go to the goal"), actions=7), 2)
+        self.assertEqual(
+            action_prior_label(
+                observation_with_front([8, 0, 0], mission="go to the goal"), actions=7
+            ),
+            2,
+        )
 
     def test_minigrid_torch_controllability_target_is_dependency_free(self) -> None:
         self.assertEqual(controllability_target({1: 1.0, 2: 0.0}, {1: 1.0}), [0.0])
@@ -974,7 +1010,11 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(relation_vector[2 * 7 + 5], 1.0)
 
     def test_minigrid_torch_mission_preservation_probe_is_dependency_free(self) -> None:
-        absent = {"direction": 0, "mission": "go to the red ball", "image": [[[0, 0, 0] for _ in range(7)] for _ in range(7)]}
+        absent = {
+            "direction": 0,
+            "mission": "go to the red ball",
+            "image": [[[0, 0, 0] for _ in range(7)] for _ in range(7)],
+        }
         center_near_image = [[[0, 0, 0] for _ in range(7)] for _ in range(7)]
         center_near_image[3][5] = [6, 0, 0]
         center_near = {"direction": 0, "mission": "go to the red ball", "image": center_near_image}
@@ -1032,8 +1072,16 @@ class ExperimentTest(unittest.TestCase):
         before[1][0] = [4, 0, 2]
         after[1][0] = [4, 0, 0]
         after[2][0] = [8, 0, 0]
-        before_observation = {"direction": 0, "mission": "unlock the door with the key", "image": before}
-        after_observation = {"direction": 1, "mission": "unlock the door with the key", "image": after}
+        before_observation = {
+            "direction": 0,
+            "mission": "unlock the door with the key",
+            "image": before,
+        }
+        after_observation = {
+            "direction": 1,
+            "mission": "unlock the door with the key",
+            "image": after,
+        }
         vector = state_plus_delta_vector(before_observation, after_observation)
         current = affordance_progress_vector(before_observation)
         next_state = affordance_progress_vector(after_observation)
@@ -1054,7 +1102,9 @@ class ExperimentTest(unittest.TestCase):
         before_observation = {"direction": 0, "mission": "go to the red ball", "image": before}
         after_observation = {"direction": 1, "mission": "go to the red ball", "image": after}
         state_delta = state_plus_delta_vector(before_observation, after_observation)
-        target_visibility = target_visibility_transition_vector(before_observation, after_observation)
+        target_visibility = target_visibility_transition_vector(
+            before_observation, after_observation
+        )
         vector = state_plus_target_visibility_vector(before_observation, after_observation)
 
         self.assertEqual(len(vector), 107)
@@ -1071,8 +1121,12 @@ class ExperimentTest(unittest.TestCase):
         unknown_observation = {"direction": 0, "mission": "go to the thing", "image": visible}
 
         absent_to_absent = mission_target_transition_vector(absent_observation, absent_observation)
-        absent_to_visible = mission_target_transition_vector(absent_observation, visible_observation)
-        unknown_to_visible = mission_target_transition_vector(unknown_observation, visible_observation)
+        absent_to_visible = mission_target_transition_vector(
+            absent_observation, visible_observation
+        )
+        unknown_to_visible = mission_target_transition_vector(
+            unknown_observation, visible_observation
+        )
         combined = state_plus_mission_target_vector(absent_observation, visible_observation)
 
         self.assertEqual(len(absent_to_absent), 49)
@@ -1081,12 +1135,16 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(sum(absent_to_visible), 1.0)
         self.assertEqual(absent_to_visible[3], 1.0)
         self.assertEqual(len(combined), 107)
-        self.assertEqual(combined[:58], state_plus_delta_vector(absent_observation, visible_observation))
+        self.assertEqual(
+            combined[:58], state_plus_delta_vector(absent_observation, visible_observation)
+        )
         self.assertEqual(combined[58:], absent_to_visible)
 
     def test_minigrid_torch_v14_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v14.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1001)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1001
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -1103,8 +1161,12 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v15_curriculum_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v15.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1101)
-        self.assertEqual([stage.name for stage in parsed.stages], ["empty_warmup", "goto_warmup", "unlock_eval"])
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1101
+        )
+        self.assertEqual(
+            [stage.name for stage in parsed.stages], ["empty_warmup", "goto_warmup", "unlock_eval"]
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -1127,7 +1189,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v16_action_prior_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v16.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1201)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1201
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -1145,7 +1209,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v17_controllability_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v17.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1301)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1301
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -1161,7 +1227,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v18_dense_ladder_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v18.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1401)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1401
+        )
         self.assertEqual(
             [stage.name for stage in parsed.stages],
             [
@@ -1186,7 +1254,9 @@ class ExperimentTest(unittest.TestCase):
         )
         active = dict(parsed.active_stages_by_condition)
         self.assertEqual(active["A_torch_hard_only_long"], ("unlock_eval",))
-        self.assertEqual(active["T_torch_controllability_delay"], ("empty_warmup", "goto_warmup", "unlock_eval"))
+        self.assertEqual(
+            active["T_torch_controllability_delay"], ("empty_warmup", "goto_warmup", "unlock_eval")
+        )
         self.assertIn("doorkey_warmup", active["V_torch_dense_ladder_controllability_delay"])
         self.assertEqual(parsed.conditions[2].episodes, 144)
         self.assertEqual(parsed.conditions[2].representation_objective, "controllability")
@@ -1194,7 +1264,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v19_affordance_progress_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v19.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1501)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1501
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -1211,7 +1283,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v20_transition_group_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v20.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1601)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1601
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -1228,7 +1302,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v21_subgoal_progress_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v21.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1701)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1701
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -1245,7 +1321,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v22_state_plus_delta_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v22.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1801)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1801
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -1262,7 +1340,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_torch_v23_dense_keydoor_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v23.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=1901)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=1901
+        )
         self.assertEqual(
             [stage.name for stage in parsed.stages],
             [
@@ -1288,15 +1368,21 @@ class ExperimentTest(unittest.TestCase):
         )
         active = dict(parsed.active_stages_by_condition)
         self.assertEqual(active["A_torch_hard_only_long"], ("unlock_eval",))
-        self.assertEqual(active["T_torch_controllability_delay"], ("empty_warmup", "goto_warmup", "unlock_eval"))
-        self.assertIn("unlock_pickup_warmup", active["ZF_torch_dense_keydoor_state_plus_delta_delay"])
+        self.assertEqual(
+            active["T_torch_controllability_delay"], ("empty_warmup", "goto_warmup", "unlock_eval")
+        )
+        self.assertIn(
+            "unlock_pickup_warmup", active["ZF_torch_dense_keydoor_state_plus_delta_delay"]
+        )
         self.assertEqual(parsed.conditions[2].episodes, 164)
         self.assertEqual(parsed.conditions[2].representation_objective, "state_plus_delta")
         self.assertEqual(parsed.conditions[3].intrinsic_target, "auxiliary")
 
     def test_minigrid_torch_v24_two_phase_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-torch-adda-v24.json")
-        parsed = parse_minigrid_torch_config(json.loads(config_path.read_text(encoding="utf-8")), seed=2001)
+        parsed = parse_minigrid_torch_config(
+            json.loads(config_path.read_text(encoding="utf-8")), seed=2001
+        )
         names = [condition.name for condition in parsed.conditions]
         self.assertEqual(
             names,
@@ -1308,7 +1394,10 @@ class ExperimentTest(unittest.TestCase):
             ],
         )
         active = dict(parsed.active_stages_by_condition)
-        self.assertEqual(active["ZH_torch_two_phase_state_plus_delta_frozen"], tuple(stage.name for stage in parsed.stages))
+        self.assertEqual(
+            active["ZH_torch_two_phase_state_plus_delta_frozen"],
+            tuple(stage.name for stage in parsed.stages),
+        )
         two_phase = parsed.conditions[3]
         self.assertEqual(two_phase.episodes, 164)
         self.assertEqual(two_phase.decoder_delay_episodes, 116)
@@ -1401,7 +1490,9 @@ class ExperimentTest(unittest.TestCase):
         )
         self.assertEqual(parsed.conditions[0].representation_objective, "none")
         self.assertEqual(parsed.conditions[1].representation_objective, "state_plus_delta")
-        self.assertEqual(parsed.conditions[2].representation_objective, "target_visibility_transition")
+        self.assertEqual(
+            parsed.conditions[2].representation_objective, "target_visibility_transition"
+        )
         for condition in parsed.conditions:
             self.assertEqual(condition.episodes, 42)
             self.assertEqual(condition.decoder_delay_episodes, 4)
@@ -1425,8 +1516,12 @@ class ExperimentTest(unittest.TestCase):
         )
         self.assertEqual(parsed.conditions[0].representation_objective, "none")
         self.assertEqual(parsed.conditions[1].representation_objective, "state_plus_delta")
-        self.assertEqual(parsed.conditions[2].representation_objective, "target_visibility_transition")
-        self.assertEqual(parsed.conditions[3].representation_objective, "state_plus_target_visibility")
+        self.assertEqual(
+            parsed.conditions[2].representation_objective, "target_visibility_transition"
+        )
+        self.assertEqual(
+            parsed.conditions[3].representation_objective, "state_plus_target_visibility"
+        )
         for condition in parsed.conditions:
             self.assertEqual(condition.episodes, 42)
             self.assertEqual(condition.decoder_delay_episodes, 4)
@@ -1475,7 +1570,9 @@ class ExperimentTest(unittest.TestCase):
                 "ZS_torch_gotoobj_state_plus_target_visibility_b050",
             ],
         )
-        beta_by_name = {condition.name: condition.representation_beta for condition in parsed.conditions}
+        beta_by_name = {
+            condition.name: condition.representation_beta for condition in parsed.conditions
+        }
         self.assertEqual(beta_by_name["ZR_torch_gotoobj_state_plus_target_visibility_b010"], 0.1)
         self.assertEqual(beta_by_name["ZO_torch_gotoobj_state_plus_target_visibility_b030"], 0.3)
         self.assertEqual(beta_by_name["ZS_torch_gotoobj_state_plus_target_visibility_b050"], 0.5)
@@ -1503,7 +1600,9 @@ class ExperimentTest(unittest.TestCase):
                 "ZW_torch_gotoobj_state_plus_target_visibility_b015",
             ],
         )
-        beta_by_name = {condition.name: condition.representation_beta for condition in parsed.conditions}
+        beta_by_name = {
+            condition.name: condition.representation_beta for condition in parsed.conditions
+        }
         self.assertEqual(beta_by_name["ZT_torch_gotoobj_state_plus_target_visibility_b005"], 0.05)
         self.assertEqual(beta_by_name["ZU_torch_gotoobj_state_plus_target_visibility_b0075"], 0.075)
         self.assertEqual(beta_by_name["ZR_torch_gotoobj_state_plus_target_visibility_b010"], 0.1)
@@ -1535,10 +1634,18 @@ class ExperimentTest(unittest.TestCase):
                 "ZR_torch_gotoobj_state_plus_target_visibility_b010_long",
             ],
         )
-        beta_by_name = {condition.name: condition.representation_beta for condition in parsed.conditions}
-        self.assertEqual(beta_by_name["ZT_torch_gotoobj_state_plus_target_visibility_b005_long"], 0.05)
-        self.assertEqual(beta_by_name["ZU_torch_gotoobj_state_plus_target_visibility_b0075_long"], 0.075)
-        self.assertEqual(beta_by_name["ZR_torch_gotoobj_state_plus_target_visibility_b010_long"], 0.1)
+        beta_by_name = {
+            condition.name: condition.representation_beta for condition in parsed.conditions
+        }
+        self.assertEqual(
+            beta_by_name["ZT_torch_gotoobj_state_plus_target_visibility_b005_long"], 0.05
+        )
+        self.assertEqual(
+            beta_by_name["ZU_torch_gotoobj_state_plus_target_visibility_b0075_long"], 0.075
+        )
+        self.assertEqual(
+            beta_by_name["ZR_torch_gotoobj_state_plus_target_visibility_b010_long"], 0.1
+        )
         for condition in parsed.conditions:
             self.assertEqual(condition.episodes, 84)
             self.assertEqual(condition.decoder_delay_episodes, 8)
@@ -1612,7 +1719,10 @@ class ExperimentTest(unittest.TestCase):
             actions=7,
         )
         self.assertEqual(set(target.keys()), {"state_plus_delta", "target_visibility_transition"})
-        self.assertEqual(target["state_plus_delta"], state_plus_delta_vector(before_observation, after_observation))
+        self.assertEqual(
+            target["state_plus_delta"],
+            state_plus_delta_vector(before_observation, after_observation),
+        )
         self.assertEqual(
             target["target_visibility_transition"],
             target_visibility_transition_vector(before_observation, after_observation),
@@ -1621,7 +1731,9 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(len(target["target_visibility_transition"]), 49)
 
     def test_minigrid_torch_two_head_config_rejects_ambiguous_betas(self) -> None:
-        config = json.loads(Path("configs/experiments/minigrid-torch-adda-v42.json").read_text(encoding="utf-8"))
+        config = json.loads(
+            Path("configs/experiments/minigrid-torch-adda-v42.json").read_text(encoding="utf-8")
+        )
         two_head = config["conditions"][2]
 
         scalar_beta_config = json.loads(json.dumps(config))
@@ -1673,7 +1785,9 @@ class ExperimentTest(unittest.TestCase):
             self.assertEqual(condition.decoder_delay_episodes, 4)
 
     def test_minigrid_torch_two_head_schedule_rejects_non_two_head_objectives(self) -> None:
-        config = json.loads(Path("configs/experiments/minigrid-torch-adda-v43.json").read_text(encoding="utf-8"))
+        config = json.loads(
+            Path("configs/experiments/minigrid-torch-adda-v43.json").read_text(encoding="utf-8")
+        )
         config["conditions"][1]["representation_schedule"] = "linear_anneal"
         config["conditions"][1]["representation_anneal_episodes"] = 4
         with self.assertRaisesRegex(ValueError, "representation schedule requires"):
@@ -1729,7 +1843,9 @@ class ExperimentTest(unittest.TestCase):
             ],
         )
         visibility_first = parsed.conditions[3]
-        self.assertEqual(visibility_first.representation_objective, "state_delta_and_target_visibility")
+        self.assertEqual(
+            visibility_first.representation_objective, "state_delta_and_target_visibility"
+        )
         self.assertEqual(visibility_first.representation_state_beta, 0.01)
         self.assertEqual(visibility_first.representation_target_visibility_beta, 0.065)
         visibility_heavy = parsed.conditions[4]
@@ -1872,9 +1988,13 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_repr_probe_v28_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v28.json")
-        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        parsed = parse_minigrid_representation_probe_config(
+            json.loads(config_path.read_text(encoding="utf-8"))
+        )
         self.assertEqual([env.name for env in parsed.envs], ["goto_red_ball", "goto_obj"])
-        self.assertEqual([env.env_id for env in parsed.envs], ["BabyAI-GoToRedBall-v0", "BabyAI-GoToObj-v0"])
+        self.assertEqual(
+            [env.env_id for env in parsed.envs], ["BabyAI-GoToRedBall-v0", "BabyAI-GoToObj-v0"]
+        )
         self.assertEqual(parsed.feature_dim, 1024)
         self.assertEqual(parsed.encoder_mode, "raw")
         self.assertEqual(parsed.feature_sets, ("raw_current", "affordance_current"))
@@ -1883,7 +2003,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_repr_probe_v29_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v29.json")
-        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        parsed = parse_minigrid_representation_probe_config(
+            json.loads(config_path.read_text(encoding="utf-8"))
+        )
         self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_encoder"))
         self.assertEqual(parsed.predictive_encoder.target_label, "changed")
         self.assertTrue(parsed.predictive_encoder.include_action)
@@ -1988,13 +2110,17 @@ class ExperimentTest(unittest.TestCase):
                         "mission_color": "red" if index < 6 else "blue",
                         "changed": "changed" if is_changed else "same",
                         "next_signature_bucket": f"bucket:{index % 4}",
-                        "target_visibility_transition": "absent->center_near" if is_changed else "absent->absent",
+                        "target_visibility_transition": "absent->center_near"
+                        if is_changed
+                        else "absent->absent",
                     },
                 }
             )
         encoder, training_report = train_predictive_encoder(transitions, config)
         self.assertEqual(training_report["target_label"], "changed")
-        self.assertGreaterEqual(training_report["test_accuracy"], training_report["test_majority_baseline"])
+        self.assertGreaterEqual(
+            training_report["test_accuracy"], training_report["test_majority_baseline"]
+        )
 
         report = evaluate_feature_set(
             transitions,
@@ -2003,7 +2129,10 @@ class ExperimentTest(unittest.TestCase):
             predictive_encoders={"predictive_encoder": encoder},
         )
         self.assertIn("changed", report["labels"])
-        self.assertGreaterEqual(report["labels"]["changed"]["accuracy"], report["labels"]["changed"]["majority_baseline"])
+        self.assertGreaterEqual(
+            report["labels"]["changed"]["accuracy"],
+            report["labels"]["changed"]["majority_baseline"],
+        )
 
     def test_minigrid_repr_feature_eval_uses_config_labels_only(self) -> None:
         config = parse_minigrid_representation_probe_config(
@@ -2014,7 +2143,11 @@ class ExperimentTest(unittest.TestCase):
                     "signature_buckets": 4,
                     "envs": [{"name": "fake", "env_id": "Fake-v0", "episodes": 1, "max_steps": 6}],
                 },
-                "features": {"feature_dim": 128, "encoder_mode": "raw", "feature_sets": ["raw_current"]},
+                "features": {
+                    "feature_dim": 128,
+                    "encoder_mode": "raw",
+                    "feature_sets": ["raw_current"],
+                },
                 "decision": {
                     "mode": "absolute_all_labels",
                     "labels": ["mission_object", "mission_color", "changed"],
@@ -2040,10 +2173,20 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_repr_probe_v30_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v30.json")
-        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
-        self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_changed", "predictive_next_signature"))
-        self.assertEqual([encoder.name for encoder in parsed.predictive_encoders], ["predictive_changed", "predictive_next_signature"])
-        self.assertEqual([encoder.target_label for encoder in parsed.predictive_encoders], ["changed", "next_signature_bucket"])
+        parsed = parse_minigrid_representation_probe_config(
+            json.loads(config_path.read_text(encoding="utf-8"))
+        )
+        self.assertEqual(
+            parsed.feature_sets, ("raw_current", "predictive_changed", "predictive_next_signature")
+        )
+        self.assertEqual(
+            [encoder.name for encoder in parsed.predictive_encoders],
+            ["predictive_changed", "predictive_next_signature"],
+        )
+        self.assertEqual(
+            [encoder.target_label for encoder in parsed.predictive_encoders],
+            ["changed", "next_signature_bucket"],
+        )
         self.assertEqual(parsed.decision.mode, "relative_to_reference")
         self.assertEqual(parsed.decision.baseline_feature_set, "raw_current")
         self.assertEqual(parsed.decision.reference_feature_set, "predictive_changed")
@@ -2053,7 +2196,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_repr_probe_v31_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v31.json")
-        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        parsed = parse_minigrid_representation_probe_config(
+            json.loads(config_path.read_text(encoding="utf-8"))
+        )
         self.assertEqual(parsed.policy, "scripted_object")
         self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_changed"))
         self.assertEqual(parsed.predictive_encoders[0].name, "predictive_changed")
@@ -2063,13 +2208,17 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_repr_probe_v32_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v32.json")
-        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        parsed = parse_minigrid_representation_probe_config(
+            json.loads(config_path.read_text(encoding="utf-8"))
+        )
         self.assertEqual(parsed.policy, "scripted_object")
         self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_next_signature"))
         self.assertEqual(parsed.predictive_encoders[0].name, "predictive_next_signature")
         self.assertEqual(parsed.predictive_encoders[0].target_label, "next_signature_bucket")
         self.assertEqual(parsed.decision.mode, "relative_to_baseline")
-        self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "next_signature_bucket"))
+        self.assertEqual(
+            parsed.decision.labels, ("mission_object", "mission_color", "next_signature_bucket")
+        )
         self.assertEqual(parsed.decision.candidate_feature_set, "predictive_next_signature")
         self.assertEqual(parsed.decision.transition_label, "next_signature_bucket")
         self.assertEqual(parsed.decision.transition_min_lift_delta, 0.01)
@@ -2077,7 +2226,9 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_repr_probe_v33_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v33.json")
-        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        parsed = parse_minigrid_representation_probe_config(
+            json.loads(config_path.read_text(encoding="utf-8"))
+        )
         self.assertEqual(parsed.policy, "scripted_object")
         self.assertEqual(
             parsed.feature_sets,
@@ -2092,7 +2243,9 @@ class ExperimentTest(unittest.TestCase):
             [True, False],
         )
         self.assertEqual(parsed.decision.mode, "relative_to_reference")
-        self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "next_signature_bucket"))
+        self.assertEqual(
+            parsed.decision.labels, ("mission_object", "mission_color", "next_signature_bucket")
+        )
         self.assertEqual(parsed.decision.baseline_feature_set, "raw_current")
         self.assertEqual(parsed.decision.reference_feature_set, "predictive_next_signature")
         self.assertEqual(parsed.decision.candidate_feature_set, "predictive_next_signature_pure")
@@ -2103,14 +2256,19 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_repr_probe_v34_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v34.json")
-        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        parsed = parse_minigrid_representation_probe_config(
+            json.loads(config_path.read_text(encoding="utf-8"))
+        )
         self.assertEqual(parsed.policy, "scripted_object")
         self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_target_visibility"))
         self.assertEqual(parsed.predictive_encoders[0].name, "predictive_target_visibility")
         self.assertEqual(parsed.predictive_encoders[0].target_label, "target_visibility_transition")
         self.assertTrue(parsed.predictive_encoders[0].include_raw_passthrough)
         self.assertEqual(parsed.decision.mode, "relative_to_baseline")
-        self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "target_visibility_transition"))
+        self.assertEqual(
+            parsed.decision.labels,
+            ("mission_object", "mission_color", "target_visibility_transition"),
+        )
         self.assertEqual(parsed.decision.baseline_feature_set, "raw_current")
         self.assertEqual(parsed.decision.candidate_feature_set, "predictive_target_visibility")
         self.assertEqual(parsed.decision.transition_label, "target_visibility_transition")
@@ -2120,11 +2278,16 @@ class ExperimentTest(unittest.TestCase):
 
     def test_minigrid_repr_probe_v35_config_is_dependency_free(self) -> None:
         config_path = Path("configs/experiments/minigrid-repr-probe-v35.json")
-        parsed = parse_minigrid_representation_probe_config(json.loads(config_path.read_text(encoding="utf-8")))
+        parsed = parse_minigrid_representation_probe_config(
+            json.loads(config_path.read_text(encoding="utf-8"))
+        )
         self.assertEqual(parsed.policy, "scripted_object")
         self.assertEqual(parsed.feature_sets, ("raw_current", "predictive_target_visibility"))
         self.assertEqual(parsed.predictive_encoders[0].target_label, "target_visibility_transition")
-        self.assertEqual(parsed.decision.labels, ("mission_object", "mission_color", "target_visibility_transition"))
+        self.assertEqual(
+            parsed.decision.labels,
+            ("mission_object", "mission_color", "target_visibility_transition"),
+        )
         self.assertEqual(parsed.decision.transition_label, "target_visibility_transition")
 
     def test_minigrid_repr_probe_sweep_aggregate_is_dependency_free(self) -> None:
@@ -2173,7 +2336,11 @@ class ExperimentTest(unittest.TestCase):
         )
         self.assertTrue(evaluate_representation_probe_sweep_decision(positive)["met"])
         low_sample = aggregate_representation_probe_runs(
-            [run(1, lift_delta=0.02), run(2, lift_delta=0.015, test_examples=9), run(3, lift_delta=0.0)],
+            [
+                run(1, lift_delta=0.02),
+                run(2, lift_delta=0.015, test_examples=9),
+                run(3, lift_delta=0.0),
+            ],
             seeds=[1, 2, 3],
         )
         self.assertFalse(evaluate_representation_probe_sweep_decision(low_sample)["met"])
@@ -2189,7 +2356,10 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         self.assertIn("mean_transition_lift_delta", summary)
-        self.assertEqual(REPR_PROBE_SWEEP_DEFAULT_CONFIG_PATH, Path("configs/experiments/minigrid-repr-probe-v35.json"))
+        self.assertEqual(
+            REPR_PROBE_SWEEP_DEFAULT_CONFIG_PATH,
+            Path("configs/experiments/minigrid-repr-probe-v35.json"),
+        )
 
     def test_minigrid_repr_relative_decision_is_dependency_free(self) -> None:
         config = parse_minigrid_representation_probe_config(
@@ -2217,14 +2387,44 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         base_labels = {
-            "mission_object": {"accuracy": 0.90, "majority_baseline": 0.50, "lift": 0.40, "test_examples": 20},
-            "mission_color": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
-            "changed": {"accuracy": 0.60, "majority_baseline": 0.58, "lift": 0.02, "test_examples": 20},
+            "mission_object": {
+                "accuracy": 0.90,
+                "majority_baseline": 0.50,
+                "lift": 0.40,
+                "test_examples": 20,
+            },
+            "mission_color": {
+                "accuracy": 0.80,
+                "majority_baseline": 0.50,
+                "lift": 0.30,
+                "test_examples": 20,
+            },
+            "changed": {
+                "accuracy": 0.60,
+                "majority_baseline": 0.58,
+                "lift": 0.02,
+                "test_examples": 20,
+            },
         }
         candidate_labels = {
-            "mission_object": {"accuracy": 0.86, "majority_baseline": 0.50, "lift": 0.36, "test_examples": 20},
-            "mission_color": {"accuracy": 0.78, "majority_baseline": 0.50, "lift": 0.28, "test_examples": 20},
-            "changed": {"accuracy": 0.66, "majority_baseline": 0.58, "lift": 0.08, "test_examples": 20},
+            "mission_object": {
+                "accuracy": 0.86,
+                "majority_baseline": 0.50,
+                "lift": 0.36,
+                "test_examples": 20,
+            },
+            "mission_color": {
+                "accuracy": 0.78,
+                "majority_baseline": 0.50,
+                "lift": 0.28,
+                "test_examples": 20,
+            },
+            "changed": {
+                "accuracy": 0.66,
+                "majority_baseline": 0.58,
+                "lift": 0.08,
+                "test_examples": 20,
+            },
         }
         result = evaluate_probe_decision(
             [
@@ -2271,9 +2471,24 @@ class ExperimentTest(unittest.TestCase):
             candidate_test_examples: int = 20,
         ) -> dict[str, object]:
             base_labels = {
-                "mission_object": {"accuracy": 0.90, "majority_baseline": 0.50, "lift": 0.40, "test_examples": 20},
-                "mission_color": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
-                "changed": {"accuracy": 0.60, "majority_baseline": 0.58, "lift": 0.02, "test_examples": 20},
+                "mission_object": {
+                    "accuracy": 0.90,
+                    "majority_baseline": 0.50,
+                    "lift": 0.40,
+                    "test_examples": 20,
+                },
+                "mission_color": {
+                    "accuracy": 0.80,
+                    "majority_baseline": 0.50,
+                    "lift": 0.30,
+                    "test_examples": 20,
+                },
+                "changed": {
+                    "accuracy": 0.60,
+                    "majority_baseline": 0.58,
+                    "lift": 0.02,
+                    "test_examples": 20,
+                },
             }
             candidate_labels = {
                 "mission_object": {
@@ -2324,7 +2539,10 @@ class ExperimentTest(unittest.TestCase):
                 },
                 "training": {
                     "predictive_encoders": [
-                        {"name": "predictive_next_signature", "target_label": "next_signature_bucket"}
+                        {
+                            "name": "predictive_next_signature",
+                            "target_label": "next_signature_bucket",
+                        }
                     ]
                 },
                 "decision": {
@@ -2340,14 +2558,44 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         base_labels = {
-            "mission_object": {"accuracy": 0.90, "majority_baseline": 0.50, "lift": 0.40, "test_examples": 20},
-            "mission_color": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
-            "next_signature_bucket": {"accuracy": 0.70, "majority_baseline": 0.20, "lift": 0.50, "test_examples": 20},
+            "mission_object": {
+                "accuracy": 0.90,
+                "majority_baseline": 0.50,
+                "lift": 0.40,
+                "test_examples": 20,
+            },
+            "mission_color": {
+                "accuracy": 0.80,
+                "majority_baseline": 0.50,
+                "lift": 0.30,
+                "test_examples": 20,
+            },
+            "next_signature_bucket": {
+                "accuracy": 0.70,
+                "majority_baseline": 0.20,
+                "lift": 0.50,
+                "test_examples": 20,
+            },
         }
         candidate_labels = {
-            "mission_object": {"accuracy": 0.87, "majority_baseline": 0.50, "lift": 0.37, "test_examples": 20},
-            "mission_color": {"accuracy": 0.78, "majority_baseline": 0.50, "lift": 0.28, "test_examples": 20},
-            "next_signature_bucket": {"accuracy": 0.72, "majority_baseline": 0.20, "lift": 0.52, "test_examples": 20},
+            "mission_object": {
+                "accuracy": 0.87,
+                "majority_baseline": 0.50,
+                "lift": 0.37,
+                "test_examples": 20,
+            },
+            "mission_color": {
+                "accuracy": 0.78,
+                "majority_baseline": 0.50,
+                "lift": 0.28,
+                "test_examples": 20,
+            },
+            "next_signature_bucket": {
+                "accuracy": 0.72,
+                "majority_baseline": 0.20,
+                "lift": 0.52,
+                "test_examples": 20,
+            },
         }
         result = evaluate_probe_decision(
             [
@@ -2399,7 +2647,10 @@ class ExperimentTest(unittest.TestCase):
             ),
             2,
         )
-        self.assertIn(scripted_object_action({"mission": "go to the blue key", "image": image_left}, 1, 2, 3), {0, 1, 2})
+        self.assertIn(
+            scripted_object_action({"mission": "go to the blue key", "image": image_left}, 1, 2, 3),
+            {0, 1, 2},
+        )
 
     def test_minigrid_repr_reference_decision_is_dependency_free(self) -> None:
         config = parse_minigrid_representation_probe_config(
@@ -2413,12 +2664,19 @@ class ExperimentTest(unittest.TestCase):
                 "features": {
                     "feature_dim": 128,
                     "encoder_mode": "raw",
-                    "feature_sets": ["raw_current", "predictive_changed", "predictive_next_signature"],
+                    "feature_sets": [
+                        "raw_current",
+                        "predictive_changed",
+                        "predictive_next_signature",
+                    ],
                 },
                 "training": {
                     "predictive_encoders": [
                         {"name": "predictive_changed", "target_label": "changed"},
-                        {"name": "predictive_next_signature", "target_label": "next_signature_bucket"},
+                        {
+                            "name": "predictive_next_signature",
+                            "target_label": "next_signature_bucket",
+                        },
                     ]
                 },
                 "decision": {
@@ -2435,19 +2693,64 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         base_labels = {
-            "mission_object": {"accuracy": 0.90, "majority_baseline": 0.50, "lift": 0.40, "test_examples": 20},
-            "mission_color": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
-            "next_signature_bucket": {"accuracy": 0.30, "majority_baseline": 0.20, "lift": 0.10, "test_examples": 20},
+            "mission_object": {
+                "accuracy": 0.90,
+                "majority_baseline": 0.50,
+                "lift": 0.40,
+                "test_examples": 20,
+            },
+            "mission_color": {
+                "accuracy": 0.80,
+                "majority_baseline": 0.50,
+                "lift": 0.30,
+                "test_examples": 20,
+            },
+            "next_signature_bucket": {
+                "accuracy": 0.30,
+                "majority_baseline": 0.20,
+                "lift": 0.10,
+                "test_examples": 20,
+            },
         }
         reference_labels = {
-            "mission_object": {"accuracy": 0.89, "majority_baseline": 0.50, "lift": 0.39, "test_examples": 20},
-            "mission_color": {"accuracy": 0.79, "majority_baseline": 0.50, "lift": 0.29, "test_examples": 20},
-            "next_signature_bucket": {"accuracy": 0.32, "majority_baseline": 0.20, "lift": 0.12, "test_examples": 20},
+            "mission_object": {
+                "accuracy": 0.89,
+                "majority_baseline": 0.50,
+                "lift": 0.39,
+                "test_examples": 20,
+            },
+            "mission_color": {
+                "accuracy": 0.79,
+                "majority_baseline": 0.50,
+                "lift": 0.29,
+                "test_examples": 20,
+            },
+            "next_signature_bucket": {
+                "accuracy": 0.32,
+                "majority_baseline": 0.20,
+                "lift": 0.12,
+                "test_examples": 20,
+            },
         }
         candidate_labels = {
-            "mission_object": {"accuracy": 0.86, "majority_baseline": 0.50, "lift": 0.36, "test_examples": 20},
-            "mission_color": {"accuracy": 0.77, "majority_baseline": 0.50, "lift": 0.27, "test_examples": 20},
-            "next_signature_bucket": {"accuracy": 0.34, "majority_baseline": 0.20, "lift": 0.14, "test_examples": 20},
+            "mission_object": {
+                "accuracy": 0.86,
+                "majority_baseline": 0.50,
+                "lift": 0.36,
+                "test_examples": 20,
+            },
+            "mission_color": {
+                "accuracy": 0.77,
+                "majority_baseline": 0.50,
+                "lift": 0.27,
+                "test_examples": 20,
+            },
+            "next_signature_bucket": {
+                "accuracy": 0.34,
+                "majority_baseline": 0.20,
+                "lift": 0.14,
+                "test_examples": 20,
+            },
         }
         result = evaluate_probe_decision(
             [
@@ -2490,7 +2793,11 @@ class ExperimentTest(unittest.TestCase):
                     "encoder_mode": "raw",
                     "feature_sets": ["raw_current", "predictive_changed"],
                 },
-                "training": {"predictive_encoders": [{"name": "predictive_changed", "target_label": "changed"}]},
+                "training": {
+                    "predictive_encoders": [
+                        {"name": "predictive_changed", "target_label": "changed"}
+                    ]
+                },
                 "decision": {
                     "mode": "external_transition_baseline",
                     "labels": ["mission_object", "mission_color", "changed"],
@@ -2505,14 +2812,44 @@ class ExperimentTest(unittest.TestCase):
             }
         )
         base_labels = {
-            "mission_object": {"accuracy": 0.80, "majority_baseline": 0.50, "lift": 0.30, "test_examples": 20},
-            "mission_color": {"accuracy": 0.70, "majority_baseline": 0.50, "lift": 0.20, "test_examples": 20},
-            "changed": {"accuracy": 0.62, "majority_baseline": 0.50, "lift": 0.12, "test_examples": 20},
+            "mission_object": {
+                "accuracy": 0.80,
+                "majority_baseline": 0.50,
+                "lift": 0.30,
+                "test_examples": 20,
+            },
+            "mission_color": {
+                "accuracy": 0.70,
+                "majority_baseline": 0.50,
+                "lift": 0.20,
+                "test_examples": 20,
+            },
+            "changed": {
+                "accuracy": 0.62,
+                "majority_baseline": 0.50,
+                "lift": 0.12,
+                "test_examples": 20,
+            },
         }
         candidate_labels = {
-            "mission_object": {"accuracy": 0.77, "majority_baseline": 0.50, "lift": 0.27, "test_examples": 20},
-            "mission_color": {"accuracy": 0.66, "majority_baseline": 0.50, "lift": 0.16, "test_examples": 20},
-            "changed": {"accuracy": 0.72, "majority_baseline": 0.50, "lift": 0.22, "test_examples": 20},
+            "mission_object": {
+                "accuracy": 0.77,
+                "majority_baseline": 0.50,
+                "lift": 0.27,
+                "test_examples": 20,
+            },
+            "mission_color": {
+                "accuracy": 0.66,
+                "majority_baseline": 0.50,
+                "lift": 0.16,
+                "test_examples": 20,
+            },
+            "changed": {
+                "accuracy": 0.72,
+                "majority_baseline": 0.50,
+                "lift": 0.22,
+                "test_examples": 20,
+            },
         }
         result = evaluate_probe_decision(
             [
@@ -2592,7 +2929,9 @@ class ExperimentTest(unittest.TestCase):
             def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
                 return observation, {}
 
-            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+            def step(
+                self, action: int
+            ) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
                 reward = 1.0 if self.env_id == "FakeEval-v0" else 0.0
                 return observation, reward, True, False, {}
 
@@ -2768,7 +3107,9 @@ class ExperimentTest(unittest.TestCase):
             def reset(self, seed: int) -> tuple[dict[str, object], dict[str, object]]:
                 return observation, {}
 
-            def step(self, action: int) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
+            def step(
+                self, action: int
+            ) -> tuple[dict[str, object], float, bool, bool, dict[str, object]]:
                 return observation, 1.0 if self.env_id == "FakeEval-v0" else 0.0, True, False, {}
 
             def close(self) -> None:
@@ -3026,7 +3367,10 @@ class ExperimentTest(unittest.TestCase):
         self.assertIn("PyTorch sweep", summary)
         self.assertIn("median_return_last", summary)
         self.assertIn("target_visible_last", summary)
-        self.assertIn("| A | 1 | 0.050 | 0.100 | 0.100 | 0.150 | 0.150 | 0.400 | 0.200 | 0.300 | 8.0 | 20 |", summary)
+        self.assertIn(
+            "| A | 1 | 0.050 | 0.100 | 0.100 | 0.150 | 0.150 | 0.400 | 0.200 | 0.300 | 8.0 | 20 |",
+            summary,
+        )
         self.assertIn("Per-Seed Winners", summary)
 
     def test_gpu_compat_policy_is_dependency_free(self) -> None:

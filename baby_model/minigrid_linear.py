@@ -83,9 +83,22 @@ class LinearQAgent:
         best_actions = [action for value, action in values if value == best_value]
         return self.rng.choice(best_actions)
 
-    def update(self, features: SparseFeatures, action: int, reward: float, next_features: SparseFeatures, done: bool) -> None:
+    def update(
+        self,
+        features: SparseFeatures,
+        action: int,
+        reward: float,
+        next_features: SparseFeatures,
+        done: bool,
+    ) -> None:
         current = self.q_value(features, action)
-        next_best = 0.0 if done else max(self.q_value(next_features, next_action) for next_action in range(self.actions))
+        next_best = (
+            0.0
+            if done
+            else max(
+                self.q_value(next_features, next_action) for next_action in range(self.actions)
+            )
+        )
         delta = reward + self.gamma * next_best - current
         norm = max(1.0, sum(abs(value) for value in features.values()))
         weights = self.weights[action]
@@ -98,13 +111,17 @@ class LinearQAgent:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-minigrid-linear")
-    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-linear-unlock.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("configs/experiments/minigrid-linear-unlock.json")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid-linear"))
     parser.add_argument("--seed", type=int, default=401)
     args = parser.parse_args()
 
     try:
-        report = run_minigrid_linear_suite(json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed)
+        report = run_minigrid_linear_suite(
+            json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed
+        )
     except ImportError as exc:
         print(f"missing optional dependency: {exc}")
         print("install with: python3 -m pip install minigrid")
@@ -137,7 +154,9 @@ def run_minigrid_linear_suite(config: dict[str, Any], seed: int = 401) -> dict[s
     ]
     return {
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "hypothesis": str(config.get("hypothesis", "Baby-AD/DA MiniGrid linear function approximation")),
+        "hypothesis": str(
+            config.get("hypothesis", "Baby-AD/DA MiniGrid linear function approximation")
+        ),
         "env_id": parsed.env_id,
         "max_steps": parsed.max_steps,
         "agent": {
@@ -272,7 +291,9 @@ def run_minigrid_linear_condition(
             )
             if first_schema is None:
                 first_schema = observation_schema(observation)
-            features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+            features = linear_features(
+                observation, condition.encoder_mode, agent_config.feature_dim
+            )
             feature_key = feature_signature(features)
             visited = {feature_key}
             external_return = 0.0
@@ -285,17 +306,27 @@ def run_minigrid_linear_condition(
                 action_bonus = None
                 if condition.intrinsic_target == "auxiliary" and not force_random:
                     action_bonus = auxiliary_agent.action_values(features)
-                action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
+                action = agent.choose(
+                    features, force_random=force_random, action_bonus=action_bonus
+                )
                 next_observation, reward, terminated, truncated, _info = _env_call(
                     env.step,
                     action,
                     quiet=quiet_env_output,
                 )
-                next_features = linear_features(next_observation, condition.encoder_mode, agent_config.feature_dim)
+                next_features = linear_features(
+                    next_observation, condition.encoder_mode, agent_config.feature_dim
+                )
                 next_feature_key = feature_signature(next_features)
-                intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature_key, action, next_feature_key)
+                intrinsic_signal = _intrinsic_signal(
+                    condition.intrinsic_mode, transition, feature_key, action, next_feature_key
+                )
                 intrinsic = condition.intrinsic_beta * intrinsic_signal
-                total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
+                total_reward = (
+                    float(reward)
+                    if condition.intrinsic_target == "auxiliary"
+                    else float(reward) + intrinsic
+                )
                 done = bool(terminated or truncated)
 
                 if not force_random:
@@ -344,7 +375,9 @@ def run_minigrid_linear_condition(
             "success_rate_last_window": mean(1.0 if item.success else 0.0 for item in last_window),
             "mean_steps_success": mean(successful_steps) if successful_steps else None,
             "mean_return_last_window": mean(item.external_return for item in last_window),
-            "mean_intrinsic_return_last_window": mean(item.intrinsic_return for item in last_window),
+            "mean_intrinsic_return_last_window": mean(
+                item.intrinsic_return for item in last_window
+            ),
             "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
             "nonzero_weights": agent.nonzero_weights(),
         }
@@ -420,7 +453,9 @@ def write_minigrid_linear_run(report: dict[str, Any], output_dir: Path) -> Path:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (run_dir / "summary.md").write_text(linear_summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():

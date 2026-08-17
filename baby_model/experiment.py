@@ -83,7 +83,9 @@ def run_condition(
             action = agent.choose(feature, force_random=force_random, action_bonus=action_bonus)
             result = env.step(action)
             next_feature = encoder.encode(result.observation)
-            intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature, action, next_feature)
+            intrinsic_signal = _intrinsic_signal(
+                condition.intrinsic_mode, transition, feature, action, next_feature
+            )
             intrinsic = _intrinsic_reward(condition, episode, result.reward, intrinsic_signal)
             total_reward = _q_target_reward(condition, result.reward, intrinsic)
 
@@ -273,14 +275,18 @@ def _intrinsic_signal(
     raise ValueError(f"unknown intrinsic mode: {mode}")
 
 
-def _intrinsic_reward(condition: Condition, episode: int, external_reward: float, intrinsic_signal: float) -> float:
+def _intrinsic_reward(
+    condition: Condition, episode: int, external_reward: float, intrinsic_signal: float
+) -> float:
     intrinsic_beta = _effective_intrinsic_beta(condition, episode)
     if condition.intrinsic_gate == "external_flat" and external_reward > 0.0:
         intrinsic_beta = 0.0
     return intrinsic_beta * intrinsic_signal
 
 
-def _q_target_reward(condition: Condition, external_reward: float, intrinsic_reward: float) -> float:
+def _q_target_reward(
+    condition: Condition, external_reward: float, intrinsic_reward: float
+) -> float:
     if condition.intrinsic_target == "auxiliary":
         return external_reward
     return external_reward + intrinsic_reward
@@ -290,7 +296,11 @@ def _effective_intrinsic_beta(condition: Condition, episode: int) -> float:
     if condition.intrinsic_schedule == "constant":
         return condition.intrinsic_beta
     if condition.intrinsic_schedule == "linear_anneal":
-        beta_end = condition.intrinsic_beta if condition.intrinsic_beta_end is None else condition.intrinsic_beta_end
+        beta_end = (
+            condition.intrinsic_beta
+            if condition.intrinsic_beta_end is None
+            else condition.intrinsic_beta_end
+        )
         horizon = condition.intrinsic_anneal_episodes
         if horizon <= 0:
             horizon = max(1, condition.episodes - condition.decoder_delay_episodes)

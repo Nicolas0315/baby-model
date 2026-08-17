@@ -38,14 +38,18 @@ def main() -> int:
     return 0
 
 
-def run_minigrid_representation_probe_sweep(config: dict[str, Any], seeds: list[int]) -> dict[str, Any]:
+def run_minigrid_representation_probe_sweep(
+    config: dict[str, Any], seeds: list[int]
+) -> dict[str, Any]:
     if not seeds:
         raise ValueError("seeds must be non-empty")
     runs = [run_minigrid_representation_probe(config, seed=seed) for seed in seeds]
     aggregate = aggregate_representation_probe_runs(runs=runs, seeds=seeds)
     return {
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "hypothesis": str(config.get("hypothesis", "Baby-AD/DA MiniGrid representation probe sweep")),
+        "hypothesis": str(
+            config.get("hypothesis", "Baby-AD/DA MiniGrid representation probe sweep")
+        ),
         "seeds": seeds,
         "runs": runs,
         "aggregate": aggregate,
@@ -53,7 +57,9 @@ def run_minigrid_representation_probe_sweep(config: dict[str, Any], seeds: list[
     }
 
 
-def aggregate_representation_probe_runs(runs: list[dict[str, Any]], seeds: list[int]) -> dict[str, Any]:
+def aggregate_representation_probe_runs(
+    runs: list[dict[str, Any]], seeds: list[int]
+) -> dict[str, Any]:
     if len(runs) != len(seeds):
         raise ValueError("runs and seeds length mismatch")
     if not runs:
@@ -108,7 +114,9 @@ def evaluate_representation_probe_sweep_decision(aggregate: dict[str, Any]) -> d
     mission_color_passed = aggregate["min_mission_color_accuracy_delta"] >= -0.050
     seed_count = int(aggregate["seed_count"])
     nonnegative_required = (seed_count // 2) + 1
-    nonnegative_passed = aggregate["nonnegative_transition_lift_delta_count"] >= nonnegative_required
+    nonnegative_passed = (
+        aggregate["nonnegative_transition_lift_delta_count"] >= nonnegative_required
+    )
     examples_passed = aggregate["min_transition_test_examples"] >= 10
     met = bool(
         mean_transition_passed
@@ -139,8 +147,12 @@ def write_representation_probe_sweep(report: dict[str, Any], output_dir: Path) -
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    (run_dir / "summary.md").write_text(representation_probe_sweep_summary_markdown(report), encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    (run_dir / "summary.md").write_text(
+        representation_probe_sweep_summary_markdown(report), encoding="utf-8"
+    )
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():
         latest_path.unlink()

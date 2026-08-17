@@ -40,10 +40,16 @@ def run_sweep(config: dict[str, Any], seeds: list[int]) -> dict[str, Any]:
                 "seeds": [row["sweep_seed"] for row in rows],
                 "condition_seeds": [row["condition_seed"] for row in rows],
                 "wins": sum(1 for item in reports if item["report"]["winner_last_window"] == name),
-                "mean_success_rate_last_window": mean(row["success_rate_last_window"] for row in rows),
+                "mean_success_rate_last_window": mean(
+                    row["success_rate_last_window"] for row in rows
+                ),
                 "mean_success_rate_all": mean(row["success_rate_all"] for row in rows),
-                "mean_external_return_last_window": mean(row["mean_external_return_last_window"] for row in rows),
-                "mean_intrinsic_return_last_window": mean(row["mean_intrinsic_return_last_window"] for row in rows),
+                "mean_external_return_last_window": mean(
+                    row["mean_external_return_last_window"] for row in rows
+                ),
+                "mean_intrinsic_return_last_window": mean(
+                    row["mean_intrinsic_return_last_window"] for row in rows
+                ),
                 "mean_steps_success": _mean_optional(row["mean_steps_success"] for row in rows),
             }
         )
@@ -64,7 +70,9 @@ def write_sweep(report: dict[str, Any], output_dir: Path) -> Path:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "sweep.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "sweep.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (run_dir / "summary.md").write_text(_summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():

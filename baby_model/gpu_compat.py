@@ -113,8 +113,14 @@ def evaluate_worker(policy: WorkerPolicy) -> dict[str, str]:
     elif wheel.min_driver and policy.driver_version < wheel.min_driver:
         reasons.append(f"driver {policy.driver_version} below {wheel.min_driver} for {wheel.tag}")
 
-    if wheel.cuda_major is not None and policy.cuda_umd_major is not None and policy.cuda_umd_major < wheel.cuda_major:
-        reasons.append(f"CUDA UMD {policy.cuda_umd_major} below CUDA {wheel.cuda_major} for {wheel.tag}")
+    if (
+        wheel.cuda_major is not None
+        and policy.cuda_umd_major is not None
+        and policy.cuda_umd_major < wheel.cuda_major
+    ):
+        reasons.append(
+            f"CUDA UMD {policy.cuda_umd_major} below CUDA {wheel.cuda_major} for {wheel.tag}"
+        )
 
     if policy.requires_cuda13_wheel and wheel.cuda_major != 13:
         reasons.append("worker class requires a CUDA 13 wheel")
@@ -155,7 +161,9 @@ def render_policy_markdown(report: dict[str, Any]) -> str:
     ]
     for row in report["results"]:
         lines.append(
-            "| {worker_class} | {status} | {primary_wheel} | {fallback_wheel} | {reason} |".format(**row)
+            "| {worker_class} | {status} | {primary_wheel} | {fallback_wheel} | {reason} |".format(
+                **row
+            )
         )
     lines.append("")
     return "\n".join(lines)

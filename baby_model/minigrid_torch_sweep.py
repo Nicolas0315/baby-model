@@ -14,7 +14,9 @@ from baby_model.sweep import parse_seeds
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-minigrid-torch-sweep")
-    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-torch-unlock-smoke.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("configs/experiments/minigrid-torch-unlock-smoke.json")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid-torch-sweeps"))
     parser.add_argument("--seeds", default="601,602,603")
     parser.add_argument("--device", default=None)
@@ -71,8 +73,12 @@ def aggregate_torch_reports(runs: list[dict[str, Any]], seeds: list[int]) -> lis
         success_last = [float(row["success_rate_last_window"]) for row in rows]
         success_all = [float(row["success_rate_all"]) for row in rows]
         returns = [float(row["mean_return_last_window"]) for row in rows]
-        target_visible = [float(row.get("mission_target_visible_rate_last_window", 0.0)) for row in rows]
-        target_center = [float(row.get("mission_target_center_rate_last_window", 0.0)) for row in rows]
+        target_visible = [
+            float(row.get("mission_target_visible_rate_last_window", 0.0)) for row in rows
+        ]
+        target_center = [
+            float(row.get("mission_target_center_rate_last_window", 0.0)) for row in rows
+        ]
         target_near = [float(row.get("mission_target_near_rate_last_window", 0.0)) for row in rows]
         updates = [int(row["updates"]) for row in rows]
         parameters = [int(row["parameter_count"]) for row in rows]
@@ -101,7 +107,9 @@ def write_minigrid_torch_sweep(report: dict[str, Any], output_dir: Path) -> Path
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (run_dir / "summary.md").write_text(torch_sweep_summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():
@@ -111,8 +119,12 @@ def write_minigrid_torch_sweep(report: dict[str, Any], output_dir: Path) -> Path
 
 
 def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:
-    devices = sorted({str(framework.get("device", "unknown")) for framework in report["frameworks"]})
-    versions = sorted({str(framework.get("version", "unknown")) for framework in report["frameworks"]})
+    devices = sorted(
+        {str(framework.get("device", "unknown")) for framework in report["frameworks"]}
+    )
+    versions = sorted(
+        {str(framework.get("version", "unknown")) for framework in report["frameworks"]}
+    )
     lines = [
         "# baby-model MiniGrid PyTorch sweep summary",
         "",

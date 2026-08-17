@@ -28,7 +28,15 @@ SUPPORTED_LABELS = (
 OBJECT_WORDS = ("ball", "box", "key", "door", "goal")
 COLOR_WORDS = ("red", "green", "blue", "purple", "yellow", "grey", "gray")
 MINIGRID_OBJECT_TO_IDX = {"door": 4, "key": 5, "ball": 6, "box": 7, "goal": 8}
-MINIGRID_COLOR_TO_IDX = {"red": 0, "green": 1, "blue": 2, "purple": 3, "yellow": 4, "grey": 5, "gray": 5}
+MINIGRID_COLOR_TO_IDX = {
+    "red": 0,
+    "green": 1,
+    "blue": 2,
+    "purple": 3,
+    "yellow": 4,
+    "grey": 5,
+    "gray": 5,
+}
 SCRIPTED_ACTION_LEFT = 0
 SCRIPTED_ACTION_RIGHT = 1
 SCRIPTED_ACTION_FORWARD = 2
@@ -113,19 +121,25 @@ class PredictiveLinearEncoder:
                 embedding[offset + class_index] = (score / max_abs_score) * self.config.score_scale
         prediction = _predict_linear_label(features, self.classes, self.weights)
         if prediction:
-            embedding[offset + len(self.classes) + self.classes.index(prediction)] = self.config.prediction_weight
+            embedding[offset + len(self.classes) + self.classes.index(prediction)] = (
+                self.config.prediction_weight
+            )
         return embedding
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-minigrid-repr-probe")
-    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-repr-probe-v28.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("configs/experiments/minigrid-repr-probe-v28.json")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid-repr-probe"))
     parser.add_argument("--seed", type=int, default=2301)
     args = parser.parse_args()
 
     try:
-        report = run_minigrid_representation_probe(json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed)
+        report = run_minigrid_representation_probe(
+            json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed
+        )
     except ImportError as exc:
         print(f"missing optional dependency: {exc}")
         print("install with: python3 -m pip install minigrid")
@@ -208,7 +222,12 @@ def run_minigrid_representation_probe(config: dict[str, Any], seed: int = 2301) 
             },
         },
         "envs": [
-            {"name": env.name, "env_id": env.env_id, "episodes": env.episodes, "max_steps": env.max_steps}
+            {
+                "name": env.name,
+                "env_id": env.env_id,
+                "episodes": env.episodes,
+                "max_steps": env.max_steps,
+            }
             for env in parsed.envs
         ],
         "observation_schema": transitions[0]["observation_schema"] if transitions else {},
@@ -219,7 +238,9 @@ def run_minigrid_representation_probe(config: dict[str, Any], seed: int = 2301) 
     }
 
 
-def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGridRepresentationProbeConfig:
+def parse_minigrid_representation_probe_config(
+    config: dict[str, Any],
+) -> MiniGridRepresentationProbeConfig:
     dataset = config.get("dataset", {})
     if not isinstance(dataset, dict):
         raise ValueError("dataset must be an object")
@@ -246,14 +267,18 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
         if max_steps < 1:
             raise ValueError(f"dataset.envs.max_steps must be positive for {name}")
         names.add(name)
-        envs.append(ProbeEnvConfig(name=name, env_id=env_id, episodes=episodes, max_steps=max_steps))
+        envs.append(
+            ProbeEnvConfig(name=name, env_id=env_id, episodes=episodes, max_steps=max_steps)
+        )
 
     feature_cfg = config.get("features", {})
     if not isinstance(feature_cfg, dict):
         raise ValueError("features must be an object")
     feature_dim = int(feature_cfg.get("feature_dim", 1024))
     encoder_mode = str(feature_cfg.get("encoder_mode", "raw"))
-    feature_sets = tuple(str(item) for item in feature_cfg.get("feature_sets", DEFAULT_FEATURE_SETS))
+    feature_sets = tuple(
+        str(item) for item in feature_cfg.get("feature_sets", DEFAULT_FEATURE_SETS)
+    )
     if feature_dim < 128:
         raise ValueError("features.feature_dim must be at least 128")
     if encoder_mode not in {"raw", "coarse"}:
@@ -296,7 +321,12 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
     if min_test_examples < 1:
         raise ValueError("decision.min_test_examples must be positive")
     mode = str(decision_cfg.get("mode", "absolute_all_labels"))
-    if mode not in {"absolute_all_labels", "relative_to_baseline", "relative_to_reference", "external_transition_baseline"}:
+    if mode not in {
+        "absolute_all_labels",
+        "relative_to_baseline",
+        "relative_to_reference",
+        "external_transition_baseline",
+    }:
         raise ValueError(
             "decision.mode must be absolute_all_labels, relative_to_baseline, relative_to_reference, or external_transition_baseline"
         )
@@ -306,7 +336,9 @@ def parse_minigrid_representation_probe_config(config: dict[str, Any]) -> MiniGr
     transition_label = str(decision_cfg.get("transition_label", "changed"))
     changed_min_lift_delta = float(decision_cfg.get("changed_min_lift_delta", 0.05))
     transition_min_lift_delta = float(decision_cfg.get("transition_min_lift_delta", 0.01))
-    external_transition_lift_baseline = float(decision_cfg.get("external_transition_lift_baseline", 0.0))
+    external_transition_lift_baseline = float(
+        decision_cfg.get("external_transition_lift_baseline", 0.0)
+    )
     max_mission_accuracy_drop = float(decision_cfg.get("max_mission_accuracy_drop", 0.05))
     if transition_label not in SUPPORTED_LABELS:
         raise ValueError(f"unsupported decision transition_label: {transition_label}")
@@ -426,7 +458,9 @@ def parse_predictive_encoder_configs(config: dict[str, Any]) -> tuple[Predictive
     return tuple(encoders)
 
 
-def collect_probe_transitions(gym: Any, config: MiniGridRepresentationProbeConfig, seed: int) -> list[dict[str, Any]]:
+def collect_probe_transitions(
+    gym: Any, config: MiniGridRepresentationProbeConfig, seed: int
+) -> list[dict[str, Any]]:
     transitions: list[dict[str, Any]] = []
     for env_index, env_config in enumerate(config.envs):
         env = gym.make(env_config.env_id)
@@ -455,7 +489,9 @@ def collect_probe_transitions(gym: Any, config: MiniGridRepresentationProbeConfi
                         quiet=config.quiet_env_output,
                     )
                     features = linear_features(observation, config.encoder_mode, config.feature_dim)
-                    next_features = linear_features(next_observation, config.encoder_mode, config.feature_dim)
+                    next_features = linear_features(
+                        next_observation, config.encoder_mode, config.feature_dim
+                    )
                     labels = transition_probe_labels(
                         observation=observation,
                         next_observation=next_observation,
@@ -474,7 +510,9 @@ def collect_probe_transitions(gym: Any, config: MiniGridRepresentationProbeConfi
                             "done": bool(terminated or truncated),
                             "features": features,
                             "next_features": next_features,
-                            "affordance_features": vector_to_sparse_features(affordance_progress_vector(observation)),
+                            "affordance_features": vector_to_sparse_features(
+                                affordance_progress_vector(observation)
+                            ),
                             "labels": labels,
                             "observation_schema": first_schema,
                         }
@@ -498,7 +536,9 @@ def choose_probe_action(
     if policy == "random":
         return int(fallback_action_space.sample())
     if policy == "scripted_object":
-        return scripted_object_action(observation=observation, episode=episode, step=step, seed=seed)
+        return scripted_object_action(
+            observation=observation, episode=episode, step=step, seed=seed
+        )
     raise ValueError(f"unsupported probe policy: {policy}")
 
 
@@ -523,7 +563,12 @@ def scripted_object_action(observation: Any, episode: int, step: int, seed: int)
 
 
 def deterministic_explore_action(episode: int, step: int, seed: int) -> int:
-    pattern = (SCRIPTED_ACTION_FORWARD, SCRIPTED_ACTION_RIGHT, SCRIPTED_ACTION_FORWARD, SCRIPTED_ACTION_LEFT)
+    pattern = (
+        SCRIPTED_ACTION_FORWARD,
+        SCRIPTED_ACTION_RIGHT,
+        SCRIPTED_ACTION_FORWARD,
+        SCRIPTED_ACTION_LEFT,
+    )
     return pattern[(episode * 17 + step + seed) % len(pattern)]
 
 
@@ -534,7 +579,9 @@ def target_from_mission(mission: str) -> dict[str, str]:
     }
 
 
-def nearest_visible_target_cell(image: Any, target: dict[str, str]) -> tuple[int, int, int, int] | None:
+def nearest_visible_target_cell(
+    image: Any, target: dict[str, str]
+) -> tuple[int, int, int, int] | None:
     columns = image_columns(image)
     if not columns:
         return None
@@ -617,7 +664,9 @@ def transition_probe_labels(
         "mission_color": _first_matching_token(mission, COLOR_WORDS),
         "changed": "changed" if changed else "same",
         "next_signature_bucket": f"bucket:{_signature_bucket(next_features, signature_buckets)}",
-        "target_visibility_transition": target_visibility_transition_label(observation, next_observation),
+        "target_visibility_transition": target_visibility_transition_label(
+            observation, next_observation
+        ),
     }
 
 
@@ -717,7 +766,9 @@ def train_predictive_encoder(
     if not test_transitions and train_transitions:
         test_transitions.append(train_transitions.pop())
 
-    classes = tuple(sorted({str(transition["labels"][target_label]) for transition in train_transitions}))
+    classes = tuple(
+        sorted({str(transition["labels"][target_label]) for transition in train_transitions})
+    )
     weights: dict[str, SparseFeatures] = {label: {} for label in classes}
     epoch_mistakes: list[int] = []
     for _epoch in range(encoder_config.epochs):
@@ -734,7 +785,9 @@ def train_predictive_encoder(
                 mistakes += 1
                 _add_scaled_features(weights[expected], features, encoder_config.learning_rate)
                 if predicted:
-                    _add_scaled_features(weights[predicted], features, -encoder_config.learning_rate)
+                    _add_scaled_features(
+                        weights[predicted], features, -encoder_config.learning_rate
+                    )
         epoch_mistakes.append(mistakes)
 
     encoder = PredictiveLinearEncoder(
@@ -803,7 +856,9 @@ def majority_baseline(labels: list[str]) -> float:
     return Counter(labels).most_common(1)[0][1] / len(labels)
 
 
-def centroid_probe_metrics(examples: list[SparseFeatures], labels: list[str], test_every: int) -> dict[str, Any]:
+def centroid_probe_metrics(
+    examples: list[SparseFeatures], labels: list[str], test_every: int
+) -> dict[str, Any]:
     if len(examples) != len(labels):
         raise ValueError("examples and labels length mismatch")
     train_examples: list[SparseFeatures] = []
@@ -832,7 +887,9 @@ def centroid_probe_metrics(examples: list[SparseFeatures], labels: list[str], te
 
     centroids = _centroids(train_examples, train_labels)
     predictions = [_predict_centroid(example, centroids) for example in test_examples]
-    correct = sum(1 for expected, actual in zip(test_labels, predictions, strict=True) if expected == actual)
+    correct = sum(
+        1 for expected, actual in zip(test_labels, predictions, strict=True) if expected == actual
+    )
     accuracy = correct / len(test_labels)
     majority_label, majority_count = Counter(test_labels).most_common(1)[0]
     majority_baseline = majority_count / len(test_labels)
@@ -847,7 +904,9 @@ def centroid_probe_metrics(examples: list[SparseFeatures], labels: list[str], te
     }
 
 
-def evaluate_probe_decision(feature_reports: list[dict[str, Any]], decision: ProbeDecisionConfig) -> dict[str, Any]:
+def evaluate_probe_decision(
+    feature_reports: list[dict[str, Any]], decision: ProbeDecisionConfig
+) -> dict[str, Any]:
     if decision.mode == "relative_to_baseline":
         return evaluate_relative_probe_decision(feature_reports, decision)
     if decision.mode == "relative_to_reference":
@@ -871,7 +930,9 @@ def evaluate_probe_decision(feature_reports: list[dict[str, Any]], decision: Pro
                 "mean_lift": mean(metric["lift"] for metric in label_metrics),
             }
         )
-    best = max(candidates, key=lambda item: (item["passed"], item["mean_accuracy"], item["mean_lift"]))
+    best = max(
+        candidates, key=lambda item: (item["passed"], item["mean_accuracy"], item["mean_lift"])
+    )
     return {
         "met": bool(best["passed"]),
         "best_feature_set": best["feature_set"],
@@ -924,29 +985,43 @@ def evaluate_relative_probe_decision(
         }
 
     transition_threshold = (
-        decision.changed_min_lift_delta if decision.transition_label == "changed" else decision.transition_min_lift_delta
+        decision.changed_min_lift_delta
+        if decision.transition_label == "changed"
+        else decision.transition_min_lift_delta
     )
     transition_passed = comparisons[decision.transition_label]["lift_delta"] >= transition_threshold
-    mission_object_passed = comparisons["mission_object"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
-    mission_color_passed = comparisons["mission_color"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
-    passed = bool(enough_examples and transition_passed and mission_object_passed and mission_color_passed)
+    mission_object_passed = (
+        comparisons["mission_object"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
+    )
+    mission_color_passed = (
+        comparisons["mission_color"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
+    )
+    passed = bool(
+        enough_examples and transition_passed and mission_object_passed and mission_color_passed
+    )
     candidates = [
         {
             "feature_set": decision.baseline_feature_set,
             "passed": False,
-            "mean_accuracy": mean(baseline["labels"][label]["accuracy"] for label in decision.labels),
+            "mean_accuracy": mean(
+                baseline["labels"][label]["accuracy"] for label in decision.labels
+            ),
             "mean_lift": mean(baseline["labels"][label]["lift"] for label in decision.labels),
         },
         {
             "feature_set": decision.candidate_feature_set,
             "passed": passed,
-            "mean_accuracy": mean(candidate["labels"][label]["accuracy"] for label in decision.labels),
+            "mean_accuracy": mean(
+                candidate["labels"][label]["accuracy"] for label in decision.labels
+            ),
             "mean_lift": mean(candidate["labels"][label]["lift"] for label in decision.labels),
         },
     ]
     return {
         "met": passed,
-        "best_feature_set": decision.candidate_feature_set if passed else decision.baseline_feature_set,
+        "best_feature_set": decision.candidate_feature_set
+        if passed
+        else decision.baseline_feature_set,
         "candidates": candidates,
         "comparisons": comparisons,
         "rule": {
@@ -975,7 +1050,9 @@ def evaluate_reference_probe_decision(
     missing_labels = [
         label
         for label in required_labels
-        if label not in baseline["labels"] or label not in reference["labels"] or label not in candidate["labels"]
+        if label not in baseline["labels"]
+        or label not in reference["labels"]
+        or label not in candidate["labels"]
     ]
     if missing_labels:
         raise ValueError(f"missing reference decision labels: {','.join(missing_labels)}")
@@ -997,7 +1074,8 @@ def evaluate_reference_probe_decision(
             "reference_accuracy": reference_metrics["accuracy"],
             "candidate_accuracy": candidate_metrics["accuracy"],
             "accuracy_delta_vs_baseline": candidate_metrics["accuracy"] - base_metrics["accuracy"],
-            "accuracy_delta_vs_reference": candidate_metrics["accuracy"] - reference_metrics["accuracy"],
+            "accuracy_delta_vs_reference": candidate_metrics["accuracy"]
+            - reference_metrics["accuracy"],
             "baseline_lift": base_metrics["lift"],
             "reference_lift": reference_metrics["lift"],
             "candidate_lift": candidate_metrics["lift"],
@@ -1014,12 +1092,16 @@ def evaluate_reference_probe_decision(
         and transition["lift_delta_vs_reference"] >= decision.transition_min_lift_delta
     )
     mission_object_passed = (
-        comparisons["mission_object"]["accuracy_delta_vs_baseline"] >= -decision.max_mission_accuracy_drop
+        comparisons["mission_object"]["accuracy_delta_vs_baseline"]
+        >= -decision.max_mission_accuracy_drop
     )
     mission_color_passed = (
-        comparisons["mission_color"]["accuracy_delta_vs_baseline"] >= -decision.max_mission_accuracy_drop
+        comparisons["mission_color"]["accuracy_delta_vs_baseline"]
+        >= -decision.max_mission_accuracy_drop
     )
-    passed = bool(enough_examples and transition_passed and mission_object_passed and mission_color_passed)
+    passed = bool(
+        enough_examples and transition_passed and mission_object_passed and mission_color_passed
+    )
     candidates = [
         {
             "feature_set": report["feature_set"],
@@ -1031,7 +1113,9 @@ def evaluate_reference_probe_decision(
     ]
     return {
         "met": passed,
-        "best_feature_set": decision.candidate_feature_set if passed else decision.reference_feature_set,
+        "best_feature_set": decision.candidate_feature_set
+        if passed
+        else decision.reference_feature_set,
         "candidates": candidates,
         "comparisons": comparisons,
         "rule": {
@@ -1082,33 +1166,48 @@ def evaluate_external_transition_decision(
             "candidate_lift": candidate_metrics["lift"],
             "lift_delta": candidate_metrics["lift"] - base_metrics["lift"],
             "external_lift_baseline": decision.external_transition_lift_baseline,
-            "candidate_lift_delta_vs_external": candidate_metrics["lift"] - decision.external_transition_lift_baseline,
+            "candidate_lift_delta_vs_external": candidate_metrics["lift"]
+            - decision.external_transition_lift_baseline,
             "baseline_test_examples": base_metrics["test_examples"],
             "candidate_test_examples": candidate_metrics["test_examples"],
         }
 
     transition = comparisons[decision.transition_label]
-    transition_passed = transition["candidate_lift_delta_vs_external"] >= decision.transition_min_lift_delta
-    mission_object_passed = comparisons["mission_object"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
-    mission_color_passed = comparisons["mission_color"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
-    passed = bool(enough_examples and transition_passed and mission_object_passed and mission_color_passed)
+    transition_passed = (
+        transition["candidate_lift_delta_vs_external"] >= decision.transition_min_lift_delta
+    )
+    mission_object_passed = (
+        comparisons["mission_object"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
+    )
+    mission_color_passed = (
+        comparisons["mission_color"]["accuracy_delta"] >= -decision.max_mission_accuracy_drop
+    )
+    passed = bool(
+        enough_examples and transition_passed and mission_object_passed and mission_color_passed
+    )
     candidates = [
         {
             "feature_set": decision.baseline_feature_set,
             "passed": False,
-            "mean_accuracy": mean(baseline["labels"][label]["accuracy"] for label in decision.labels),
+            "mean_accuracy": mean(
+                baseline["labels"][label]["accuracy"] for label in decision.labels
+            ),
             "mean_lift": mean(baseline["labels"][label]["lift"] for label in decision.labels),
         },
         {
             "feature_set": decision.candidate_feature_set,
             "passed": passed,
-            "mean_accuracy": mean(candidate["labels"][label]["accuracy"] for label in decision.labels),
+            "mean_accuracy": mean(
+                candidate["labels"][label]["accuracy"] for label in decision.labels
+            ),
             "mean_lift": mean(candidate["labels"][label]["lift"] for label in decision.labels),
         },
     ]
     return {
         "met": passed,
-        "best_feature_set": decision.candidate_feature_set if passed else decision.baseline_feature_set,
+        "best_feature_set": decision.candidate_feature_set
+        if passed
+        else decision.baseline_feature_set,
         "candidates": candidates,
         "comparisons": comparisons,
         "rule": {
@@ -1129,8 +1228,12 @@ def write_representation_probe(report: dict[str, Any], output_dir: Path) -> Path
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    (run_dir / "summary.md").write_text(representation_probe_summary_markdown(report), encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    (run_dir / "summary.md").write_text(
+        representation_probe_summary_markdown(report), encoding="utf-8"
+    )
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():
         latest_path.unlink()
@@ -1188,7 +1291,9 @@ def representation_probe_summary_markdown(report: dict[str, Any]) -> str:
                     test_accuracy=training_report["test_accuracy"],
                     test_majority=training_report["test_majority_baseline"],
                     test_lift=training_report["test_lift"],
-                    epoch_mistakes=",".join(str(item) for item in training_report["epoch_mistakes"]),
+                    epoch_mistakes=",".join(
+                        str(item) for item in training_report["epoch_mistakes"]
+                    ),
                 )
             )
         lines.append("")

@@ -37,13 +37,17 @@ class MiniGridCurriculumConfig:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-minigrid-curriculum")
-    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-curriculum-unlock.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("configs/experiments/minigrid-curriculum-unlock.json")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid-curriculum"))
     parser.add_argument("--seed", type=int, default=301)
     args = parser.parse_args()
 
     try:
-        report = run_minigrid_curriculum_suite(json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed)
+        report = run_minigrid_curriculum_suite(
+            json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed
+        )
     except ImportError as exc:
         print(f"missing optional dependency: {exc}")
         print("install with: python3 -m pip install minigrid")
@@ -85,13 +89,15 @@ def run_minigrid_curriculum_suite(config: dict[str, Any], seed: int = 301) -> di
             for stage in parsed.stages
         ],
         "results": results,
-        "winner_final_last_window": max(results, key=lambda row: row["final_stage"]["success_rate_last_window"])[
-            "name"
-        ],
+        "winner_final_last_window": max(
+            results, key=lambda row: row["final_stage"]["success_rate_last_window"]
+        )["name"],
     }
 
 
-def parse_minigrid_curriculum_config(config: dict[str, Any], seed: int = 301) -> MiniGridCurriculumConfig:
+def parse_minigrid_curriculum_config(
+    config: dict[str, Any], seed: int = 301
+) -> MiniGridCurriculumConfig:
     quiet_env_output = bool(config.get("quiet_env_output", True))
 
     stage_cfgs = config.get("stages", [])
@@ -117,7 +123,9 @@ def parse_minigrid_curriculum_config(config: dict[str, Any], seed: int = 301) ->
             raise ValueError(f"stage.max_steps must be positive for {name}")
         if episodes < 1:
             raise ValueError(f"stage.episodes must be positive for {name}")
-        stages.append(CurriculumStage(name=name, env_id=env_id, max_steps=max_steps, episodes=episodes))
+        stages.append(
+            CurriculumStage(name=name, env_id=env_id, max_steps=max_steps, episodes=episodes)
+        )
 
     condition_cfgs = config.get("conditions", [])
     if not isinstance(condition_cfgs, list) or not condition_cfgs:
@@ -134,7 +142,9 @@ def parse_minigrid_curriculum_config(config: dict[str, Any], seed: int = 301) ->
         if name in names:
             raise ValueError(f"duplicate condition.name: {name}")
         names.add(name)
-        active_stages = tuple(str(stage_name) for stage_name in item.get("active_stages", all_stage_names))
+        active_stages = tuple(
+            str(stage_name) for stage_name in item.get("active_stages", all_stage_names)
+        )
         if not active_stages:
             raise ValueError(f"active_stages must be non-empty for {name}")
         unknown_stages = sorted(set(active_stages) - stage_names)
@@ -277,9 +287,15 @@ def _run_curriculum_stage(
                     quiet=quiet_env_output,
                 )
                 next_feature = encode_observation(next_observation, condition.encoder_mode)
-                intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature, action, next_feature)
+                intrinsic_signal = _intrinsic_signal(
+                    condition.intrinsic_mode, transition, feature, action, next_feature
+                )
                 intrinsic = condition.intrinsic_beta * intrinsic_signal
-                total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
+                total_reward = (
+                    float(reward)
+                    if condition.intrinsic_target == "auxiliary"
+                    else float(reward) + intrinsic
+                )
                 done = bool(terminated or truncated)
 
                 if not force_random:
@@ -308,7 +324,12 @@ def _run_curriculum_stage(
                 )
             )
 
-        return _stage_summary(stage, condition, episodes, first_schema), agent, auxiliary_agent, global_episode_start + stage.episodes
+        return (
+            _stage_summary(stage, condition, episodes, first_schema),
+            agent,
+            auxiliary_agent,
+            global_episode_start + stage.episodes,
+        )
     finally:
         env.close()
 
@@ -341,7 +362,9 @@ def write_minigrid_curriculum_run(report: dict[str, Any], output_dir: Path) -> P
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (run_dir / "summary.md").write_text(curriculum_summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():

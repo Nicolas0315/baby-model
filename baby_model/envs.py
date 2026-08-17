@@ -99,7 +99,12 @@ class BabyGrid:
             observation=self.observation(),
             reward=reward,
             done=done,
-            info={"steps": self.steps, "agent": self.agent, "goal": self.goal, "blocked": int(blocked)},
+            info={
+                "steps": self.steps,
+                "agent": self.agent,
+                "goal": self.goal,
+                "blocked": int(blocked),
+            },
         )
 
     def observation(self) -> tuple[int, ...]:

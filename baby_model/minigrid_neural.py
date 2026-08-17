@@ -61,7 +61,10 @@ class NeuralQAgent:
         self.rng = Random(seed)
         self.input_weights: list[dict[int, float]] = [defaultdict(float) for _ in range(hidden_dim)]
         self.hidden_bias = [0.0 for _ in range(hidden_dim)]
-        self.output_weights = [[self.rng.uniform(-init_scale, init_scale) for _ in range(hidden_dim)] for _ in range(actions)]
+        self.output_weights = [
+            [self.rng.uniform(-init_scale, init_scale) for _ in range(hidden_dim)]
+            for _ in range(actions)
+        ]
         self.output_bias = [0.0 for _ in range(actions)]
 
     def hidden(self, features: SparseFeatures) -> list[float]:
@@ -76,7 +79,8 @@ class NeuralQAgent:
 
     def q_values_from_hidden(self, hidden: list[float]) -> list[float]:
         return [
-            self.output_bias[action] + sum(weight * value for weight, value in zip(self.output_weights[action], hidden))
+            self.output_bias[action]
+            + sum(weight * value for weight, value in zip(self.output_weights[action], hidden))
             for action in range(self.actions)
         ]
 
@@ -96,14 +100,22 @@ class NeuralQAgent:
         hidden = self.hidden(features)
         base_values = self.q_values_from_hidden(hidden)
         values = [
-            base_values[action] + bonus_weight * (0.0 if action_bonus is None else action_bonus.get(action, 0.0))
+            base_values[action]
+            + bonus_weight * (0.0 if action_bonus is None else action_bonus.get(action, 0.0))
             for action in range(self.actions)
         ]
         best_value = max(values)
         best_actions = [action for action, value in enumerate(values) if value == best_value]
         return self.rng.choice(best_actions)
 
-    def update(self, features: SparseFeatures, action: int, reward: float, next_features: SparseFeatures, done: bool) -> None:
+    def update(
+        self,
+        features: SparseFeatures,
+        action: int,
+        reward: float,
+        next_features: SparseFeatures,
+        done: bool,
+    ) -> None:
         hidden = self.hidden(features)
         values = self.q_values_from_hidden(hidden)
         next_best = 0.0 if done else max(self.q_values_from_hidden(self.hidden(next_features)))
@@ -123,7 +135,9 @@ class NeuralQAgent:
                 weights[feature_index] += self.alpha_hidden * hidden_grad * (value / norm)
 
     def nonzero_parameters(self) -> int:
-        input_count = sum(1 for weights in self.input_weights for value in weights.values() if value != 0.0)
+        input_count = sum(
+            1 for weights in self.input_weights for value in weights.values() if value != 0.0
+        )
         output_count = sum(1 for row in self.output_weights for value in row if value != 0.0)
         bias_count = sum(1 for value in self.hidden_bias + self.output_bias if value != 0.0)
         return input_count + output_count + bias_count
@@ -131,13 +145,17 @@ class NeuralQAgent:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-minigrid-neural")
-    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-neural-unlock.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("configs/experiments/minigrid-neural-unlock.json")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid-neural"))
     parser.add_argument("--seed", type=int, default=501)
     args = parser.parse_args()
 
     try:
-        report = run_minigrid_neural_suite(json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed)
+        report = run_minigrid_neural_suite(
+            json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed
+        )
     except ImportError as exc:
         print(f"missing optional dependency: {exc}")
         print("install with: python3 -m pip install minigrid")
@@ -296,9 +314,12 @@ def run_minigrid_neural_condition(
         if hasattr(env.action_space, "seed"):
             env.action_space.seed(condition.seed)
         agent = NeuralQAgent(actions=actions, seed=condition.seed, **agent_config.__dict__)
-        auxiliary_agent = NeuralQAgent(actions=actions, seed=condition.seed + 100_003, epsilon=0.0, **{
-            key: value for key, value in agent_config.__dict__.items() if key != "epsilon"
-        })
+        auxiliary_agent = NeuralQAgent(
+            actions=actions,
+            seed=condition.seed + 100_003,
+            epsilon=0.0,
+            **{key: value for key, value in agent_config.__dict__.items() if key != "epsilon"},
+        )
         transition = TransitionSurprise()
         episodes: list[EpisodeMetrics] = []
         first_schema: dict[str, Any] | None = None
@@ -311,7 +332,9 @@ def run_minigrid_neural_condition(
             )
             if first_schema is None:
                 first_schema = observation_schema(observation)
-            features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+            features = linear_features(
+                observation, condition.encoder_mode, agent_config.feature_dim
+            )
             feature_key = feature_signature(features)
             visited = {feature_key}
             external_return = 0.0
@@ -324,17 +347,27 @@ def run_minigrid_neural_condition(
                 action_bonus = None
                 if condition.intrinsic_target == "auxiliary" and not force_random:
                     action_bonus = auxiliary_agent.action_values(features)
-                action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
+                action = agent.choose(
+                    features, force_random=force_random, action_bonus=action_bonus
+                )
                 next_observation, reward, terminated, truncated, _info = _env_call(
                     env.step,
                     action,
                     quiet=quiet_env_output,
                 )
-                next_features = linear_features(next_observation, condition.encoder_mode, agent_config.feature_dim)
+                next_features = linear_features(
+                    next_observation, condition.encoder_mode, agent_config.feature_dim
+                )
                 next_feature_key = feature_signature(next_features)
-                intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature_key, action, next_feature_key)
+                intrinsic_signal = _intrinsic_signal(
+                    condition.intrinsic_mode, transition, feature_key, action, next_feature_key
+                )
                 intrinsic = condition.intrinsic_beta * intrinsic_signal
-                total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
+                total_reward = (
+                    float(reward)
+                    if condition.intrinsic_target == "auxiliary"
+                    else float(reward) + intrinsic
+                )
                 done = bool(terminated or truncated)
 
                 if not force_random:
@@ -384,7 +417,9 @@ def run_minigrid_neural_condition(
             "success_rate_last_window": mean(1.0 if item.success else 0.0 for item in last_window),
             "mean_steps_success": mean(successful_steps) if successful_steps else None,
             "mean_return_last_window": mean(item.external_return for item in last_window),
-            "mean_intrinsic_return_last_window": mean(item.intrinsic_return for item in last_window),
+            "mean_intrinsic_return_last_window": mean(
+                item.intrinsic_return for item in last_window
+            ),
             "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
             "nonzero_parameters": agent.nonzero_parameters(),
         }
@@ -396,7 +431,9 @@ def write_minigrid_neural_run(report: dict[str, Any], output_dir: Path) -> Path:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (run_dir / "summary.md").write_text(neural_summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():

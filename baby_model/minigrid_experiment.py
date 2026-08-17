@@ -26,13 +26,17 @@ class MiniGridConfig:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-minigrid-experiment")
-    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-smoke.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("configs/experiments/minigrid-smoke.json")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid"))
     parser.add_argument("--seed", type=int, default=101)
     args = parser.parse_args()
 
     try:
-        report = run_minigrid_suite(json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed)
+        report = run_minigrid_suite(
+            json.loads(args.config.read_text(encoding="utf-8")), seed=args.seed
+        )
     except ImportError as exc:
         print(f"missing optional dependency: {exc}")
         print("install with: python3 -m pip install minigrid")
@@ -162,7 +166,9 @@ def _run_minigrid_condition(
         if hasattr(env.action_space, "seed"):
             env.action_space.seed(condition.seed)
         agent = QAgent(actions=int(env.action_space.n), seed=condition.seed)
-        auxiliary_agent = QAgent(actions=int(env.action_space.n), seed=condition.seed + 100_003, epsilon=0.0)
+        auxiliary_agent = QAgent(
+            actions=int(env.action_space.n), seed=condition.seed + 100_003, epsilon=0.0
+        )
         transition = TransitionSurprise()
         episodes: list[EpisodeMetrics] = []
         first_schema: dict[str, Any] | None = None
@@ -194,9 +200,15 @@ def _run_minigrid_condition(
                     quiet=quiet_env_output,
                 )
                 next_feature = encode_observation(next_observation, condition.encoder_mode)
-                intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature, action, next_feature)
+                intrinsic_signal = _intrinsic_signal(
+                    condition.intrinsic_mode, transition, feature, action, next_feature
+                )
                 intrinsic = condition.intrinsic_beta * intrinsic_signal
-                total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
+                total_reward = (
+                    float(reward)
+                    if condition.intrinsic_target == "auxiliary"
+                    else float(reward) + intrinsic
+                )
                 done = bool(terminated or truncated)
 
                 if not force_random:
@@ -242,7 +254,9 @@ def _run_minigrid_condition(
             "success_rate_last_window": mean(1.0 if item.success else 0.0 for item in last_window),
             "mean_steps_success": mean(successful_steps) if successful_steps else None,
             "mean_return_last_window": mean(item.external_return for item in last_window),
-            "mean_intrinsic_return_last_window": mean(item.intrinsic_return for item in last_window),
+            "mean_intrinsic_return_last_window": mean(
+                item.intrinsic_return for item in last_window
+            ),
             "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
         }
     finally:
@@ -260,7 +274,9 @@ def write_minigrid_run(report: dict[str, Any], output_dir: Path) -> Path:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (run_dir / "summary.md").write_text(summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():
