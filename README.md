@@ -102,5 +102,8 @@ host.
 - MiniGrid PyTorch DQN lane: `docs/experiments/minigrid-torch-lane.md`
 - Seed statistics and greedy holdout:
   `docs/experiments/seed-statistics-and-holdout.md`
+- Verification audit: `docs/experiments/verification-audit-20260823.md`
+- Pipeline sequence and artifact model:
+  `docs/architecture/experiment-pipeline.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`

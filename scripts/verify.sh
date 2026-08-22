@@ -27,6 +27,7 @@ fi
 "$py" -m json.tool configs/experiments/minigrid-torch-adda-v16.json >/dev/null
 "$py" -m json.tool configs/experiments/minigrid-torch-adda-v48.json >/dev/null
 "$py" -m json.tool configs/experiments/minigrid-torch-adda-v49.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v50.json >/dev/null
 "$py" -m json.tool configs/fleet/gpu-wheel-policy.json >/dev/null
 "$py" -m baby_model.gpu_compat --config configs/fleet/gpu-wheel-policy.json >/dev/null
 bash -n scripts/*.sh

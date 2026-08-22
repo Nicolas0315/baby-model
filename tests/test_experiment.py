@@ -3259,6 +3259,28 @@ class ExperimentTest(unittest.TestCase):
                 episodes=0,
             )
 
+    def test_representation_null_control_is_opt_in(self) -> None:
+        base = {
+            "environment": {"id": "BabyAI-GoToObj-v0", "max_steps": 64},
+            "conditions": [
+                {
+                    "name": "N",
+                    "episodes": 4,
+                    "representation_objective": "state_plus_mission_target",
+                    "representation_beta": 0.0,
+                }
+            ],
+        }
+        # beta = 0 stays rejected by default so a typo cannot silently disable the objective.
+        with self.assertRaises(ValueError):
+            parse_minigrid_torch_config(base)
+
+        opted = {**base, "conditions": [{**base["conditions"][0], "representation_null_control": True}]}
+        condition = parse_minigrid_torch_config(opted).conditions[0]
+        self.assertTrue(condition.representation_null_control)
+        self.assertEqual(condition.representation_beta, 0.0)
+        self.assertEqual(condition.representation_objective, "state_plus_mission_target")
+
     def test_gpu_compat_policy_is_dependency_free(self) -> None:
         self.assertLess(DriverVersion.parse("576.88"), DriverVersion.parse("580.0"))
         self.assertLess(DriverVersion.parse("560.99"), DriverVersion.parse("580.0"))

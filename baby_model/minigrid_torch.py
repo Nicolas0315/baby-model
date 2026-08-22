@@ -640,6 +640,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         action_prior_weight = float(item.get("action_prior_weight", 0.0))
         freeze_encoder_after_delay = bool(item.get("freeze_encoder_after_delay", False))
         stop_representation_after_delay = bool(item.get("stop_representation_after_delay", False))
+        representation_null_control = bool(item.get("representation_null_control", False))
         active_stages = tuple(str(stage_name) for stage_name in item.get("active_stages", all_stage_names))
         if stages:
             if not active_stages:
@@ -681,7 +682,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 raise ValueError(f"two-head representation betas must be positive for {name}")
             if representation_schedule == "linear_anneal" and representation_anneal_episodes <= 0:
                 raise ValueError(f"linear representation anneal requires representation_anneal_episodes for {name}")
-        elif representation_objective != "none" and representation_beta <= 0.0:
+        elif representation_objective != "none" and representation_beta <= 0.0 and not representation_null_control:
             raise ValueError(f"representation_beta must be positive for {name}")
         elif representation_objective != TWO_HEAD_STATE_TARGET_OBJECTIVE and (
             representation_state_beta != 0.0 or representation_target_visibility_beta != 0.0
@@ -723,6 +724,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 action_prior_weight=action_prior_weight,
                 freeze_encoder_after_delay=freeze_encoder_after_delay,
                 stop_representation_after_delay=stop_representation_after_delay,
+                representation_null_control=representation_null_control,
             )
         )
         active_stages_by_condition.append((name, active_stages))
