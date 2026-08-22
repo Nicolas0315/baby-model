@@ -1065,6 +1065,36 @@ Updated: 2026-08-23 JST
     sibling clone that no longer exists, so the v2.45 environment was not
     reproducible as found. It is being rebuilt at source commit `56f0c3d`.
 
+- Verification audit at 2026-08-23:
+  `docs/experiments/verification-audit-20260823.md`, plus the pipeline sequence
+  and artifact-model diagrams in `docs/architecture/experiment-pipeline.md`
+  (both Mermaid diagrams rendered with `mmdc` 11.16.0).
+  - No random-policy floor had ever been measured. It is `0.283` on the holdout
+    episode seeds and `0.269` on the training-window seeds, and **every**
+    condition in the v2.46 eight-seed run is at or below it on greedy holdout
+    (`ZK` 0.254, `ZI` 0.192, `ZH` 0.158, `ZG` 0.125, `ZE` 0.079).
+  - CPU and both CUDA workers produce bit-identical behaviour, aggregates, and
+    statistics for the same seeds. Initialization is CPU-side under
+    `torch.manual_seed` and no CUDA RNG is drawn, so the device is not an
+    experimental axis. An RTX 4090 is 1.15x the same host's CPU on this loop.
+  - `max_steps` above the environment's own truncation is inert. 27 configs
+    request `80` on a 64-step env, so the step-horizon axis has never been
+    varied on the evaluation task.
+  - The AD-only phase is 8 of 84 episodes and lies entirely inside
+    `MiniGrid-Empty-5x5-v0`, which has no mission target, while the objective
+    is `state_plus_mission_target`. `ZI` performs 235 representation updates
+    against `ZE`'s 4228, all of them in that stage.
+  - Feature hashing loses 6.6% of tokens per observation at `feature_dim` 1024.
+  - The shared Adam advances the encoder's step count twice as fast in any
+    representation condition, so `beta -> 0` does not recover the control and
+    there is no continuous path from `ZE` to `ZK`. That control was not
+    expressible: `beta <= 0` was rejected whenever an objective was set. Added
+    `representation_null_control` and
+    `configs/experiments/minigrid-torch-adda-v50.json` as v2.47 `ZN`.
+  - Tested and refuted: representation updates do not leak a momentum update
+    into the Q head. `zero_grad()` sets `grad = None` and Adam skips those
+    parameters.
+
 ## Next
 
 - Issue #70 v2.46: an eight-seed CUDA sweep of

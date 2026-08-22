@@ -109,7 +109,7 @@ because `scripts/setup_minigrid_env.sh` is parameterised.
 | D2 | The AD-only phase runs entirely in an environment with no mission target | **measured** |
 | D3 | `ZI` performs 5.6% of `ZE`'s representation learning | **measured** |
 | D4 | Feature-hash collision rate | **measured, 6.6% of tokens per observation** |
-| D5 | The GPU has no behavioural effect | **measured** |
+| D5 | The GPU has no behavioural effect, and neither does CPU vs CUDA | **measured** |
 | D6 | One RNG stream is shared by exploration and replay sampling | open |
 
 ### D1. The horizon knob is partly inert
@@ -165,10 +165,30 @@ under `torch.manual_seed` before `.to(device)`, there is no dropout, and no CUDA
 RNG is ever drawn. Action selection and replay sampling both come from one
 `random.Random(seed)`.
 
+The same eight seeds were then run with `--device cpu` on `rtx4090`, in the
+same venv and the same clone. **CPU and CUDA are also bit-identical** on every
+behavioural quantity, on the whole `aggregate` block, and on the whole
+`statistics` block. The only differing leaves across the entire artifact are
+timestamps, the `device` string, and `mean_representation_loss_last_window`.
+
+Runtime for the identical eight-seed sweep:
+
+| device | total | per seed |
+| --- | ---: | ---: |
+| CUDA `rtx4090` | 8.2 min | 70.0 s |
+| CUDA `rtx5060ti` | 10.7 min | 91.3 s |
+| CPU `rtx4090` | 9.4 min | 80.8 s |
+
+An RTX 4090 buys **1.15x** over the same host's CPU, because the loop does
+single-sample forward passes with a fresh host-to-device transfer of a
+1024-vector on every step (E6).
+
 Consequence: the "CUDA replication" gates in v2.34, v2.38, and v2.43, and the
-"another CUDA worker" plan in issue #70, carry no independent evidence. A CPU
-run of the same eight seeds on the same host is in flight to confirm that the
-device is fully irrelevant rather than merely GPU-to-GPU stable.
+"another CUDA worker" plan in issue #70, carry no independent evidence at all —
+not merely no *worker* information, but no information beyond the CPU run. The
+whole GPU lane, from v0.8 onward, has consumed fleet GPU time for a 15% wall
+clock gain and zero additional evidence. Either retire the lane, or change the
+loop to batched or vectorised environments where a GPU can actually contribute.
 
 ### D4. Feature hashing
 
