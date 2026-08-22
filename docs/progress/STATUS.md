@@ -1095,20 +1095,54 @@ Updated: 2026-08-23 JST
     into the Q head. `zero_grad()` sets `grad = None` and Adam skips those
     parameters.
 
+- Issue #70 v2.46 is complete and **reverses the v2.45 decision**:
+  `docs/experiments/minigrid-torch-adda-v57.md`.
+  - `ZI` is not separable from the control on a new eight-seed set: Δ success
+    `+0.050`, CI `[-0.044, +0.125]`, p `0.375`. Re-running the original seeds
+    `4301-4305` on the rebuilt environment reproduced v2.45 exactly, so the
+    difference is the seed set alone. The control `ZK` moved `+0.131` between
+    seed sets while `ZI` moved `-0.049`; the v2.45 effect was the control
+    drawing a weak seed set.
+  - The preferred gate in #70 cannot produce evidence: `rtx4090`, `rtx5060ti`,
+    and CPU are all bit-identical for the same seeds.
+  - `ZI` is not the long-horizon baseline. On greedy holdout it is below both
+    the control and a random policy.
+- v2.47 null control is complete: `docs/experiments/minigrid-torch-adda-v58.md`.
+  - `ZN` runs the same objective with `beta = 0`, so the optimizer takes the
+    same steps with a zero-information gradient. `ZN` holdout `0.119` is
+    indistinguishable from `ZE`'s `0.083` (p `0.594`) and far from the control's
+    `0.254`.
+  - Decomposition of the `ZK`-to-`ZE` gap of `0.171`: optimizer schedule alone
+    `0.135` (**79%**), objective content `0.035` (21%).
+  - Mechanism measured directly: at `beta = 0` the encoder gradient is an exact
+    zero tensor rather than `None`, so Adam still applies leftover Q-learning
+    momentum. Encoder drift is `7.282e-02` at `beta = 0` and `7.284e-02` at
+    `beta = 0.05`.
+  - The representation family has therefore never tested the hypothesis. The
+    beta-neighbourhood rankings in v2.24, v2.29, v2.37, and v2.45 were noise on
+    top of a roughly constant optimizer artifact.
+
 ## Next
 
-- Issue #70 v2.46: an eight-seed CUDA sweep of
-  `configs/experiments/minigrid-torch-adda-v49.json` is running on `rtx5060ti`,
-  which changes both the worker axis and the seed count. Eight seeds is the
-  first count where the paired test can reach p < 0.05, and the config enables
-  the greedy holdout, so the run tests `ZI` on a held-out metric as well.
-- Backfill the earlier CUDA gates with holdout numbers only if the v2.46 result
-  makes the training-window and holdout rankings disagree.
+- Give the representation head its own optimizer, or exclude the Q network's
+  parameters from the representation step, then re-run the v2.47 condition set.
+  Until that lands, no result in the representation family separates the
+  hypothesis from the artifact.
+- Anneal `epsilon` so the greedy policy is exercised during training. It is the
+  likeliest direct cause of every condition's greedy policy sitting below the
+  random floor.
 
 ## Not Yet Proven
 
+- **That any condition beats a uniform-random policy on held-out greedy
+  evaluation.** The floor is `0.283` on `BabyAI-GoToObj-v0`; the best condition
+  in the eight-seed run reaches `0.254`. This is now measured automatically by
+  every sweep with `holdout_episodes` set.
+- That the AD-first / DA-delayed hypothesis has been tested at all, given the
+  v2.47 finding that 79% of the representation effect is an optimizer artifact.
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
-  compatibility and needs an explicit external state change before rerun.
+  compatibility and needs an explicit external state change before rerun. Note
+  that per v2.46 this gate would carry no evidence even if it ran.
 - A broader stability claim beyond the bounded three-seed CUDA sweep.
 - A redesigned objective that beats the no-representation curriculum and the
   current best representation baselines under the mission-preservation probe.

@@ -100,6 +100,8 @@ host.
   `docs/experiments/minigrid-linear-sweep.md`
 - MiniGrid neural encoder: `docs/experiments/minigrid-neural-unlock.md`
 - MiniGrid PyTorch DQN lane: `docs/experiments/minigrid-torch-lane.md`
+- v2.46 cross-axis result: `docs/experiments/minigrid-torch-adda-v57.md`
+- v2.47 null control: `docs/experiments/minigrid-torch-adda-v58.md`
 - Seed statistics and greedy holdout:
   `docs/experiments/seed-statistics-and-holdout.md`
 - Verification audit: `docs/experiments/verification-audit-20260823.md`

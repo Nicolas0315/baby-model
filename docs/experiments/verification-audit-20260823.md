@@ -14,7 +14,7 @@ gaps with no measurement yet.
 | A1 | Random-policy floor | **measured, and now a permanent part of every sweep** |
 | A2 | Optimal / scripted-policy ceiling | open |
 | A3 | Untrained-network greedy floor | open |
-| A4 | Representation head present with beta = 0 | **was not expressible in the config; now added, running as v2.47** |
+| A4 | Representation head present with beta = 0 | **was not expressible; added, and v2.47 shows it accounts for 79% of the effect** |
 
 ### A1. The random-policy floor
 
@@ -328,8 +328,10 @@ releases and silently changes a result.
 
 ## Remaining priority
 
-1. **E1 via v2.47** (running), then give the representation head its own
-   optimiser if `ZN` shows the schedule matters.
+1. **Give the representation head its own optimiser.** v2.47 reported: the
+   schedule accounts for 79% of the `ZK`-to-`ZE` gap and the objective for 21%,
+   so the mechanism the hypothesis rests on has been dominated by an optimiser
+   side effect. See `docs/experiments/minigrid-torch-adda-v58.md`.
 2. **B2 and B3.** Anneal epsilon so the greedy policy is exercised during
    training, and widen the evaluation beyond 20 episodes. B2 is the likely
    direct cause of the below-floor greedy policies in A1.
