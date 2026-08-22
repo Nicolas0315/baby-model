@@ -105,6 +105,8 @@ host.
 - Seed statistics and greedy holdout:
   `docs/experiments/seed-statistics-and-holdout.md`
 - Verification audit: `docs/experiments/verification-audit-20260823.md`
+- Prior art, applicable repos, and learning-order evidence:
+  `docs/research/prior-art-and-learning-order.md`
 - Pipeline sequence and artifact model:
   `docs/architecture/experiment-pipeline.md`
 - Progress: `docs/progress/STATUS.md`

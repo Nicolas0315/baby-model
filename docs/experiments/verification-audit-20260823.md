@@ -305,6 +305,64 @@ Combined with A1, the honest current state of the research claim is:
 - The ordering among the remaining representation conditions is not separable
   from the shared-optimiser schedule until v2.47 reports.
 
+## G. Necessary tests versus speedups
+
+The two are worth separating because they have different currencies. A
+**necessary test** costs compute and cannot be skipped without leaving a claim
+unsupported. A **speedup** costs engineering time once and buys more of every
+test afterwards; it must be behaviour-preserving or it is a silent
+protocol change.
+
+### G.1 Speedups (landed)
+
+Profiling one seed of the v50 config put about 40% of runtime in building dense
+Python lists and converting them to tensors — which is also why an RTX 4090 was
+only 1.15x the same host's CPU.
+
+| change | why it was the bottleneck |
+| --- | --- |
+| `lru_cache` on `_feature_index` | pure blake2b hash, ~4.6M calls per seed against a few thousand distinct tokens |
+| `_scatter` replaces `dense_feature_vector` + `torch.tensor(nested list)` | one flat index assignment instead of a dense 1024-element Python list per row |
+| replay stores each transition's dense row once | capacity 1024 / batch 16 means a transition is resampled dozens of times, and each resample rebuilt its row |
+
+**90.45s to 40.42s for two seeds — 2.24x — with bit-identical output.** The
+behaviour, aggregate, statistics, and random-floor blocks all match the
+pre-optimization run; only `created_at` differs. `scatter_self_check` asserts
+`_scatter` still equals the dense path and runs in the torch lane of
+`verify_minigrid.sh`, because a divergence there would make the whole
+experiment history incomparable.
+
+After this the profile is flat: Adam's single-tensor path, `linear_features`,
+the elementwise optimizer kernels, backward, and the MiniGrid environment all
+sit within a factor of two of each other. There is no remaining single hotspot.
+
+### G.2 Speedups deliberately not taken
+
+| candidate | why not |
+| --- | --- |
+| `foreach=True` / `fused=True` Adam | worth roughly 10-15% of the current profile, but it changes the arithmetic, so results would stop being comparable with everything before it. A knob to offer with a recorded flag, not a default to flip. |
+| sparse ops / `EmbeddingBag` instead of dense 1024-vectors | structurally the right answer, but a different kernel means different float results. Only worth it together with a deliberate protocol reset. |
+| the CUDA lane | the fastest available speedup is to **stop using it**. CPU is bit-identical (D5) and 1.15x slower, so the GPU is buying 15% wall clock and no evidence while occupying fleet capacity. Run the lane on CPU and spend the GPUs on something that batches. |
+| replacing `list(self.replay)` before `rng.sample` | not in the profile. Copying 1024 pointers is cheaper than indexing a deque k times. |
+
+### G.3 Necessary tests, ranked
+
+Ordering matters here: items 1 and 2 change what every later measurement means,
+so running 3 onward first would optimize the artifact.
+
+| # | test | why it cannot be skipped | rough cost |
+| --- | --- | --- | --- |
+| 1 | **Episode-budget ladder.** Sweep eval episodes 48 / 200 / 800 / 3200 and find where any condition clears the random floor. | The published RL requirement for the same BabyAI difficulty tier is 15,900-17,400 episodes; the protocol gives 48. Until something clears the floor, every condition comparison is inside the pre-learning noise band. See `docs/research/prior-art-and-learning-order.md`. | small at the low rungs, hours at 3200+ |
+| 2 | **Separate optimizer for the representation head.** Re-run the v2.47 condition set with the representation loss stepping its own optimizer. | v2.47 attributes 79% of the representation effect to the shared Adam schedule. Until this is separated, no representation result tests the hypothesis. | one 8-seed sweep |
+| 3 | **Epsilon anneal.** Anneal to near-greedy and re-measure the holdout. | `epsilon` is constant 0.2, so the greedy policy is never exercised during training. Likeliest direct cause of every greedy policy sitting below the floor. | one 8-seed sweep |
+| 4 | **A ceiling.** A standard PPO baseline on `BabyAI-GoToObj-v0` from `rl-starter-files`. | The audit has a measured floor (0.283) and no ceiling, so no number can be placed on a scale. | one external training run |
+| 5 | **Seeds sized to the effect.** The measured sd of paired holdout differences is about 0.144; detecting Δ = 0.05 at 80% power needs roughly 65 seeds. | Explains why a hand-run loop at n = 3-5 could never work: the exact p-floor there is 0.250 / 0.062. Either widen the evaluation to shrink sigma, or stop claiming effects of that size. | scales with 1-3 |
+| 6 | **`feature_dim` sweep.** 1024 vs 4096. | Hash collisions lose 6.6% of tokens per observation at 1024 (D4); `feature_dim` has never been varied. | one sweep, cheap |
+| 7 | **A3: untrained-greedy floor.** | Separates "learned something bad" from "never learned". Cheap and currently missing. | minutes |
+
+Items 5 and 1 interact in the project's favour: the 2.24x speedup and moving
+the lane to CPU both buy seeds directly, and seeds are what item 5 is short of.
+
 ## Landed in this session
 
 **A1 is now a gate, not a note.** Any sweep with `holdout_episodes` set also
