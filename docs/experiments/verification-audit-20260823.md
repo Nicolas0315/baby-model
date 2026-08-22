@@ -363,6 +363,58 @@ so running 3 onward first would optimize the artifact.
 Items 5 and 1 interact in the project's favour: the 2.24x speedup and moving
 the lane to CPU both buy seeds directly, and seeds are what item 5 is short of.
 
+## H. The episode-budget ladder (measured)
+
+Necessary test G.3 item 1, run on 3 seeds with the control `ZK` and the
+representation condition `ZE`, varying only the eval stage's episode count.
+Greedy holdout, 60 episodes, against the random floor measured on the same
+episode seeds (0.239 at these three seeds).
+
+| eval episodes | `ZK` holdout | `ZE` holdout | floor | `ZK` vs floor | `ZE` - `ZK` | p |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **48** (the historic protocol) | 0.244 | 0.144 | 0.239 | **+0.006** | -0.100 | 0.750 |
+| 200 | 0.344 | 0.256 | 0.239 | +0.106 | -0.089 | 0.750 |
+| 800 | 0.417 | 0.417 | 0.239 | +0.178 | -0.000 | 1.000 |
+| 3200 | **0.700** | 0.389 | 0.239 | **+0.461** | -0.311 | 0.500 |
+
+Training-window success over the same rungs: `ZK` 0.433 / 0.800 / 0.833 /
+**0.950**; `ZE` 0.433 / 0.450 / 0.667 / 0.650.
+
+### What this establishes
+
+**The episode budget was the binding constraint, and the historic protocol sat
+exactly at chance.** At 48 eval episodes the control's greedy policy is
+`+0.006` above the random floor — indistinguishable from it. Raising the budget
+alone moves it to `+0.461`, with per-seed values 0.617 / 0.600 / 0.883, all far
+above the floor. Nothing about the agent, the objective, or the curriculum had
+to change.
+
+This is a single sufficient explanation for the whole audit: at 84 total
+episodes the agents were pre-learning, so all 56 experiment documents compared
+conditions inside the noise band that precedes learning. It also matches the
+external reference — BabyAI's own baselines need 15,900-17,400 RL episodes on
+the same difficulty tier.
+
+### What this does not establish
+
+**The `ZE` versus `ZK` difference is not separable at any rung.** Every rung is
+1/2/0 on wins and p >= 0.5, which is expected: at n = 3 the exact p-floor is
+0.250. The `-0.311` at 3200 has CI `[-0.817, +0.050]` and is driven by one seed
+collapsing to 0.067 while the other two reach 0.450 and 0.650.
+
+What can be said is that the *direction* is consistent — `ZE` lost two of three
+seeds at all four rungs — and that `ZE`'s training-window success plateaus
+(0.450 / 0.667 / 0.650) while `ZK`'s keeps climbing to 0.950. Whether the
+representation objective caps learning or merely tracks it more noisily needs
+the budget and the seed count raised together.
+
+That is v2.48: `configs/experiments/minigrid-torch-adda-v51.json` runs `ZK`,
+`ZN` (the beta = 0 null control), and `ZE` at 3200 eval episodes with a
+120-episode holdout across eight seeds, split across two hosts. Eight seeds
+lowers the p-floor to 0.008, and including `ZN` decomposes any surviving
+penalty into optimizer schedule versus objective content at a budget where the
+control demonstrably learns.
+
 ## Landed in this session
 
 **A1 is now a gate, not a note.** Any sweep with `holdout_episodes` set also
