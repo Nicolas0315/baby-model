@@ -53,6 +53,24 @@ MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
 This additionally requires optional `torch`; setup details are in
 `docs/experiments/minigrid-torch-lane.md`.
 
+## Reading a Sweep
+
+Every PyTorch sweep summary carries a `## Seed-Level Statistics` section with
+per-condition dispersion and a paired sign-flip test against the control
+condition. Re-analyze an existing artifact without a GPU:
+
+```sh
+python3 -m baby_model.stats path/to/metrics.json
+```
+
+The exact p-value floor of that test is `2 / 2**n`, so a five-seed gate cannot
+reach p < 0.05. Use at least six seeds, preferably eight, for any gate meant to
+claim significance.
+
+Set `holdout_episodes` in a torch config to add a greedy (epsilon = 0),
+no-learning evaluation on held-out episode seeds after training. Training-window
+metrics mix policy quality with exploration noise; the holdout does not.
+
 ## Fleet Loop
 
 Start read-only:
@@ -82,5 +100,7 @@ host.
   `docs/experiments/minigrid-linear-sweep.md`
 - MiniGrid neural encoder: `docs/experiments/minigrid-neural-unlock.md`
 - MiniGrid PyTorch DQN lane: `docs/experiments/minigrid-torch-lane.md`
+- Seed statistics and greedy holdout:
+  `docs/experiments/seed-statistics-and-holdout.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`

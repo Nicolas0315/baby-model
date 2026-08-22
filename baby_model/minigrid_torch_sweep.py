@@ -9,6 +9,7 @@ from statistics import mean, median
 from typing import Any
 
 from baby_model.minigrid_torch import run_minigrid_torch_suite
+from baby_model.stats import analyze_report, statistics_markdown
 from baby_model.sweep import parse_seeds
 
 
@@ -41,7 +42,7 @@ def run_minigrid_torch_sweep(config: dict[str, Any], seeds: list[int]) -> dict[s
         raise ValueError("seeds must be non-empty")
     runs = [run_minigrid_torch_suite(config, seed=seed) for seed in seeds]
     aggregate = aggregate_torch_reports(runs=runs, seeds=seeds)
-    return {
+    report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "hypothesis": str(config.get("hypothesis", "Baby-AD/DA MiniGrid PyTorch DQN sweep")),
         "seeds": seeds,
@@ -53,6 +54,19 @@ def run_minigrid_torch_sweep(config: dict[str, Any], seeds: list[int]) -> dict[s
             key=lambda row: (row["mean_success_rate_last_window"], row["win_count"]),
         )["name"],
     }
+    metrics = ["success_rate_last_window", "mean_return_last_window"]
+    if any("holdout_success_rate" in row for run in runs for row in run["results"]):
+        metrics.append("holdout_success_rate")
+        report["winner_by_mean_holdout_success"] = max(
+            aggregate,
+            key=lambda row: (row["mean_holdout_success_rate"], row["win_count"]),
+        )["name"]
+    report["statistics"] = analyze_report(
+        report,
+        metrics=tuple(metrics),
+        baseline=config.get("baseline_condition"),
+    )
+    return report
 
 
 def aggregate_torch_reports(runs: list[dict[str, Any]], seeds: list[int]) -> list[dict[str, Any]]:
@@ -76,6 +90,8 @@ def aggregate_torch_reports(runs: list[dict[str, Any]], seeds: list[int]) -> lis
         target_near = [float(row.get("mission_target_near_rate_last_window", 0.0)) for row in rows]
         updates = [int(row["updates"]) for row in rows]
         parameters = [int(row["parameter_count"]) for row in rows]
+        holdout_success = [float(row["holdout_success_rate"]) for row in rows if "holdout_success_rate" in row]
+        extra = {"mean_holdout_success_rate": mean(holdout_success)} if holdout_success else {}
         aggregate.append(
             {
                 "name": name,
@@ -92,6 +108,7 @@ def aggregate_torch_reports(runs: list[dict[str, Any]], seeds: list[int]) -> lis
                 "mean_mission_target_near_rate_last_window": mean(target_near),
                 "mean_updates": mean(updates),
                 "mean_parameter_count": mean(parameters),
+                **extra,
             }
         )
     return aggregate
@@ -122,6 +139,10 @@ def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:
         f"- torch_versions: `{','.join(versions)}`",
         f"- devices: `{','.join(devices)}`",
         f"- winner_by_mean_success_last_window: `{report['winner_by_mean_success_last_window']}`",
+    ]
+    if "winner_by_mean_holdout_success" in report:
+        lines.append(f"- winner_by_mean_holdout_success: `{report['winner_by_mean_holdout_success']}`")
+    lines += [
         "",
         "| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | median_return_last | target_visible_last | target_center_last | target_near_last | mean_updates | parameters |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
@@ -143,6 +164,9 @@ def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:
                 params=row["mean_parameter_count"],
             )
         )
+    if report.get("statistics"):
+        lines.append("")
+        lines.append(statistics_markdown(report["statistics"]).rstrip("\n"))
     lines.append("")
     lines.extend(["## Per-Seed Winners", ""])
     for seed, run in zip(report["seeds"], report["runs"], strict=True):

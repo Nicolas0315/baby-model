@@ -1,6 +1,6 @@
 # baby-model Status
 
-Updated: 2026-06-30 JST
+Updated: 2026-08-23 JST
 
 ## Proven
 
@@ -1028,11 +1028,52 @@ Updated: 2026-06-30 JST
   - Treat `ZI` as the current strongest long-horizon representation-driven
     baseline.
 
+- Verification machinery for seed-level uncertainty landed:
+  `docs/experiments/seed-statistics-and-holdout.md`
+  - `baby_model/stats.py`: paired sign-flip randomization test (exact for
+    n <= 20) and percentile-bootstrap intervals, standard library only and
+    deterministic. Wired into every PyTorch sweep report and `summary.md`, and
+    usable offline on an existing artifact via
+    `python3 -m baby_model.stats <metrics.json>`.
+  - `run_greedy_holdout` in `baby_model/minigrid_torch.py`, enabled by
+    `holdout_episodes`: greedy (epsilon = 0), no-learning evaluation on episode
+    seeds disjoint from training, reported as `holdout_success_rate` and
+    `winner_by_mean_holdout_success`.
+  - `configs/experiments/minigrid-torch-adda-v49.json` is v48 plus
+    `holdout_episodes: 60` and an explicit `baseline_condition`.
+  - `./scripts/verify.sh` passes with the new gates; 97 unit tests. A real
+    `minigrid` 3.1.0 / `torch` 2.12.1 CPU sweep produced a `summary.md`
+    carrying the statistics and holdout sections.
+- Re-analysis of the untouched v2.44 and v2.45 CUDA artifacts:
+  - `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` beat the
+    no-representation control on every seed in both sweeps. At five seeds:
+    success `+0.230`, CI `[+0.140, +0.340]`, p `0.062`, 5/0/0; return `+0.210`,
+    CI `[+0.153, +0.285]`. Its seed sd (`0.057`) is half the control's
+    (`0.112`), so it is the only condition that is also stable.
+  - `ZE`, `ZG`, and `ZH` are statistically indistinguishable from the control
+    (p `0.5`-`1.0`, intervals straddling zero). The earlier ranking among them,
+    including v2.39/v2.40 treating `ZE` as the strongest
+    representation-driven candidate, was reading protocol noise.
+  - The exact p-value floor of the paired test is `2 / 2**n`, so no three-seed
+    or five-seed gate in this repository can reach p < 0.05 at any effect size.
+- CUDA environments rebuilt from the scripted setup path
+  (`MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128`,
+  `MINIGRID_VENV_DIR=.venv-minigrid-cuda`, uv backend, Python 3.12):
+  - `rtx5060ti` / WSL Ubuntu: `torch 2.11.0+cu128`, `cuda_available=True`,
+    `NVIDIA GeForce RTX 5060 Ti`. This is the second CUDA axis for issue #70.
+  - The previous `rtx4090` CUDA venv used for v2.43-v2.45 was a symlink into a
+    sibling clone that no longer exists, so the v2.45 environment was not
+    reproducible as found. It is being rebuilt at source commit `56f0c3d`.
+
 ## Next
 
-- Validate `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` on a
-  new axis, preferably another CUDA-capable worker or a longer horizon, before
-  calling the long-horizon branch stable beyond this worker/protocol.
+- Issue #70 v2.46: an eight-seed CUDA sweep of
+  `configs/experiments/minigrid-torch-adda-v49.json` is running on `rtx5060ti`,
+  which changes both the worker axis and the seed count. Eight seeds is the
+  first count where the paired test can reach p < 0.05, and the config enables
+  the greedy holdout, so the run tests `ZI` on a held-out metric as well.
+- Backfill the earlier CUDA gates with holdout numbers only if the v2.46 result
+  makes the training-window and holdout rankings disagree.
 
 ## Not Yet Proven
 
@@ -1067,5 +1108,10 @@ Updated: 2026-06-30 JST
   AD-only phase. v2.43 replicated that direction on CUDA seed `4301`, v2.44
   passed a bounded three-seed CUDA gate for `ZI`, and v2.45 preserved the edge
   in a five-seed CUDA extension. The remaining gap is cross-axis validation
-  beyond the same worker and long-horizon protocol.
+  beyond the same worker and long-horizon protocol. As of the 2026-08-23
+  re-analysis, only the `ZI` result in that chain is separable from the
+  no-representation control; the `ZE`/`ZG`/`ZH` rankings above are recorded
+  history, not evidence.
+- Any result at p < 0.05. Every gate so far used three or five seeds, whose
+  exact paired-test p-floors are `0.250` and `0.062`.
 - Full objective completion.

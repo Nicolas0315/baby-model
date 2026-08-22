@@ -1,6 +1,6 @@
 # baby-model Current State
 
-Updated: 2026-06-29 JST
+Updated: 2026-08-23 JST
 
 ## Purpose
 
@@ -39,6 +39,21 @@ bash -n scripts/*.sh
 The full verifier writes bounded temporary outputs under `.tmp/verify-run` and
 `.tmp/verify-sweep`, then manages only those expected paths.
 
+## Decision Verification
+
+Sweep decisions are read from `## Seed-Level Statistics` in a sweep's
+`summary.md`: per-condition sd and bootstrap interval, plus a paired sign-flip
+test against the control condition. See
+`docs/experiments/seed-statistics-and-holdout.md`. Two rules follow from the
+mechanism:
+
+- The exact paired p-floor is `2 / 2**n`. Three- and five-seed gates cannot
+  reach p < 0.05; use six or more seeds for a significance claim.
+- `success_rate_last_window` is measured under epsilon-greedy exploration on
+  training episodes. Configs that set `holdout_episodes` also report
+  `holdout_success_rate` from a greedy, no-learning pass over held-out episode
+  seeds, which is the metric to prefer when the two disagree.
+
 ## Research Lanes
 
 - Core stdlib lane: v0, v0.2, and v0.3 toy-environment sweeps.
@@ -46,6 +61,27 @@ The full verifier writes bounded temporary outputs under `.tmp/verify-run` and
   experiments.
 - Optional PyTorch/GPU lane: CPU-safe and CUDA/MPS-capable smoke tests with
   fleet evidence kept in local docs outside this repository.
+
+## GPU Lane Environment
+
+The CUDA venv is not committed and is not durable; rebuild it from the scripted
+path rather than assuming a previous one survives:
+
+```sh
+MINIGRID_VENV_DIR=.venv-minigrid-cuda \
+MINIGRID_PYTHON=3.12 \
+MINIGRID_ENV_BACKEND=uv \
+MINIGRID_TORCH_INSTALLER=uv \
+MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128 \
+MINIGRID_TORCH_DEVICE=cuda \
+MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
+./scripts/setup_minigrid_env.sh
+```
+
+The v2.43-v2.45 `rtx4090` venv was found in 2026-08 as a broken symlink into a
+sibling clone that had been removed, so that environment was not reproducible
+as recorded. Two CUDA workers are now provisioned this way, which is what makes
+the cross-axis gate possible.
 
 ## Active Local Slice
 

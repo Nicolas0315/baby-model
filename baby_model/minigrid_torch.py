@@ -81,6 +81,7 @@ class MiniGridTorchConfig:
     conditions: tuple[Condition, ...]
     stages: tuple[TorchCurriculumStage, ...] = ()
     active_stages_by_condition: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    holdout_episodes: int = 0
 
 
 @dataclass(frozen=True)
@@ -412,6 +413,7 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
                 agent_config=parsed.agent,
                 device=device,
                 quiet_env_output=parsed.quiet_env_output,
+                holdout_episodes=parsed.holdout_episodes,
             )
             for condition in parsed.conditions
         ]
@@ -426,6 +428,7 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
                 agent_config=parsed.agent,
                 device=device,
                 quiet_env_output=parsed.quiet_env_output,
+                holdout_episodes=parsed.holdout_episodes,
             )
             for condition in parsed.conditions
         ]
@@ -453,6 +456,7 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
             "target_sync_updates": parsed.agent.target_sync_updates,
         },
         "results": results,
+        "holdout_episodes": parsed.holdout_episodes,
         "winner_last_window": max(results, key=lambda row: row["success_rate_last_window"])["name"],
     }
     if parsed.stages:
@@ -539,6 +543,9 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
     if max_steps < 1:
         raise ValueError("environment.max_steps must be positive")
     quiet_env_output = bool(env_cfg.get("quiet_env_output", True))
+    holdout_episodes = int(config.get("holdout_episodes", 0))
+    if holdout_episodes < 0:
+        raise ValueError("holdout_episodes must not be negative")
 
     agent_cfg = config.get("agent", {})
     if not isinstance(agent_cfg, dict):
@@ -737,6 +744,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         conditions=tuple(conditions),
         stages=stages,
         active_stages_by_condition=tuple(active_stages_by_condition),
+        holdout_episodes=holdout_episodes,
     )
 
 
@@ -779,6 +787,7 @@ def run_minigrid_torch_condition(
     agent_config: TorchAgentConfig,
     device: Any,
     quiet_env_output: bool = True,
+    holdout_episodes: int = 0,
 ) -> dict[str, Any]:
     env = gym.make(env_id)
     try:
@@ -949,6 +958,18 @@ def run_minigrid_torch_condition(
             else representation_target_visibility_betas
         )
         successful_steps = [item.steps for item in episodes if item.success]
+        holdout: dict[str, Any] = {}
+        if holdout_episodes > 0:
+            holdout = run_greedy_holdout(
+                gym=gym,
+                agent=agent,
+                condition=condition,
+                agent_config=agent_config,
+                env_id=env_id,
+                max_steps=max_steps,
+                episodes=holdout_episodes,
+                quiet_env_output=quiet_env_output,
+            )
         return {
             "name": condition.name,
             "env_id": env_id,
@@ -991,6 +1012,7 @@ def run_minigrid_torch_condition(
             "representation_parameter_count": agent.representation_parameter_count(),
             "parameter_count": agent.parameter_count(),
             "updates": agent.updates,
+            **holdout,
         }
     finally:
         env.close()
@@ -1005,6 +1027,7 @@ def run_minigrid_torch_curriculum_condition(
     agent_config: TorchAgentConfig,
     device: Any,
     quiet_env_output: bool = True,
+    holdout_episodes: int = 0,
 ) -> dict[str, Any]:
     active_stage_names = set(active_stages)
     agent: TorchDQNAgent | None = None
@@ -1035,6 +1058,19 @@ def run_minigrid_torch_curriculum_condition(
     if not stage_results or agent is None:
         raise ValueError(f"no active curriculum stages for {condition.name}")
     final_stage = stage_results[-1]
+    holdout: dict[str, Any] = {}
+    if holdout_episodes > 0:
+        final_stage_spec = next(stage for stage in stages if stage.name == final_stage["stage"])
+        holdout = run_greedy_holdout(
+            gym=gym,
+            agent=agent,
+            condition=condition,
+            agent_config=agent_config,
+            env_id=final_stage_spec.env_id,
+            max_steps=final_stage_spec.max_steps,
+            episodes=holdout_episodes,
+            quiet_env_output=quiet_env_output,
+        )
     return {
         "name": condition.name,
         "env_id": final_stage["env_id"],
@@ -1087,7 +1123,75 @@ def run_minigrid_torch_curriculum_condition(
         "representation_parameter_count": agent.representation_parameter_count(),
         "parameter_count": agent.parameter_count(),
         "updates": agent.updates,
+        **holdout,
     }
+
+
+def run_greedy_holdout(
+    gym: Any,
+    agent: TorchDQNAgent,
+    condition: Condition,
+    agent_config: TorchAgentConfig,
+    env_id: str,
+    max_steps: int,
+    episodes: int,
+    quiet_env_output: bool = True,
+) -> dict[str, Any]:
+    """Greedy, no-learning evaluation on held-out episode seeds.
+
+    Training metrics are collected with epsilon-greedy exploration on the same
+    episodes the agent learned from, so they mix policy quality with
+    exploration noise. This runs the frozen policy at epsilon = 0 on episode
+    seeds disjoint from the training range, which is what a condition
+    comparison should actually be decided on.
+    """
+    if episodes < 1:
+        raise ValueError("episodes must be positive")
+    env = gym.make(env_id)
+    saved_epsilon = agent.epsilon
+    agent.epsilon = 0.0
+    try:
+        successes = 0
+        returns: list[float] = []
+        step_counts: list[int] = []
+        for index in range(episodes):
+            observation, _info = _env_call(
+                env.reset,
+                quiet=quiet_env_output,
+                # Disjoint from training seeds, which stay under the 100_000 stride.
+                seed=condition.seed * 100_000 + 99_000 + index,
+            )
+            features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+            external_return = 0.0
+            success = False
+            steps = 0
+            for _ in range(max_steps):
+                action = agent.choose(features, force_random=False)
+                observation, reward, terminated, truncated, _info = _env_call(
+                    env.step,
+                    action,
+                    quiet=quiet_env_output,
+                )
+                features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+                external_return += float(reward)
+                steps += 1
+                if float(reward) > 0.0:
+                    success = True
+                if bool(terminated or truncated):
+                    break
+            successes += 1 if success else 0
+            returns.append(external_return)
+            step_counts.append(steps)
+        return {
+            "holdout_env_id": env_id,
+            "holdout_episodes": episodes,
+            "holdout_success_rate": successes / episodes,
+            "holdout_mean_return": mean(returns),
+            "holdout_mean_steps": mean(step_counts),
+        }
+    finally:
+        agent.epsilon = saved_epsilon
+        env.close()
 
 
 def _run_minigrid_torch_stage(
