@@ -153,6 +153,7 @@ if [[ -n "$MINIGRID_NEURAL_CONFIG" ]]; then
 fi
 
 if [[ -n "$MINIGRID_TORCH_CONFIG" ]]; then
+  python3 -c 'from baby_model.minigrid_torch import scatter_self_check; scatter_self_check()'
   python3 -m baby_model.minigrid_torch \
     --config "$MINIGRID_TORCH_CONFIG" \
     --output-dir "$VERIFY_MINIGRID_DIR/torch" \

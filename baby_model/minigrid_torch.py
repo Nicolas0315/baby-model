@@ -174,7 +174,7 @@ class TorchDQNAgent:
         self.optimizer = torch.optim.Adam(parameters, lr=config.learning_rate)
         self.loss_fn = torch.nn.MSELoss()
         self.classification_loss_fn = torch.nn.CrossEntropyLoss()
-        self.replay: deque[tuple[SparseFeatures, int, float, SparseFeatures, bool]] = deque(maxlen=config.replay_capacity)
+        self.replay: deque[tuple[Any, int, float, Any, bool]] = deque(maxlen=config.replay_capacity)
         self.updates = 0
 
     def action_values(self, features: SparseFeatures) -> dict[int, float]:
@@ -210,15 +210,19 @@ class TorchDQNAgent:
         return self.rng.choice(best_actions)
 
     def update(self, features: SparseFeatures, action: int, reward: float, next_features: SparseFeatures, done: bool) -> None:
-        self.replay.append((features, action, reward, next_features, done))
+        # Rows are built once here rather than on every batch that samples them.
+        # With capacity 1024 and batch 16 a transition is resampled dozens of
+        # times, and rebuilding its dense row each time dominated the profile.
+        state_row, next_state_row = self._scatter([features, next_features], self.config.feature_dim)
+        self.replay.append((state_row, action, reward, next_state_row, done))
         if len(self.replay) < self.config.batch_size:
             return
 
         batch = self.rng.sample(list(self.replay), self.config.batch_size)
-        states = self._batch_tensor([item[0] for item in batch])
+        states = self.torch.stack([item[0] for item in batch])
         actions = self.torch.tensor([item[1] for item in batch], dtype=self.torch.long, device=self.device)
         rewards = self.torch.tensor([item[2] for item in batch], dtype=self.torch.float32, device=self.device)
-        next_states = self._batch_tensor([item[3] for item in batch])
+        next_states = self.torch.stack([item[3] for item in batch])
         dones = self.torch.tensor([1.0 if item[4] else 0.0 for item in batch], dtype=self.torch.float32, device=self.device)
 
         q_values = self.model(states).gather(1, actions.unsqueeze(1)).squeeze(1)
@@ -354,14 +358,35 @@ class TorchDQNAgent:
             return list(self.model(tensor).detach().cpu().tolist()[0])
 
     def _feature_tensor(self, features: SparseFeatures) -> Any:
-        return self.torch.tensor(dense_feature_vector(features, self.config.feature_dim), dtype=self.torch.float32, device=self.device)
+        return self._scatter([features], self.config.feature_dim)[0]
 
     def _batch_tensor(self, batch_features: list[SparseFeatures]) -> Any:
-        return self.torch.tensor(
-            [dense_feature_vector(features, self.config.feature_dim) for features in batch_features],
-            dtype=self.torch.float32,
-            device=self.device,
+        return self._scatter(batch_features, self.config.feature_dim)
+
+    def _scatter(self, rows: list[SparseFeatures], feature_dim: int) -> Any:
+        """Dense (len(rows), feature_dim) float32 tensor from sparse feature dicts.
+
+        Equivalent to torch.tensor([dense_feature_vector(r, dim) for r in rows]),
+        but without materializing a dense Python list per row. Profiling put 40%
+        of a seed's runtime in that construction. Feature keys are unique within
+        a row, so the index assignment has no duplicate targets and the result is
+        bit-identical to the dense path.
+        """
+        for features in rows:
+            if features and (min(features) < 0 or max(features) >= feature_dim):
+                raise ValueError(f"feature index out of range: {max(features)}")
+        flat_indices = [
+            row * feature_dim + index for row, features in enumerate(rows) for index in features
+        ]
+        values = [value for features in rows for value in features.values()]
+        tensor = self.torch.zeros(
+            len(rows) * feature_dim, dtype=self.torch.float32, device=self.device
         )
+        if values:
+            tensor[self.torch.tensor(flat_indices, dtype=self.torch.long, device=self.device)] = (
+                self.torch.tensor(values, dtype=self.torch.float32, device=self.device)
+            )
+        return tensor.view(len(rows), feature_dim)
 
 
 def main() -> int:
@@ -1152,6 +1177,55 @@ def run_minigrid_torch_curriculum_condition(
         "updates": agent.updates,
         **holdout,
     }
+
+
+def scatter_self_check() -> None:
+    """Assert the sparse tensor builder still equals the dense path it replaced.
+
+    ``_scatter`` exists purely for speed; if it ever diverges from
+    ``dense_feature_vector`` the whole experiment history becomes
+    incomparable, so this runs in the torch lane of the verifier.
+    """
+    import torch
+
+    device = torch.device("cpu")
+    config = TorchAgentConfig(
+        feature_dim=64,
+        hidden_dim=8,
+        learning_rate=0.001,
+        gamma=0.9,
+        epsilon=0.2,
+        batch_size=2,
+        replay_capacity=8,
+        target_sync_updates=5,
+        device="cpu",
+    )
+    agent = TorchDQNAgent(torch=torch, actions=3, config=config, device=device, seed=0)
+    rows: list[SparseFeatures] = [
+        {0: 1.0, 63: 2.0, 7: 0.5},
+        {},
+        {31: -1.25},
+    ]
+    expected = torch.tensor(
+        [dense_feature_vector(row, 64) for row in rows], dtype=torch.float32, device=device
+    )
+    actual = agent._scatter(rows, 64)
+    assert actual.shape == expected.shape, (actual.shape, expected.shape)
+    assert actual.dtype == expected.dtype
+    assert torch.equal(actual, expected), (actual - expected).abs().max().item()
+
+    single = agent._feature_tensor(rows[0])
+    assert torch.equal(single, expected[0])
+
+    for bad in ({64: 1.0}, {-1: 1.0}):
+        try:
+            agent._scatter([bad], 64)
+        except ValueError:
+            pass
+        else:  # pragma: no cover - the guard must stay
+            raise AssertionError(f"out-of-range index accepted: {bad}")
+
+    print("scatter_self_check ok")
 
 
 def random_policy_floor(
