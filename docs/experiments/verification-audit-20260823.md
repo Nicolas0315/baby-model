@@ -11,7 +11,7 @@ gaps with no measurement yet.
 
 | # | Item | Status |
 | --- | --- | --- |
-| A1 | Random-policy floor | **measured — and it changes the reading of every result** |
+| A1 | Random-policy floor | **measured, and now a permanent part of every sweep** |
 | A2 | Optimal / scripted-policy ceiling | open |
 | A3 | Untrained-network greedy floor | open |
 | A4 | Representation head present with beta = 0 | **was not expressible in the config; now added, running as v2.47** |
@@ -83,9 +83,9 @@ section F.
 | # | Item | Status |
 | --- | --- | --- |
 | C1 | Per-episode metrics are discarded; no artifact contains a learning curve | **open** |
-| C2 | `framework` records torch version and device but not GPU model, driver, or host | **open** |
+| C2 | `framework` records torch version and device but not GPU model, driver, or host | fixed |
 | C3 | The config body is not embedded in `metrics.json` (only `hypothesis`) | **open** |
-| C4 | The source commit is not embedded in the artifact | **open** |
+| C4 | The source commit is not embedded in the artifact | fixed via `BABY_MODEL_SOURCE_COMMIT` |
 | C5 | GPU evidence lives only in remote `.tmp/`, which is disposable | **open — already caused a loss** |
 
 C1 means "did it converge?" is unanswerable from any stored artifact. The only
@@ -210,7 +210,7 @@ roughly 1.7%. No experiment has varied `feature_dim`.
 | E1 | The shared Adam advances the encoder's step count twice as fast in representation conditions | **measured — confound** |
 | E2 | Hypothesis: representation loss leaks a momentum update into the Q head | **tested and refuted** |
 | E3 | No determinism flags (`use_deterministic_algorithms`, `CUBLAS_WORKSPACE_CONFIG`) | open |
-| E4 | TF32 / reduced-precision matmul settings never pinned or recorded | open |
+| E4 | TF32 / reduced-precision matmul settings never pinned or recorded | recorded, not yet pinned |
 | E5 | `MSELoss` broadcasts silently on a shape mismatch | open |
 | E6 | Per-step host-to-device transfer of a dense 1024-vector | open (performance) |
 | E7 | `list(self.replay)` copied on every update | open (performance) |
@@ -305,17 +305,38 @@ Combined with A1, the honest current state of the research claim is:
 - The ordering among the remaining representation conditions is not separable
   from the shared-optimiser schedule until v2.47 reports.
 
-## Priority
+## Landed in this session
 
-1. **A1 as a permanent gate.** Add the random floor as a condition in every
-   config so no sweep can report a winner without it. Without this the lane can
-   keep producing rankings among below-chance policies.
-2. **E1 via v2.47** (running), then give the representation head its own
+**A1 is now a gate, not a note.** Any sweep with `holdout_episodes` set also
+measures `random_policy_floor` on the same environment and the same held-out
+episode seeds, and `summary.md` grows a `## Random-Policy Floor` section that
+names every condition at or below it, with the sentence that their ranking
+against each other carries no meaning. A future sweep cannot report a winner
+without the floor next to it.
+
+**C2, C4, and E4 are closed by recording provenance.** `framework` now carries
+`host`, `platform`, `python`, `source_commit` (from
+`BABY_MODEL_SOURCE_COMMIT`), `gpu_name`, `gpu_capability`,
+`torch_cuda_build`, `matmul_allow_tf32`, `cudnn_allow_tf32`,
+`deterministic_algorithms`, and `cublas_workspace_config`.
+
+The precision flags are recorded rather than forced, and the first recording
+already earned its place: on this Mac `matmul_allow_tf32` is `false` while
+`cudnn_allow_tf32` is `true`. That asymmetry was never visible in any prior
+artifact, and it is exactly the kind of default that moves between torch
+releases and silently changes a result.
+
+## Remaining priority
+
+1. **E1 via v2.47** (running), then give the representation head its own
    optimiser if `ZN` shows the schedule matters.
-3. **B2 and B3.** Anneal epsilon so the greedy policy is exercised during
-   training, and widen the evaluation beyond 20 episodes.
-4. **C1, C2, C4.** Persist per-episode rows, the resolved GPU/driver/host, and
-   the source commit. All three are small and all three would have caught
-   earlier problems.
-5. **D2.** Either extend the AD-only phase into a stage that contains a mission
+2. **B2 and B3.** Anneal epsilon so the greedy policy is exercised during
+   training, and widen the evaluation beyond 20 episodes. B2 is the likely
+   direct cause of the below-floor greedy policies in A1.
+3. **C1.** Persist per-episode rows so "did it converge?" becomes answerable.
+4. **D2.** Either extend the AD-only phase into a stage that contains a mission
    target, or stop describing the current protocol as perception-first.
+5. **A2 and A3.** A scripted-optimal ceiling and an untrained-greedy floor, to
+   bound the useful range from both ends.
+6. **E3.** Pin the determinism flags now that they are recorded, turning the
+   CPU/CUDA agreement from an observation into an invariant.

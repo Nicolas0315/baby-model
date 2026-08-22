@@ -3281,6 +3281,57 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(condition.representation_beta, 0.0)
         self.assertEqual(condition.representation_objective, "state_plus_mission_target")
 
+    def test_sweep_summary_names_conditions_below_the_random_floor(self) -> None:
+        aggregate = [
+            {
+                "name": "BELOW",
+                "win_count": 1,
+                "mean_success_rate_all": 0.4,
+                "mean_success_rate_last_window": 0.45,
+                "median_success_rate_last_window": 0.45,
+                "mean_return_last_window": 0.3,
+                "median_return_last_window": 0.3,
+                "mean_updates": 10.0,
+                "mean_parameter_count": 20,
+                "mean_holdout_success_rate": 0.20,
+            },
+            {
+                "name": "ABOVE",
+                "win_count": 0,
+                "mean_success_rate_all": 0.4,
+                "mean_success_rate_last_window": 0.40,
+                "median_success_rate_last_window": 0.40,
+                "mean_return_last_window": 0.3,
+                "median_return_last_window": 0.3,
+                "mean_updates": 10.0,
+                "mean_parameter_count": 20,
+                "mean_holdout_success_rate": 0.40,
+            },
+        ]
+        summary = torch_sweep_summary_markdown(
+            {
+                "created_at": "2026-08-23T00:00:00+00:00",
+                "hypothesis": "floor",
+                "seeds": [1],
+                "winner_by_mean_success_last_window": "BELOW",
+                "frameworks": [{"version": "2.x", "device": "cuda"}],
+                "aggregate": aggregate,
+                "runs": [{"winner_last_window": "BELOW", "framework": {"version": "2.x", "device": "cuda"}}],
+                "random_policy_floor": {
+                    "env_id": "BabyAI-GoToObj-v0",
+                    "episodes": 60,
+                    "per_seed_success": [0.283],
+                    "mean_success": 0.283,
+                },
+            }
+        )
+        self.assertIn("Random-Policy Floor", summary)
+        self.assertIn("0.283", summary)
+        # The winner by training-window success is the one that loses to random.
+        self.assertIn("at or below the floor", summary)
+        self.assertIn("`BELOW`", summary)
+        self.assertNotIn("  - `ABOVE`", summary)
+
     def test_gpu_compat_policy_is_dependency_free(self) -> None:
         self.assertLess(DriverVersion.parse("576.88"), DriverVersion.parse("580.0"))
         self.assertLess(DriverVersion.parse("560.99"), DriverVersion.parse("580.0"))

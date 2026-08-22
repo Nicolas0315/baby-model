@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import platform
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -432,6 +434,27 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
             )
             for condition in parsed.conditions
         ]
+    random_floor: dict[str, Any] | None = None
+    if parsed.holdout_episodes > 0:
+        if parsed.stages:
+            final_stage = next(
+                stage
+                for stage in reversed(parsed.stages)
+                if stage.name in set(active_stages_by_condition[parsed.conditions[0].name])
+            )
+            floor_env_id, floor_max_steps = final_stage.env_id, final_stage.max_steps
+        else:
+            floor_env_id, floor_max_steps = parsed.env_id, parsed.max_steps
+        random_floor = random_policy_floor(
+            gym=gym,
+            env_id=floor_env_id,
+            max_steps=floor_max_steps,
+            episodes=parsed.holdout_episodes,
+            seed=seed,
+            quiet_env_output=parsed.quiet_env_output,
+        )
+        random_floor["env_id"] = floor_env_id
+
     report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "hypothesis": str(config.get("hypothesis", "Baby-AD/DA MiniGrid PyTorch DQN")),
@@ -443,6 +466,7 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
             "device": str(device),
             "cuda_available": bool(torch.cuda.is_available()),
             "mps_available": torch_mps_available(torch),
+            **runtime_provenance(torch, device),
         },
         "agent": {
             "type": "torch_dqn",
@@ -457,6 +481,7 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
         },
         "results": results,
         "holdout_episodes": parsed.holdout_episodes,
+        "random_policy_floor": random_floor,
         "winner_last_window": max(results, key=lambda row: row["success_rate_last_window"])["name"],
     }
     if parsed.stages:
@@ -1127,6 +1152,81 @@ def run_minigrid_torch_curriculum_condition(
         "updates": agent.updates,
         **holdout,
     }
+
+
+def random_policy_floor(
+    gym: Any,
+    env_id: str,
+    max_steps: int,
+    episodes: int,
+    seed: int,
+    quiet_env_output: bool = True,
+) -> dict[str, Any]:
+    """Uniform-random success rate on the same held-out episode seeds.
+
+    A condition ranking is meaningless without this. The v2.46 audit found every
+    condition's greedy policy at or below this floor while its epsilon-greedy
+    behaviour policy sat above it, which is invisible unless the floor is
+    measured on the same episodes.
+    """
+    if episodes < 1:
+        raise ValueError("episodes must be positive")
+    env = gym.make(env_id)
+    try:
+        rng = Random(seed)
+        actions = int(env.action_space.n)
+        successes = 0
+        returns: list[float] = []
+        for index in range(episodes):
+            _env_call(env.reset, quiet=quiet_env_output, seed=seed * 100_000 + 99_000 + index)
+            external_return = 0.0
+            for _ in range(max_steps):
+                _obs, reward, terminated, truncated, _info = _env_call(
+                    env.step,
+                    rng.randrange(actions),
+                    quiet=quiet_env_output,
+                )
+                external_return += float(reward)
+                if float(reward) > 0.0:
+                    successes += 1
+                    break
+                if bool(terminated or truncated):
+                    break
+            returns.append(external_return)
+        return {
+            "episodes": episodes,
+            "success_rate": successes / episodes,
+            "mean_return": mean(returns),
+        }
+    finally:
+        env.close()
+
+
+def runtime_provenance(torch: Any, device: Any) -> dict[str, Any]:
+    """Environment facts a claim about a run can be checked against.
+
+    Only ``torch.__version__`` and the device string used to be recorded, so
+    every worker, GPU, driver, and commit statement in docs/experiments/ was an
+    unverifiable hand transcription. The precision flags are recorded rather
+    than forced: their defaults have moved between torch releases, and a silent
+    change is what makes an unexplained result unexplainable.
+    """
+    provenance: dict[str, Any] = {
+        "host": platform.node(),
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "source_commit": os.environ.get("BABY_MODEL_SOURCE_COMMIT", "unrecorded"),
+        "torch_cuda_build": str(getattr(torch.version, "cuda", None)),
+        "matmul_allow_tf32": bool(getattr(torch.backends.cuda.matmul, "allow_tf32", False)),
+        "cudnn_allow_tf32": bool(getattr(torch.backends.cudnn, "allow_tf32", False)),
+        "deterministic_algorithms": bool(torch.are_deterministic_algorithms_enabled()),
+        "cublas_workspace_config": os.environ.get("CUBLAS_WORKSPACE_CONFIG", "unset"),
+    }
+    if str(device).startswith("cuda") and torch.cuda.is_available():
+        provenance["gpu_name"] = torch.cuda.get_device_name(0)
+        capability = torch.cuda.get_device_capability(0)
+        provenance["gpu_capability"] = f"{capability[0]}.{capability[1]}"
+    return provenance
 
 
 def run_greedy_holdout(

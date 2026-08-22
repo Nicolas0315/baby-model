@@ -54,6 +54,14 @@ def run_minigrid_torch_sweep(config: dict[str, Any], seeds: list[int]) -> dict[s
             key=lambda row: (row["mean_success_rate_last_window"], row["win_count"]),
         )["name"],
     }
+    floors = [run["random_policy_floor"] for run in runs if run.get("random_policy_floor")]
+    if floors:
+        report["random_policy_floor"] = {
+            "env_id": floors[0]["env_id"],
+            "episodes": floors[0]["episodes"],
+            "per_seed_success": [float(f["success_rate"]) for f in floors],
+            "mean_success": mean(float(f["success_rate"]) for f in floors),
+        }
     metrics = ["success_rate_last_window", "mean_return_last_window"]
     if any("holdout_success_rate" in row for run in runs for row in run["results"]):
         metrics.append("holdout_success_rate")
@@ -164,6 +172,30 @@ def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:
                 params=row["mean_parameter_count"],
             )
         )
+    floor = report.get("random_policy_floor")
+    if floor:
+        lines.append("")
+        lines.append("## Random-Policy Floor")
+        lines.append("")
+        lines.append(
+            f"- uniform-random success on `{floor['env_id']}` over the same held-out episode "
+            f"seeds, {floor['episodes']} episodes per seed: **{floor['mean_success']:.3f}**"
+        )
+        below = [
+            row["name"]
+            for row in report["aggregate"]
+            if "mean_holdout_success_rate" in row
+            and row["mean_holdout_success_rate"] <= floor["mean_success"]
+        ]
+        if below:
+            lines.append("")
+            lines.append(
+                "- **at or below the floor on greedy holdout, so their ranking against each "
+                "other carries no meaning:**"
+            )
+            lines.extend(f"  - `{name}`" for name in below)
+        else:
+            lines.append("- every condition clears the floor on greedy holdout")
     if report.get("statistics"):
         lines.append("")
         lines.append(statistics_markdown(report["statistics"]).rstrip("\n"))
