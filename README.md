@@ -117,6 +117,8 @@ host.
 - v2.48 adequate budget: `docs/experiments/minigrid-torch-adda-v59.md`
 - v2.49 separate representation optimizer:
   `docs/experiments/minigrid-torch-adda-v60.md`
+- v2.50-v2.52 beta is a no-op, the dial is the learning rate:
+  `docs/experiments/minigrid-torch-adda-v61.md`
 - Seed statistics and greedy holdout:
   `docs/experiments/seed-statistics-and-holdout.md`
 - Verification audit: `docs/experiments/verification-audit-20260823.md`

@@ -1161,13 +1161,33 @@ Updated: 2026-08-23 JST
   eight values differ. `torch.get_num_threads()` differs per host (12 / 8 / 6).
   Conclusions are unaffected because every comparison is paired within a host.
 
+- v2.50-v2.52 are complete and reported together in
+  `docs/experiments/minigrid-torch-adda-v61.md`.
+  - **`representation_beta` is a no-op.** Adam normalises by its own second
+    moment, so a constant factor on the loss cancels. Measured: `beta` over a
+    100x range moves the encoder step by **1.00x**, the representation learning
+    rate over a 1000x range moves it by **249x**. Every beta-neighbourhood sweep
+    before this (v2.24, v2.29, v2.37, `ZG`/`ZH`/`ZE` in v2.45) was turning a
+    switch as if it were a dial, which is why the v2.45 re-analysis found those
+    conditions indistinguishable. Designing v2.50 around `beta` was my mistake.
+  - **The v2.49 catastrophe is specific to lr = the Q learning rate.** At 1e-3
+    it reproduces (0.011, 0/8 seeds, p `0.0078`); two orders lower it does not.
+    The claim narrows from "the representation objective prevents learning" to
+    "learning the representation as fast as the policy prevents learning".
+  - **lr 1e-4 is the best evidence the hypothesis has ever had, and it is still
+    not significant**: Δ `+0.130`, p `0.1328`, 5 wins of 8. It also clears its
+    own seed's floor on 8/8 with a worst seed of `0.683` and sd `0.089`, against
+    `ZK`'s 7/8, worst `0.208`, sd `0.208` — `ZK` has a catastrophic seed and
+    lr 1e-4 has none.
+  - Averaged learning curve: lr 1e-4 rises fastest, settles highest (`0.978`
+    peak against `ZK`'s `0.864`), and reaches the goal in 15.9 steps against
+    22.3.
+
 ## Next
 
-- v2.50 is running: sweep `beta` at 0.005 / 0.05 / 0.5 against `ZK` under the
-  separate optimizer, eight seeds
-  (`configs/experiments/minigrid-torch-adda-v53.json`). Until it reports, the
-  hypothesis has had exactly one fair test, at one hand-me-down
-  hyperparameter, and failed it.
+- v2.53 is running seeds 5309-5322 to reach **22 seeds**, which is what 80%
+  power at the observed effect (Δ `+0.130`, paired sd `0.216`) requires. At 22
+  the exact p-floor is about 5e-7, so the test stops being the limiting factor.
 - Anneal `epsilon` so the greedy policy is exercised during training.
 - Get a ceiling from a standard MiniGrid/BabyAI baseline. `0.668` has a floor to
   beat but no upper reference.
