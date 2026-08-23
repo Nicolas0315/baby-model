@@ -1122,22 +1122,43 @@ Updated: 2026-08-23 JST
     beta-neighbourhood rankings in v2.24, v2.29, v2.37, and v2.45 were noise on
     top of a roughly constant optimizer artifact.
 
+- The episode budget was the binding constraint, measured as a ladder
+  (audit section H). Varying only the eval stage's episode count, the control's
+  greedy holdout goes `0.244` (48 episodes, floor `0.239`, so `+0.006`) ->
+  `0.344` -> `0.417` -> `0.700` (3200 episodes, `+0.461`). **At the historic
+  protocol the control was indistinguishable from a random policy**, so every
+  prior condition comparison happened before learning began. BabyAI's own
+  baselines need 15,900-17,400 RL episodes on the same difficulty tier; see
+  `docs/research/prior-art-and-learning-order.md`.
+- v2.48 repeated the decisive comparison at 3200 eval episodes with 8 seeds and
+  a 120-episode holdout: `docs/experiments/minigrid-torch-adda-v59.md`.
+  - `ZK` (no representation) reaches `0.668` against a floor of `0.279`,
+    `+0.389`, CI `[0.519, 0.787]`. **The harness works.**
+  - `ZE` - `ZK` is `-0.470`, CI `[-0.680, -0.246]`, p `0.0156`, 1/7/0. This is
+    the **first result in this repository at p < 0.05**, and its sign is against
+    the hypothesis. `ZE` sits below the random floor (`-0.081`).
+  - The schedule/objective split is a point estimate only (63% / 37%): both
+    `ZN` - `ZK` (p `0.109`) and `ZE` - `ZN` (p `0.273`) are non-significant at
+    n = 8.
+
 ## Next
 
-- Give the representation head its own optimizer, or exclude the Q network's
-  parameters from the representation step, then re-run the v2.47 condition set.
-  Until that lands, no result in the representation family separates the
-  hypothesis from the artifact.
-- Anneal `epsilon` so the greedy policy is exercised during training. It is the
-  likeliest direct cause of every condition's greedy policy sitting below the
-  random floor.
+- Give the representation head its own optimizer, so the representation loss
+  cannot advance the shared encoder's Adam state, and re-run the v2.48
+  condition set unchanged. This is now the only thing between the project and a
+  real test of its hypothesis.
+- Anneal `epsilon` so the greedy policy is exercised during training.
+- Get a ceiling from a standard MiniGrid/BabyAI baseline. `0.668` has a floor to
+  beat but no upper reference.
 
 ## Not Yet Proven
 
-- **That any condition beats a uniform-random policy on held-out greedy
-  evaluation.** The floor is `0.283` on `BabyAI-GoToObj-v0`; the best condition
-  in the eight-seed run reaches `0.254`. This is now measured automatically by
-  every sweep with `holdout_episodes` set.
+- ~~That any condition beats a uniform-random policy on held-out greedy
+  evaluation.~~ **Proven in v2.48**: the no-representation control reaches
+  `0.668` against a floor of `0.279` at 3200 eval episodes. It required only
+  the episode budget, not a change of method.
+- That the AD/DA hypothesis helps at all. The only p < 0.05 result in the
+  repository says the representation objective **hurts** by `-0.470`.
 - That the AD-first / DA-delayed hypothesis has been tested at all, given the
   v2.47 finding that 79% of the representation effect is an optimizer artifact.
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
