@@ -1,0 +1,102 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v2.54: GoToObj is near its ceiling for the winner, and the v2.53 effect is failure removal, which should show more on a harder level. Same conditions on BabyAI-GoToLocal-v0, which adds distractor objects so the mission actually has to be read.",
+  "environment": {
+    "id": "BabyAI-GoToLocal-v0",
+    "max_steps": 64,
+    "quiet_env_output": true
+  },
+  "stages": [
+    {
+      "name": "empty_warmup",
+      "env_id": "MiniGrid-Empty-5x5-v0",
+      "max_steps": 30,
+      "episodes": 12
+    },
+    {
+      "name": "goto_red_ball_warmup",
+      "env_id": "BabyAI-GoToRedBall-v0",
+      "max_steps": 80,
+      "episodes": 24
+    },
+    {
+      "name": "goto_local_eval",
+      "env_id": "BabyAI-GoToLocal-v0",
+      "max_steps": 64,
+      "episodes": 3200
+    }
+  ],
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "cpu",
+    "separate_representation_optimizer": true
+  },
+  "conditions": [
+    {
+      "name": "ZK_torch_gotoobj_curriculum_no_repr_delay_long",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_red_ball_warmup",
+        "goto_local_eval"
+      ],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "ZE_lr1e5",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_red_ball_warmup",
+        "goto_local_eval"
+      ],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.05,
+      "representation_learning_rate": 1e-05
+    },
+    {
+      "name": "ZE_lr1e4",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_red_ball_warmup",
+        "goto_local_eval"
+      ],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.05,
+      "representation_learning_rate": 0.0001
+    },
+    {
+      "name": "ZE_lr1e3",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_red_ball_warmup",
+        "goto_local_eval"
+      ],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.05,
+      "representation_learning_rate": 0.001
+    }
+  ],
+  "baseline_condition": "ZK_torch_gotoobj_curriculum_no_repr_delay_long",
+  "holdout_episodes": 120,
+  "common_random_numbers": true
+}

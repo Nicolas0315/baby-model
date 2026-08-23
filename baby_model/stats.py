@@ -194,6 +194,99 @@ def statistics_markdown(analysis: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Borrowed from rliable (Agarwal et al., NeurIPS 2021,
+# github.com/google-research/rliable), reimplemented on the standard library.
+#
+# Taken: the interquartile mean and the performance profile. Both answer
+# weaknesses this project measured rather than guessed at -- the control is
+# bimodal, so its mean moved by 0.154 as seeds were added, and a mean cannot
+# express "fails on 7 of 22 seeds".
+#
+# Deliberately NOT taken:
+#   * probability_of_improvement -- rliable computes it with Mann-Whitney, which
+#     is unpaired. With common random numbers every condition runs on the same
+#     seed, so the paired sign-flip test above is both valid and more powerful.
+#   * StratifiedBootstrap -- it stratifies over (runs x tasks). This project has
+#     one task, where it degenerates to an ordinary bootstrap over runs, which
+#     bootstrap_ci already is.
+# ---------------------------------------------------------------------------
+
+IQM_TRIM = 0.25
+
+
+def interquartile_mean(values: list[float], proportion_to_cut: float = IQM_TRIM) -> float:
+    """Mean of the middle 50%: robust to both tails, unlike the mean.
+
+    Use alongside the mean, never instead of it. When the finding *is* in the
+    tail -- a condition that collapses on some seeds -- IQM is precisely the
+    statistic that hides it. Read it with the performance profile.
+    """
+    if not values:
+        raise ValueError("values must be non-empty")
+    if not 0.0 <= proportion_to_cut < 0.5:
+        raise ValueError("proportion_to_cut must be in [0, 0.5)")
+    ordered = sorted(values)
+    cut = int(len(ordered) * proportion_to_cut)
+    kept = ordered[cut : len(ordered) - cut] or ordered
+    return mean(kept)
+
+
+def performance_profile(values: list[float], thresholds: list[float]) -> list[float]:
+    """Fraction of runs scoring above each threshold.
+
+    The whole distribution rather than one number. A condition whose profile is
+    above another's at every threshold dominates it stochastically, which is a
+    stronger statement than a mean difference and is readable directly off the
+    curve.
+    """
+    if not values:
+        raise ValueError("values must be non-empty")
+    return [sum(1 for value in values if value > tau) / len(values) for tau in thresholds]
+
+
+def dominates(profile_a: list[float], profile_b: list[float]) -> bool:
+    """True when A is at or above B at every threshold and strictly above somewhere."""
+    if len(profile_a) != len(profile_b):
+        raise ValueError("profiles must share their thresholds")
+    return all(a >= b for a, b in zip(profile_a, profile_b, strict=True)) and any(
+        a > b for a, b in zip(profile_a, profile_b, strict=True)
+    )
+
+
+def profile_markdown(
+    series: dict[str, list[float]],
+    thresholds: list[float] | None = None,
+    baseline: str | None = None,
+) -> str:
+    taus = thresholds or [index / 10.0 for index in range(10)]
+    lines = ["## Performance Profile", ""]
+    lines.append("Fraction of seeds scoring above each threshold. A row above another at")
+    lines.append("every threshold dominates it stochastically.")
+    lines.append("")
+    lines.append("| condition | IQM | mean | " + " | ".join(f"&gt;{tau:.1f}" for tau in taus) + " |")
+    lines.append("| --- | ---: | ---: |" + " ---: |" * len(taus))
+    profiles = {name: performance_profile(values, taus) for name, values in series.items()}
+    for name, values in series.items():
+        cells = " | ".join(f"{value:.2f}" for value in profiles[name])
+        lines.append(
+            f"| `{name}` | {interquartile_mean(values):.3f} | {mean(values):.3f} | {cells} |"
+        )
+    if baseline and baseline in profiles:
+        lines.append("")
+        for name, profile in profiles.items():
+            if name == baseline:
+                continue
+            if dominates(profile, profiles[baseline]):
+                lines.append(f"- `{name}` **stochastically dominates** `{baseline}`")
+            elif dominates(profiles[baseline], profile):
+                lines.append(f"- `{baseline}` **stochastically dominates** `{name}`")
+            else:
+                lines.append(f"- `{name}` and `{baseline}` **cross**: neither dominates")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _percentile(sorted_values: list[float], q: float) -> float:
     if not sorted_values:
         raise ValueError("sorted_values must be non-empty")
@@ -246,6 +339,31 @@ def demo() -> None:
     cmp_same = paired_comparison(baseline, baseline)
     assert cmp_same["mean_diff"] == 0.0
     assert cmp_same["p_two_sided"] == 1.0
+
+    # IQM ignores both tails; the mean does not. A single catastrophic run is
+    # exactly the case where they must disagree.
+    with_collapse = [0.7, 0.7, 0.7, 0.7, 0.0]
+    assert abs(interquartile_mean(with_collapse) - 0.7) < 1e-9, interquartile_mean(with_collapse)
+    assert mean(with_collapse) < 0.6
+    taus = [0.0, 0.3, 0.6, 0.9]
+    weak = performance_profile(with_collapse, taus)
+    strong = performance_profile([0.7] * 5, taus)
+    assert weak == [0.8, 0.8, 0.8, 0.0], weak
+    assert dominates(strong, weak) and not dominates(weak, strong)
+    assert not dominates(weak, weak)
+    try:
+        interquartile_mean([], 0.25)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("empty accepted")
+    try:
+        interquartile_mean([1.0], 0.5)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("proportion 0.5 accepted")
+    assert "Performance Profile" in profile_markdown({"a": [0.5, 0.6]}, taus, baseline="a")
 
     described = describe(baseline)
     assert described["n"] == 5

@@ -113,6 +113,40 @@ Three findings bound how far this should be read:
 3. **There is still no external upper reference.** The floor is measured; the
    ceiling is not. `0.735` has nothing above it to be compared against.
 
+## Read again with rliable's tools
+
+`rliable` (Agarwal et al., NeurIPS 2021) exists for exactly this situation: few
+runs, heavy tails. Two of its elements were reimplemented on the standard
+library in `baby_model.stats` and applied to this data.
+
+**Performance profile** — fraction of seeds above each threshold:
+
+| condition | IQM | mean | >0.0 | >0.2 | >0.4 | >0.6 | >0.8 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ZK` | 0.565 | 0.503 | 0.91 | 0.77 | 0.64 | 0.59 | 0.14 |
+| `ZE` lr 1e-5 | 0.601 | 0.543 | 0.91 | 0.77 | 0.64 | 0.64 | 0.18 |
+| **`ZE` lr 1e-4** | **0.731** | **0.735** | **1.00** | **1.00** | **1.00** | **0.86** | **0.32** |
+| `ZE` lr 1e-3 | 0.017 | 0.031 | 0.45 | 0.00 | 0.00 | 0.00 | 0.00 |
+
+**`ZE` lr 1e-4 stochastically dominates `ZK`** — at or above it at every
+threshold and strictly above somewhere. That is a stronger claim than a mean
+difference, and it does not depend on the mean being a good summary of a bimodal
+distribution. `ZE` lr 1e-5 and `ZK` **cross**, which is the same conclusion the
+paired test reached at p 0.61.
+
+**The IQM-to-mean gap measures the tail.** `ZK`'s IQM (0.565) sits 0.062 above
+its mean, because the mean is dragged down by seeds that end at zero. `ZE`
+lr 1e-4's IQM (0.731) and mean (0.735) agree to within 0.004 — there is no tail
+to hide. That gap is also why `ZK`'s mean moved -0.154 between n=8 and n=22
+while lr 1e-4's moved -0.052.
+
+Two of rliable's elements were deliberately **not** taken:
+`probability_of_improvement`, because it uses Mann-Whitney and is therefore
+unpaired, while common random numbers make the paired sign-flip test both valid
+and more powerful here; and `StratifiedBootstrap`, which stratifies over
+(runs x tasks) and degenerates to an ordinary bootstrap over runs on a
+single-task setup.
+
 ## Next
 
 - Measure the ceiling with a standard baseline on the same level, so 0.735 has a
