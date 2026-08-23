@@ -82,28 +82,45 @@ The v2.43-v2.45 `rtx4090` venv was found in 2026-08 as a broken symlink into a
 sibling clone that had been removed, so that environment was not reproducible
 as recorded. Two CUDA workers are now provisioned this way.
 
-### `rtx4090` segfaults on long runs; cause not identified
+### `rtx4090` is faulty: do not use it for these sweeps
 
-Two v2.5x sweeps on `rtx4090` died with a pygame-parachute SIGSEGV, the first
-after 18 minutes (exit 134) and the second after 72 minutes (exit 139), with
-tens of GB of memory free. `rtx5060ti` running the identical code, config, and
-torch build has not crashed.
+Three sweeps on `rtx4090` died with a SIGSEGV/SIGABRT caught by pygame's
+parachute handler, while `rtx5060ti` and the Mac ran the identical code, config,
+and (for `rtx5060ti`) the identical torch build for hours without a single
+failure.
 
-**A first explanation was wrong and is retracted.** The first crash happened on a
-clone under `$HOME/work`, which on that host is a root-owned symlink to
-`/mnt/c/Users/ogosh/work`, so it ran over WSL's drvfs bridge. Rebuilding under
-`$HOME/ext4/` did not prevent the second crash: the filesystem was not the
-cause.
+| attempt | filesystem | torch threads | ran for | exit | crash site |
+| --- | --- | ---: | ---: | ---: | --- |
+| v2.49 #1 | `/mnt/c` via drvfs | 12 | 18 min | 134 | `minigrid/core/grid.py process_vis` |
+| v2.50 #1 | ext4 | 12 | 72 min | 139 | C frame, no Python frame |
+| v2.50 #2 | ext4 | 1 | 5 min | 134 | `minigrid_torch.py _scatter` |
 
-Remaining differences between the hosts: 24 cores and 94 GB versus 8 cores and
-31 GB, and `torch.get_num_threads()` of 12 versus 8. The thread-count
-hypothesis is untested for the crash. It is, separately, measurably *not* the
-cause of numerical divergence: at the 84-episode budget, six threads and one
-thread give bit-identical results.
+**Two explanations were tried and both were wrong.** The filesystem was not the
+cause: moving the clone and venv to ext4 did not prevent the second crash. The
+thread count was not the cause either: pinning to one thread did not prevent the
+third.
 
-Until a cause is found, treat `rtx4090` as unreliable for multi-hour sweeps and
-prefer `rtx5060ti` or the Mac. There is also a standing note that this host has
-never been memtested.
+The third trace is what settles it. It lands inside a list comprehension that
+builds a list of Python ints from dict keys:
+
+```python
+flat_indices = [
+    row * feature_dim + index for row, features in enumerate(rows) for index in features
+]
+```
+
+That cannot segfault from program logic, and the indices are provably in range
+(the loop above it rejects any key outside `[0, feature_dim)`, so the maximum
+flat index is `len(rows) * feature_dim - 1` against a tensor of exactly that
+length). Three crashes at three unrelated sites — a numpy visibility routine, an
+unnamed C frame, and a pure-Python integer comprehension — on one host and never
+on two others is the signature of a faulty host, not of a bug.
+
+This host has never been memtested, which is a standing note elsewhere in the
+fleet docs. Running one is an operator action.
+
+**Until then, do not schedule baby-model sweeps on `rtx4090`.** Use `rtx5060ti`
+or the Mac.
 
 ### Pin `torch` to one thread
 
