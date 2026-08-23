@@ -1,0 +1,71 @@
+{
+  "hypothesis": "Baby-AD/DA PyTorch DQN v2.51: representation_beta is cancelled by Adam, so v2.50 swept a no-op. Sweep the representation optimizer's learning rate, which measurably controls the encoder step, at 1/100 and 1/10 of the Q rate.",
+  "environment": {
+    "id": "BabyAI-GoToObj-v0",
+    "max_steps": 80,
+    "quiet_env_output": true
+  },
+  "stages": [
+    {
+      "name": "empty_warmup",
+      "env_id": "MiniGrid-Empty-5x5-v0",
+      "max_steps": 30,
+      "episodes": 12
+    },
+    {
+      "name": "goto_red_ball_warmup",
+      "env_id": "BabyAI-GoToRedBall-v0",
+      "max_steps": 80,
+      "episodes": 24
+    },
+    {
+      "name": "goto_obj_eval",
+      "env_id": "BabyAI-GoToObj-v0",
+      "max_steps": 80,
+      "episodes": 3200
+    }
+  ],
+  "agent": {
+    "feature_dim": 1024,
+    "hidden_dim": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.92,
+    "epsilon": 0.2,
+    "batch_size": 16,
+    "replay_capacity": 1024,
+    "target_sync_updates": 50,
+    "device": "cpu",
+    "separate_representation_optimizer": true,
+    "representation_learning_rate": 0.0001
+  },
+  "conditions": [
+    {
+      "name": "ZK_torch_gotoobj_curriculum_no_repr_delay_long",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_red_ball_warmup",
+        "goto_obj_eval"
+      ],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none"
+    },
+    {
+      "name": "ZE_lr_mid_sep",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_red_ball_warmup",
+        "goto_obj_eval"
+      ],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.05
+    }
+  ],
+  "baseline_condition": "ZK_torch_gotoobj_curriculum_no_repr_delay_long",
+  "holdout_episodes": 120
+}

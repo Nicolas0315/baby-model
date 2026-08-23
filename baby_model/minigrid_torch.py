@@ -79,6 +79,12 @@ class TorchAgentConfig:
     # 79% of the effect to it). Default false to keep every historical config
     # bit-identical.
     separate_representation_optimizer: bool = False
+    # Adam normalises by its own second moment, so a constant factor on the loss
+    # cancels: scaling the loss by beta scales m by beta and v by beta**2, and
+    # m/sqrt(v) is unchanged. Measured across a 100x beta range the encoder step
+    # is flat to three digits. `representation_beta` is therefore an on/off
+    # switch, not a dial -- this is the dial.
+    representation_learning_rate: float | None = None
 
 
 @dataclass(frozen=True)
@@ -188,8 +194,13 @@ class TorchDQNAgent:
             representation_parameters.extend(
                 parameter for parameter in parameters if parameter not in set(self.model.parameters())
             )
+            representation_lr = (
+                config.learning_rate
+                if config.representation_learning_rate is None
+                else config.representation_learning_rate
+            )
             self.representation_optimizer = torch.optim.Adam(
-                representation_parameters, lr=config.learning_rate
+                representation_parameters, lr=representation_lr
             )
         else:
             self.representation_optimizer = self.optimizer
@@ -637,6 +648,17 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
     target_sync_updates = int(agent_cfg.get("target_sync_updates", 25))
     device = str(agent_cfg.get("device", "auto"))
     separate_representation_optimizer = bool(agent_cfg.get("separate_representation_optimizer", False))
+    representation_learning_rate_cfg = agent_cfg.get("representation_learning_rate")
+    representation_learning_rate = (
+        None if representation_learning_rate_cfg is None else float(representation_learning_rate_cfg)
+    )
+    if representation_learning_rate is not None:
+        if representation_learning_rate <= 0.0:
+            raise ValueError("agent.representation_learning_rate must be positive")
+        if not separate_representation_optimizer:
+            raise ValueError(
+                "agent.representation_learning_rate requires separate_representation_optimizer"
+            )
     if feature_dim < 16:
         raise ValueError("agent.feature_dim must be at least 16")
     if hidden_dim < 2 or hidden_dim > 2048:
@@ -821,6 +843,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             target_sync_updates=target_sync_updates,
             device=device,
             separate_representation_optimizer=separate_representation_optimizer,
+            representation_learning_rate=representation_learning_rate,
         ),
         conditions=tuple(conditions),
         stages=stages,
@@ -1313,6 +1336,58 @@ def representation_optimizer_self_check() -> None:
     )
     assert separate_null == 0.0, f"separate optimizer still drifts at beta=0: {separate_null}"
     assert separate_real > 0.0, "separate optimizer must still shape the encoder at beta>0"
+
+    # beta is an on/off switch, not a dial: Adam normalises by its own second
+    # moment, so a constant factor on the loss cancels. The dial is the
+    # representation optimizer's learning rate. Guard both, because every
+    # beta-neighbourhood sweep before v2.50 was tuning the switch as if it were
+    # the dial.
+    def live_step(learning_rate: float | None, beta: float) -> float:
+        from random import Random
+
+        config = TorchAgentConfig(
+            feature_dim=64,
+            hidden_dim=8,
+            learning_rate=0.01,
+            gamma=0.9,
+            epsilon=0.2,
+            batch_size=4,
+            replay_capacity=64,
+            target_sync_updates=50,
+            device="cpu",
+            separate_representation_optimizer=True,
+            representation_learning_rate=learning_rate,
+        )
+        torch.manual_seed(0)
+        agent = TorchDQNAgent(
+            torch=torch,
+            actions=3,
+            config=config,
+            device=torch.device("cpu"),
+            seed=0,
+            representation_objective="state_plus_mission_target",
+            representation_beta=beta,
+        )
+        dim = _representation_target_dim("state_plus_mission_target", 64)
+        rng = Random(0)
+        # Non-stationary target so the predictor cannot converge and the
+        # gradient stays live; a constant target makes higher rates converge and
+        # read as *smaller* steps.
+        for _ in range(200):
+            agent.update({1: 1.0, 5: 1.0}, 0, 1.0, {2: 1.0, 7: 1.0}, False)
+            agent.update_representation({1: 1.0, 5: 1.0}, 0, [rng.random() for _ in range(dim)])
+        before = agent.model.encoder[0].weight.detach().clone()
+        agent.update_representation({1: 1.0, 5: 1.0}, 0, [rng.random() for _ in range(dim)])
+        return (agent.model.encoder[0].weight.detach() - before).abs().max().item()
+
+    beta_low, beta_high = live_step(None, 0.005), live_step(None, 0.5)
+    assert abs(beta_high - beta_low) / beta_low < 0.01, (
+        f"beta is expected to cancel under Adam, but moved the step: {beta_low} -> {beta_high}"
+    )
+    rate_low, rate_high = live_step(0.00001, 0.05), live_step(0.01, 0.05)
+    assert rate_high / rate_low > 50.0, (
+        f"the representation learning rate must actually control the step: {rate_low} -> {rate_high}"
+    )
 
     print(
         "representation_optimizer_self_check ok "
