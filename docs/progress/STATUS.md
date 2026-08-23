@@ -1183,11 +1183,34 @@ Updated: 2026-08-23 JST
     peak against `ZK`'s `0.864`), and reaches the goal in 15.9 steps against
     22.3.
 
+- **v2.53: the hypothesis passes at 22 seeds.**
+  `docs/experiments/minigrid-torch-adda-v62.md`. Floor `0.259`.
+  - `ZE` lr 1e-4 - `ZK`: Δ **`+0.232`**, CI `[+0.089, +0.384]`, **p `0.0065`**,
+    14/8/0. Also 13.6 steps faster to goal, same p.
+  - `ZE` lr 1e-3 - `ZK`: Δ `-0.472`, p `0.0002`, 2/19/1. Rate-critical: the same
+    objective at the policy's learning rate is catastrophic.
+  - `ZE` lr 1e-5: null (p `0.61`).
+  - **The shape of the result is failure removal, not ceiling raising.** `ZK` is
+    bimodal — on 7 of 22 seeds its greedy policy ends at or below random,
+    several at exactly `0.000`. `ZE` lr 1e-4 does this on **0 of 22**, worst
+    seed `0.483`, sd `0.118` against `ZK`'s `0.315`.
+  - The effect grew from n=8 to n=22 (Δ `+0.130` -> `+0.232`) because `ZK`'s mean
+    fell from `0.657` to `0.503` as its collapses were sampled; the treatment
+    barely moved (`0.787` -> `0.735`).
+  - **Multiplicity disclosed**: four looks (n=4, 8, 15, 22). The n=22 target was
+    fixed in advance by the n=8 power calculation; p `0.0065` clears a
+    Bonferroni alpha of `0.0125`. A future gate should fix n before the first
+    look.
+
 ## Next
 
-- v2.53 is running seeds 5309-5322 to reach **22 seeds**, which is what 80%
-  power at the observed effect (Δ `+0.130`, paired sd `0.216`) requires. At 22
-  the exact p-floor is about 5e-7, so the test stops being the limiting factor.
+- Measure the ceiling with a standard baseline on `GoToObj` so `0.735` has a
+  scale. The floor is measured; the ceiling is not.
+- Move to a harder level. `ZE` lr 1e-4 already trains to `0.980` on `GoToObj`,
+  BabyAI's easiest tier, so there is little headroom left here, and a result
+  about removing collapses should show more on a harder task.
+- Anneal `epsilon`: the winner's train-to-holdout gap is still `0.980` to
+  `0.735`.
 - Anneal `epsilon` so the greedy policy is exercised during training.
 - Get a ceiling from a standard MiniGrid/BabyAI baseline. `0.668` has a floor to
   beat but no upper reference.
@@ -1198,8 +1221,12 @@ Updated: 2026-08-23 JST
   evaluation.~~ **Proven in v2.48**: the no-representation control reaches
   `0.668` against a floor of `0.279` at 3200 eval episodes. It required only
   the episode budget, not a change of method.
-- That the AD/DA hypothesis helps at all. The only p < 0.05 result in the
-  repository says the representation objective **hurts** by `-0.470`.
+- ~~That the AD/DA hypothesis helps at all.~~ **Passed in v2.53**: with the
+  representation head on its own optimizer at lr 1e-4, Δ `+0.232` over the
+  no-representation control, p `0.0065`, 22 seeds. Bounded by three things: it
+  is rate-critical, `GoToObj` is near its ceiling for the winner, and there is
+  still no external upper reference.
+- That the effect survives on a harder level, or against a standard baseline.
 - That the AD-first / DA-delayed hypothesis has been tested at all, given the
   v2.47 finding that 79% of the representation effect is an optimizer artifact.
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel

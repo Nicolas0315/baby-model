@@ -119,6 +119,8 @@ host.
   `docs/experiments/minigrid-torch-adda-v60.md`
 - v2.50-v2.52 beta is a no-op, the dial is the learning rate:
   `docs/experiments/minigrid-torch-adda-v61.md`
+- v2.53 the hypothesis passes at 22 seeds:
+  `docs/experiments/minigrid-torch-adda-v62.md`
 - Seed statistics and greedy holdout:
   `docs/experiments/seed-statistics-and-holdout.md`
 - Verification audit: `docs/experiments/verification-audit-20260823.md`
