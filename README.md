@@ -114,5 +114,7 @@ host.
   `docs/research/voyager-system-analysis.md`
 - Pipeline sequence and artifact model:
   `docs/architecture/experiment-pipeline.md`
+- Verification of the verification, dependency and adversarial review:
+  `docs/architecture/verification-of-verification.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`
