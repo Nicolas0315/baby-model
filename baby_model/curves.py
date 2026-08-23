@@ -44,15 +44,27 @@ def load_episodes(path: Path) -> list[dict[str, Any]]:
 
 
 def binned_curve(rows: list[dict[str, Any]], bins: int, key: str = "success") -> list[float]:
-    """Mean of `key` over `bins` equal slices of the episode sequence."""
+    """Mean of `key` over `bins` equal slices of the episode sequence.
+
+    Binned **per seed** and then averaged bin-wise. Binning the concatenated
+    sequence instead makes every bin span parts of different seeds, so the result
+    is a seed-ordering artefact rather than a learning curve. That produced a
+    visibly wrong verdict on an 8-seed log before this was fixed.
+    """
     if bins < 1:
         raise ValueError("bins must be positive")
     if not rows:
         return []
-    ordered = sorted(rows, key=lambda row: (int(row["seed"]), int(row["episode"])))
-    values = [float(row[key]) for row in ordered]
-    edges = [round(index * len(values) / bins) for index in range(bins + 1)]
-    return [mean(values[a:b]) if b > a else 0.0 for a, b in zip(edges[:-1], edges[1:], strict=True)]
+    by_seed: dict[int, list[float]] = defaultdict(list)
+    for row in sorted(rows, key=lambda r: (int(r["seed"]), int(r["episode"]))):
+        by_seed[int(row["seed"])].append(float(row[key]))
+    per_seed_curves: list[list[float]] = []
+    for values in by_seed.values():
+        edges = [round(index * len(values) / bins) for index in range(bins + 1)]
+        per_seed_curves.append(
+            [mean(values[a:b]) if b > a else 0.0 for a, b in zip(edges[:-1], edges[1:], strict=True)]
+        )
+    return [mean(curve[i] for curve in per_seed_curves) for i in range(bins)]
 
 
 def classify(curve: list[float], noise_band: float = NOISE_BAND) -> str:
@@ -259,6 +271,16 @@ def demo() -> None:
     wobbly = binned_curve(rows([0.2] * 10 + [0.9] * 30), 12)
     wobbly[-2] = wobbly[-2] - 0.08
     assert classify(wobbly) == IMPROVED, wobbly
+
+    # Two seeds with opposite trends average to flat. Binning the concatenation
+    # would instead read as one long ramp followed by one long fall.
+    seed_a = [{"seed": 1, "episode": i, "success": v, "steps": 10, "stage": "eval", "condition": "c"}
+              for i, v in enumerate([0.0] * 20 + [1.0] * 20)]
+    seed_b = [{"seed": 2, "episode": i, "success": v, "steps": 10, "stage": "eval", "condition": "c"}
+              for i, v in enumerate([1.0] * 20 + [0.0] * 20)]
+    averaged = binned_curve(seed_a + seed_b, 4)
+    assert all(abs(v - 0.5) < 1e-9 for v in averaged), averaged
+    assert classify(averaged) == FLAT, averaged
 
     curve = binned_curve(rows(rising), 4)
     assert len(curve) == 4 and curve[0] == 0.0 and curve[-1] == 1.0, curve
