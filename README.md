@@ -108,6 +108,8 @@ host.
 - Verification audit: `docs/experiments/verification-audit-20260823.md`
 - Prior art, applicable repos, and learning-order evidence:
   `docs/research/prior-art-and-learning-order.md`
+- Voyager (Minecraft x LLM) system analysis:
+  `docs/research/voyager-system-analysis.md`
 - Pipeline sequence and artifact model:
   `docs/architecture/experiment-pipeline.md`
 - Progress: `docs/progress/STATUS.md`
