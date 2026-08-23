@@ -1183,6 +1183,14 @@ Updated: 2026-08-23 JST
     peak against `ZK`'s `0.864`), and reaches the goal in 15.9 steps against
     22.3.
 
+- **Correction (2026-08-24)**: the v2.53 write-up claimed "stochastic
+  dominance" from nine hand-picked thresholds. Re-checked at all 31 unique
+  observed values, lr 1e-4 does dominate `ZK` empirically with zero crossings,
+  but that is a statement about the sample, not the population, and the
+  abbreviated table could not reproduce its own "cross" verdict for lr 1e-5
+  (the crossing is at 0.267). Profile CIs were also missing; they separate at
+  only two of five thresholds. All corrected in
+  `docs/experiments/minigrid-torch-adda-v62.md`.
 - **v2.53: the hypothesis passes at 22 seeds.**
   `docs/experiments/minigrid-torch-adda-v62.md`. Floor `0.259`.
   - `ZE` lr 1e-4 - `ZK`: Δ **`+0.232`**, CI `[+0.089, +0.384]`, **p `0.0065`**,

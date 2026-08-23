@@ -113,39 +113,69 @@ Three findings bound how far this should be read:
 3. **There is still no external upper reference.** The floor is measured; the
    ceiling is not. `0.735` has nothing above it to be compared against.
 
-## Read again with rliable's tools
+## Read again with rliable's tools — and corrected after adversarial review
 
 `rliable` (Agarwal et al., NeurIPS 2021) exists for exactly this situation: few
 runs, heavy tails. Two of its elements were reimplemented on the standard
-library in `baby_model.stats` and applied to this data.
+library in `baby_model.stats`.
 
-**Performance profile** — fraction of seeds above each threshold:
+**The first version of this section overclaimed, and an adversarial review was
+right to reject it.** It compared the profiles on nine hand-picked thresholds
+and called the result "stochastic dominance". A coarse grid can hide a crossing
+— a constructed counterexample now lives in the self-check, where `dominates()`
+returns True on a three-point grid and the all-boundary check returns "crosses".
+What follows is the corrected analysis.
+
+### Checked at every unique observed value
+
+| comparison | boundaries | verdict | gap range | crossings |
+| --- | ---: | --- | :---: | --- |
+| `ZE` lr 1e-4 vs `ZK` | 31 | **lr 1e-4 empirically dominates** | [+0.000, +0.409] | none |
+| `ZE` lr 1e-5 vs `ZK` | 26 | **crosses** | [-0.045, +0.182] | at 0.267 |
+| `ZE` lr 1e-3 vs `ZK` | 24 | `ZK` empirically dominates | [-0.773, +0.000] | none |
+
+The substantive claim survives the stricter test: lr 1e-4's survival function is
+at or above `ZK`'s at all 31 points where either can step, and strictly above
+somewhere. The **wording** does not survive. This is a statement about 22
+observed seeds, so it is *empirical* dominance; "stochastic dominance" is a
+claim about the population that this sample cannot make. Corrected throughout.
+
+The lr 1e-5 crossing sits at 0.267 — inside the interval the abbreviated table
+below skips, which is why the earlier table could not reproduce its own "cross"
+verdict. That was a presentation defect, not just wording.
+
+### Profile with bootstrap CIs
 
 | condition | IQM | mean | >0.0 | >0.2 | >0.4 | >0.6 | >0.8 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ZK` | 0.565 | 0.503 | 0.91 | 0.77 | 0.64 | 0.59 | 0.14 |
-| `ZE` lr 1e-5 | 0.601 | 0.543 | 0.91 | 0.77 | 0.64 | 0.64 | 0.18 |
-| **`ZE` lr 1e-4** | **0.731** | **0.735** | **1.00** | **1.00** | **1.00** | **0.86** | **0.32** |
+| --- | ---: | ---: | :---: | :---: | :---: | :---: | :---: |
+| `ZK` | 0.565 | 0.503 | 0.91 [0.77, 1.00] | 0.77 [0.59, 0.95] | 0.64 [0.45, 0.82] | 0.59 [0.36, 0.77] | 0.14 [0.00, 0.27] |
+| `ZE` lr 1e-5 | 0.601 | 0.543 | 0.91 [0.77, 1.00] | 0.77 [0.59, 0.95] | 0.64 [0.41, 0.82] | 0.64 [0.41, 0.82] | 0.18 [0.05, 0.36] |
+| `ZE` lr 1e-4 | 0.731 | 0.735 | 1.00 [1.00, 1.00] | 1.00 [1.00, 1.00] | 1.00 [1.00, 1.00] | 0.86 [0.73, 1.00] | 0.32 [0.14, 0.50] |
 | `ZE` lr 1e-3 | 0.017 | 0.031 | 0.45 | 0.00 | 0.00 | 0.00 | 0.00 |
 
-**`ZE` lr 1e-4 stochastically dominates `ZK`** — at or above it at every
-threshold and strictly above somewhere. That is a stronger claim than a mean
-difference, and it does not depend on the mean being a good summary of a bimodal
-distribution. `ZE` lr 1e-5 and `ZK` **cross**, which is the same conclusion the
-paired test reached at p 0.61.
+**The CIs separate at only two of the five thresholds** — 0.2 and 0.4, where
+lr 1e-4 is at 1.00 with a degenerate interval and `ZK` tops out at 0.95 and 0.82.
+At 0.0, 0.6, and 0.8 the intervals overlap. So the profile supports "lr 1e-4 has
+no seeds below 0.4 and `ZK` has several" much more strongly than it supports any
+claim about the upper end.
 
-**The IQM-to-mean gap measures the tail.** `ZK`'s IQM (0.565) sits 0.062 above
-its mean, because the mean is dragged down by seeds that end at zero. `ZE`
-lr 1e-4's IQM (0.731) and mean (0.735) agree to within 0.004 — there is no tail
-to hide. That gap is also why `ZK`'s mean moved -0.154 between n=8 and n=22
-while lr 1e-4's moved -0.052.
+### On the IQM-to-mean gap
 
-Two of rliable's elements were deliberately **not** taken:
-`probability_of_improvement`, because it uses Mann-Whitney and is therefore
-unpaired, while common random numbers make the paired sign-flip test both valid
-and more powerful here; and `StratifiedBootstrap`, which stratifies over
-(runs x tasks) and degenerates to an ordinary bootstrap over runs on a
-single-task setup.
+The earlier text called the gap a tail-weight indicator and said lr 1e-4 has "no
+tail to hide". That is more than the statistic supports: IQM trims both ends, so
+the gap's sign does not identify which tail moved it. What is defensible is
+narrower — `ZK`'s IQM (0.565) exceeds its mean (0.503) while lr 1e-4's IQM
+(0.731) and mean (0.735) agree to 0.004, which is *consistent with* `ZK` having
+low outliers, a reading independently supported by the seven seeds at or below
+its own random floor.
+
+### Not taken from rliable
+
+`probability_of_improvement` uses Mann-Whitney and is unpaired, while common
+random numbers make the paired sign-flip test both valid and more powerful here.
+`StratifiedBootstrap` stratifies over (runs x tasks) and degenerates to an
+ordinary bootstrap over runs on a single-task setup — it becomes necessary the
+moment this spreads to several BabyAI levels.
 
 ## Next
 

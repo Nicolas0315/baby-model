@@ -246,12 +246,78 @@ def performance_profile(values: list[float], thresholds: list[float]) -> list[fl
 
 
 def dominates(profile_a: list[float], profile_b: list[float]) -> bool:
-    """True when A is at or above B at every threshold and strictly above somewhere."""
+    """True when A is at or above B at every threshold given, strictly above somewhere.
+
+    This is a statement about *the thresholds supplied*, nothing more. Calling it
+    stochastic dominance requires every unique observed value as a threshold --
+    use `empirical_dominance` for that. An adversarial review caught this exact
+    overclaim in the v2.53 write-up: a coarse grid can hide a crossing.
+    """
     if len(profile_a) != len(profile_b):
         raise ValueError("profiles must share their thresholds")
     return all(a >= b for a, b in zip(profile_a, profile_b, strict=True)) and any(
         a > b for a, b in zip(profile_a, profile_b, strict=True)
     )
+
+
+def all_boundaries(*series: list[float]) -> list[float]:
+    """Every unique observed value across the series, which is where a CDF can step."""
+    values = sorted({value for one in series for value in one})
+    if not values:
+        raise ValueError("series must be non-empty")
+    return values
+
+
+def empirical_dominance(values_a: list[float], values_b: list[float]) -> dict[str, Any]:
+    """Compare empirical CDFs at every unique observed value, with a paired CI.
+
+    Reports `empirical_dominance` only, never "stochastic dominance": the sample
+    is finite, so what is checked is whether A's survival function is at or above
+    B's at every point where either can step.
+    """
+    taus = all_boundaries(values_a, values_b)
+    profile_a = performance_profile(values_a, taus)
+    profile_b = performance_profile(values_b, taus)
+    gaps = [a - b for a, b in zip(profile_a, profile_b, strict=True)]
+    crossings = [
+        (tau, a, b)
+        for tau, a, b in zip(taus, profile_a, profile_b, strict=True)
+        if (a - b) * (max(gaps) if max(gaps) else 1.0) < 0
+    ]
+    a_above = all(gap >= 0.0 for gap in gaps) and any(gap > 0.0 for gap in gaps)
+    b_above = all(gap <= 0.0 for gap in gaps) and any(gap < 0.0 for gap in gaps)
+    return {
+        "boundaries": len(taus),
+        "a_dominates_empirically": a_above,
+        "b_dominates_empirically": b_above,
+        "crosses": not (a_above or b_above),
+        "min_gap": min(gaps),
+        "max_gap": max(gaps),
+        "crossing_thresholds": [round(tau, 6) for tau, _, _ in crossings][:8],
+    }
+
+
+def profile_ci(
+    values: list[float],
+    thresholds: list[float],
+    resamples: int = BOOTSTRAP_RESAMPLES,
+    seed: int = BOOTSTRAP_SEED,
+) -> list[tuple[float, float]]:
+    """Percentile bootstrap CI for each point of a performance profile.
+
+    rliable ships CIs on its profiles; the first version here did not, which made
+    a profile look more decisive than the sample supports.
+    """
+    if not values:
+        raise ValueError("values must be non-empty")
+    rng = random.Random(seed)
+    n = len(values)
+    columns: list[list[float]] = [[] for _ in thresholds]
+    for _ in range(resamples):
+        sample = rng.choices(values, k=n)
+        for index, tau in enumerate(thresholds):
+            columns[index].append(sum(1 for value in sample if value > tau) / n)
+    return [(_percentile(sorted(column), 0.025), _percentile(sorted(column), 0.975)) for column in columns]
 
 
 def profile_markdown(
