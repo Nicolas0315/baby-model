@@ -15,6 +15,7 @@ fi
 "$py" -m compileall -q baby_model tests
 "$py" -m unittest discover -s tests -p 'test_*.py'
 "$py" -c "from baby_model.stats import demo; demo()"
+"$py" -c "from baby_model.curves import demo; demo()"
 "$py" -m baby_model.cli verify-config configs/experiments/v0-smoke.json
 "$py" -m baby_model.cli verify-config configs/experiments/v02-sweep.json
 "$py" -m baby_model.cli verify-config configs/experiments/v03-sweep.json

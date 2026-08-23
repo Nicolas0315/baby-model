@@ -63,6 +63,18 @@ condition. Re-analyze an existing artifact without a GPU:
 python3 -m baby_model.stats path/to/metrics.json
 ```
 
+Every sweep also writes `episodes.jsonl`, one line per episode tagged with seed,
+condition, and stage. Learning curves, convergence verdicts, and the first bin
+that clears the random floor:
+
+```sh
+python3 -m baby_model.curves path/to/run_dir --bins 12 --svg curves.svg
+```
+
+The verdict distinguishes `improved`, `flat`, `declined`, and `collapsed`,
+because the final window alone cannot tell a condition that gained and lost it
+from one that never moved.
+
 The exact p-value floor of that test is `2 / 2**n`, so a five-seed gate cannot
 reach p < 0.05. Use at least six seeds, preferably eight, for any gate meant to
 claim significance.

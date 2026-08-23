@@ -126,13 +126,49 @@ def write_minigrid_torch_sweep(report: dict[str, Any], output_dir: Path) -> Path
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
+    episode_count = write_episode_log(report, run_dir / "episodes.jsonl")
     (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if episode_count:
+        print(f"episode_rows={episode_count}")
     (run_dir / "summary.md").write_text(torch_sweep_summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():
         latest_path.unlink()
     latest_path.symlink_to(run_dir.name)
     return run_dir
+
+
+def write_episode_log(report: dict[str, Any], path: Path) -> int:
+    """Drain per-episode rows into JSONL and strip them from the report.
+
+    Keeps metrics.json the size it always was while making learning curves
+    recoverable. One line per episode, tagged with seed, condition, and stage.
+    """
+    lines: list[str] = []
+    for seed, run in zip(report.get("seeds", []), report.get("runs", []), strict=True):
+        for condition in run["results"]:
+            for stage in condition.get("stage_results", []):
+                rows = stage.pop("episode_rows", None)
+                if not rows:
+                    continue
+                for row in rows:
+                    lines.append(
+                        json.dumps(
+                            {
+                                "seed": int(seed),
+                                "condition": str(condition["name"]),
+                                "stage": str(stage["stage"]),
+                                "env_id": str(stage["env_id"]),
+                                **row,
+                            },
+                            sort_keys=True,
+                        )
+                    )
+            # final_stage aliases the last stage dict, so its rows are already gone
+            condition.get("final_stage", {}).pop("episode_rows", None)
+    if lines:
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return len(lines)
 
 
 def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:

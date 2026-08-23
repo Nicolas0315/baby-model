@@ -1759,6 +1759,25 @@ def _torch_stage_summary(
     agent: TorchDQNAgent,
 ) -> dict[str, Any]:
     last_window = episodes[-20:] if len(episodes) >= 20 else episodes
+    # Per-episode rows used to be discarded here, which made "did it converge?"
+    # unanswerable from any artifact -- the only trend information was
+    # success_rate_all versus success_rate_last_window, two points per stage.
+    # They are carried out under a private key and written to episodes.jsonl by
+    # the sweep writer, so metrics.json stays lean.
+    episode_rows = [
+        {
+            "episode": index,
+            "success": bool(item.success),
+            "steps": int(item.steps),
+            "external_return": float(item.external_return),
+            "intrinsic_return": float(item.intrinsic_return),
+            "unique_features": int(item.unique_features),
+            "representation_updates": int(representation_update_counts[index])
+            if index < len(representation_update_counts)
+            else 0,
+        }
+        for index, item in enumerate(episodes)
+    ]
     mission_probe_summary = summarize_mission_preservation_probes(mission_probes)
     representation_last_window = (
         representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
@@ -1781,6 +1800,7 @@ def _torch_stage_summary(
     )
     successful_steps = [item.steps for item in episodes if item.success]
     return {
+        "episode_rows": episode_rows,
         "stage": stage.name,
         "env_id": stage.env_id,
         "max_steps": stage.max_steps,
