@@ -1141,12 +1141,33 @@ Updated: 2026-08-23 JST
     `ZN` - `ZK` (p `0.109`) and `ZE` - `ZN` (p `0.273`) are non-significant at
     n = 8.
 
+- v2.49 gave the representation head its own optimizer and re-ran the v2.48
+  condition set: `docs/experiments/minigrid-torch-adda-v60.md`. Both halves on
+  torch `2.11.0+cu128`, so the v2.48 build-split caveat does not apply.
+  - **The fix is validated by its own control.** `ZN` cost `-0.298` against
+    `ZK` under the shared optimizer and `+0.017` (p `0.875`) under the separate
+    one. That entire penalty was the shared-Adam artifact.
+  - `ZE` - `ZK` is `-0.582`, CI `[-0.698, -0.446]`, p `0.0078`, **0/8 seeds**.
+    `ZE` holdout is `0.032` against a floor of `0.279`.
+  - A prediction was refuted and it narrows the claim: the separate optimizer
+    makes a representation step about **8x smaller**, not larger (2.68e-06 vs
+    2.19e-05 after 200 interleaved updates), because the shared step was carried
+    by stale Q momentum. `beta = 0.05` was hand-picked under the broken
+    mechanism, so the result condemns **this setting**, not the objective class.
+  - The representation-update count is endogenous: `ZE` runs 170,089 updates to
+    `ZN`'s 72,200 because failing episodes run to truncation.
+- Scoping correction: the v2.46 bit-identity finding holds at 84 episodes, not
+  at 3200. Comparing `ZK` across v2.48 and v2.49 on the same seeds, three of
+  eight values differ. `torch.get_num_threads()` differs per host (12 / 8 / 6).
+  Conclusions are unaffected because every comparison is paired within a host.
+
 ## Next
 
-- Give the representation head its own optimizer, so the representation loss
-  cannot advance the shared encoder's Adam state, and re-run the v2.48
-  condition set unchanged. This is now the only thing between the project and a
-  real test of its hypothesis.
+- v2.50 is running: sweep `beta` at 0.005 / 0.05 / 0.5 against `ZK` under the
+  separate optimizer, eight seeds
+  (`configs/experiments/minigrid-torch-adda-v53.json`). Until it reports, the
+  hypothesis has had exactly one fair test, at one hand-me-down
+  hyperparameter, and failed it.
 - Anneal `epsilon` so the greedy policy is exercised during training.
 - Get a ceiling from a standard MiniGrid/BabyAI baseline. `0.668` has a floor to
   beat but no upper reference.
