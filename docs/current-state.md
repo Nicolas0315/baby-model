@@ -80,8 +80,31 @@ MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
 
 The v2.43-v2.45 `rtx4090` venv was found in 2026-08 as a broken symlink into a
 sibling clone that had been removed, so that environment was not reproducible
-as recorded. Two CUDA workers are now provisioned this way, which is what makes
-the cross-axis gate possible.
+as recorded. Two CUDA workers are now provisioned this way.
+
+### Put the working copy on ext4, not on `/mnt/c`
+
+On `rtx4090`, `$HOME/work` is a root-owned symlink to `/mnt/c/Users/ogosh/work`,
+so a clone placed there runs off the Windows filesystem through WSL's drvfs
+bridge. A v2.49 sweep from that path died 18 minutes in with
+
+```
+Fatal Python error: pygame_parachute: (pygame parachute) Segmentation Fault
+  minigrid/core/grid.py line 310 in process_vis
+exit=134
+```
+
+with 91 GB of memory free, while the identical sweep on `rtx5060ti` — whose
+`$HOME/work` is real ext4 — ran to completion. Rebuilding the clone and its venv
+under `$HOME/ext4/` on `rtx4090` cleared it.
+
+Treat a `/mnt/c`-backed working copy as unusable for long runs on that host.
+Check before launching:
+
+```sh
+readlink -f "$HOME/work"   # must not start with /mnt/
+df -hT .                   # must say ext4
+```
 
 ## Active Local Slice
 
