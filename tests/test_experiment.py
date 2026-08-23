@@ -3332,6 +3332,16 @@ class ExperimentTest(unittest.TestCase):
         self.assertIn("`BELOW`", summary)
         self.assertNotIn("  - `ABOVE`", summary)
 
+    def test_separate_representation_optimizer_is_opt_in(self) -> None:
+        base = {
+            "environment": {"id": "BabyAI-GoToObj-v0", "max_steps": 64},
+            "conditions": [{"name": "A", "episodes": 4}],
+        }
+        # Default must stay off so every historical config keeps its behaviour.
+        self.assertFalse(parse_minigrid_torch_config(base).agent.separate_representation_optimizer)
+        opted = {**base, "agent": {"separate_representation_optimizer": True}}
+        self.assertTrue(parse_minigrid_torch_config(opted).agent.separate_representation_optimizer)
+
     def test_gpu_compat_policy_is_dependency_free(self) -> None:
         self.assertLess(DriverVersion.parse("576.88"), DriverVersion.parse("580.0"))
         self.assertLess(DriverVersion.parse("560.99"), DriverVersion.parse("580.0"))

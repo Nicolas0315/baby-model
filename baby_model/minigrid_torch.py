@@ -72,6 +72,13 @@ class TorchAgentConfig:
     replay_capacity: int
     target_sync_updates: int
     device: str
+    # When true the representation loss steps its own Adam instance. With one
+    # shared optimizer, a representation step advances the encoder using the
+    # Adam state accumulated from Q-learning gradients, so the objective's
+    # effect could not be separated from that displacement (v2.47 attributed
+    # 79% of the effect to it). Default false to keep every historical config
+    # bit-identical.
+    separate_representation_optimizer: bool = False
 
 
 @dataclass(frozen=True)
@@ -172,6 +179,20 @@ class TorchDQNAgent:
             ).to(device)
             parameters.extend(self.representation_predictor.parameters())
         self.optimizer = torch.optim.Adam(parameters, lr=config.learning_rate)
+        if config.separate_representation_optimizer:
+            # The encoder stays in both: the representation objective is supposed
+            # to shape perception, and removing it would delete the mechanism
+            # under test. What changes is that it is shaped by the objective's
+            # own Adam state rather than by leftover Q-learning momentum.
+            representation_parameters = list(self.model.encoder.parameters())
+            representation_parameters.extend(
+                parameter for parameter in parameters if parameter not in set(self.model.parameters())
+            )
+            self.representation_optimizer = torch.optim.Adam(
+                representation_parameters, lr=config.learning_rate
+            )
+        else:
+            self.representation_optimizer = self.optimizer
         self.loss_fn = torch.nn.MSELoss()
         self.classification_loss_fn = torch.nn.CrossEntropyLoss()
         self.replay: deque[tuple[Any, int, float, Any, bool]] = deque(maxlen=config.replay_capacity)
@@ -300,9 +321,9 @@ class TorchDQNAgent:
             state_loss = self.loss_fn(state_prediction, state_target)
             visibility_loss = self.loss_fn(visibility_prediction, visibility_target)
             loss = state_loss * state_beta + visibility_loss * visibility_beta
-            self.optimizer.zero_grad()
+            self.representation_optimizer.zero_grad()
             loss.backward()
-            self.optimizer.step()
+            self.representation_optimizer.step()
             return RepresentationUpdateResult(
                 loss=float(loss.detach().cpu().item()),
                 state_loss=float(state_loss.detach().cpu().item()),
@@ -327,9 +348,9 @@ class TorchDQNAgent:
             action_one_hot[0, action] = 1.0
             prediction = self.representation_predictor(self.torch.cat([hidden, action_one_hot], dim=1))
             loss = self.loss_fn(prediction, target) * self.representation_beta
-        self.optimizer.zero_grad()
+        self.representation_optimizer.zero_grad()
         loss.backward()
-        self.optimizer.step()
+        self.representation_optimizer.step()
         return RepresentationUpdateResult(loss=float(loss.detach().cpu().item()))
 
     def parameter_count(self) -> int:
@@ -609,6 +630,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
     replay_capacity = int(agent_cfg.get("replay_capacity", 512))
     target_sync_updates = int(agent_cfg.get("target_sync_updates", 25))
     device = str(agent_cfg.get("device", "auto"))
+    separate_representation_optimizer = bool(agent_cfg.get("separate_representation_optimizer", False))
     if feature_dim < 16:
         raise ValueError("agent.feature_dim must be at least 16")
     if hidden_dim < 2 or hidden_dim > 2048:
@@ -792,6 +814,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             replay_capacity=replay_capacity,
             target_sync_updates=target_sync_updates,
             device=device,
+            separate_representation_optimizer=separate_representation_optimizer,
         ),
         conditions=tuple(conditions),
         stages=stages,
@@ -1226,6 +1249,69 @@ def scatter_self_check() -> None:
             raise AssertionError(f"out-of-range index accepted: {bad}")
 
     print("scatter_self_check ok")
+
+
+def representation_optimizer_self_check() -> None:
+    """Assert the separate representation optimizer removes stale-momentum drift.
+
+    With one shared Adam, a representation step moves the encoder by roughly the
+    same amount at beta = 0 as at beta = 0.05, because the displacement comes
+    from Q-learning momentum rather than from the objective. With a separate
+    optimizer, beta = 0 must move the encoder by exactly zero, which is what
+    makes the null control an actual control.
+    """
+    import torch
+
+    def drift(separate: bool, beta: float) -> float:
+        config = TorchAgentConfig(
+            feature_dim=64,
+            hidden_dim=8,
+            learning_rate=0.01,
+            gamma=0.9,
+            epsilon=0.2,
+            batch_size=2,
+            replay_capacity=32,
+            target_sync_updates=50,
+            device="cpu",
+            separate_representation_optimizer=separate,
+        )
+        torch.manual_seed(0)
+        agent = TorchDQNAgent(
+            torch=torch,
+            actions=3,
+            config=config,
+            device=torch.device("cpu"),
+            seed=0,
+            representation_objective="state_plus_mission_target",
+            representation_beta=beta,
+        )
+        target = [0.0] * _representation_target_dim("state_plus_mission_target", 64)
+        for _ in range(6):
+            agent.update({1: 1.0, 5: 1.0}, 0, 1.0, {2: 1.0, 7: 1.0}, False)
+        before = agent.model.encoder[0].weight.detach().clone()
+        head_before = agent.model.head.weight.detach().clone()
+        for _ in range(20):
+            agent.update_representation({1: 1.0, 5: 1.0}, 0, target)
+        head_drift = (agent.model.head.weight.detach() - head_before).abs().max().item()
+        assert head_drift == 0.0, f"representation loss reached the Q head: {head_drift}"
+        return (agent.model.encoder[0].weight.detach() - before).abs().max().item()
+
+    shared_null = drift(separate=False, beta=0.0)
+    shared_real = drift(separate=False, beta=0.05)
+    separate_null = drift(separate=True, beta=0.0)
+    separate_real = drift(separate=True, beta=0.05)
+
+    assert shared_null > 0.0, "the shared-optimizer artifact should still be reproducible"
+    assert abs(shared_null - shared_real) / shared_real < 0.05, (
+        f"shared drift should be dominated by momentum, not beta: {shared_null} vs {shared_real}"
+    )
+    assert separate_null == 0.0, f"separate optimizer still drifts at beta=0: {separate_null}"
+    assert separate_real > 0.0, "separate optimizer must still shape the encoder at beta>0"
+
+    print(
+        "representation_optimizer_self_check ok "
+        f"(shared {shared_null:.3e}/{shared_real:.3e}, separate {separate_null:.3e}/{separate_real:.3e})"
+    )
 
 
 def random_policy_floor(
