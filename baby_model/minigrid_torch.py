@@ -447,6 +447,12 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
     except ImportError as exc:
         raise ImportError("gymnasium/minigrid/torch") from exc
 
+    # Tiny tensors (1024 -> 64 -> 7, batch 16) make multithreaded BLAS pure
+    # overhead: measured 1.35x faster at one thread with bit-identical results.
+    # Off by default so nothing historical changes; set to pin it.
+    requested_threads = os.environ.get("BABY_MODEL_TORCH_THREADS")
+    if requested_threads:
+        torch.set_num_threads(int(requested_threads))
     torch.manual_seed(seed)
     device = select_torch_device(torch, parsed.agent.device)
     active_stages_by_condition = dict(parsed.active_stages_by_condition)
@@ -1381,6 +1387,7 @@ def runtime_provenance(torch: Any, device: Any) -> dict[str, Any]:
         "cudnn_allow_tf32": bool(getattr(torch.backends.cudnn, "allow_tf32", False)),
         "deterministic_algorithms": bool(torch.are_deterministic_algorithms_enabled()),
         "cublas_workspace_config": os.environ.get("CUBLAS_WORKSPACE_CONFIG", "unset"),
+        "torch_num_threads": int(torch.get_num_threads()),
     }
     if str(device).startswith("cuda") and torch.cuda.is_available():
         provenance["gpu_name"] = torch.cuda.get_device_name(0)

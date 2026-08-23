@@ -82,6 +82,67 @@ The v2.43-v2.45 `rtx4090` venv was found in 2026-08 as a broken symlink into a
 sibling clone that had been removed, so that environment was not reproducible
 as recorded. Two CUDA workers are now provisioned this way.
 
+### `rtx4090` segfaults on long runs; cause not identified
+
+Two v2.5x sweeps on `rtx4090` died with a pygame-parachute SIGSEGV, the first
+after 18 minutes (exit 134) and the second after 72 minutes (exit 139), with
+tens of GB of memory free. `rtx5060ti` running the identical code, config, and
+torch build has not crashed.
+
+**A first explanation was wrong and is retracted.** The first crash happened on a
+clone under `$HOME/work`, which on that host is a root-owned symlink to
+`/mnt/c/Users/ogosh/work`, so it ran over WSL's drvfs bridge. Rebuilding under
+`$HOME/ext4/` did not prevent the second crash: the filesystem was not the
+cause.
+
+Remaining differences between the hosts: 24 cores and 94 GB versus 8 cores and
+31 GB, and `torch.get_num_threads()` of 12 versus 8. The thread-count
+hypothesis is untested for the crash. It is, separately, measurably *not* the
+cause of numerical divergence: at the 84-episode budget, six threads and one
+thread give bit-identical results.
+
+Until a cause is found, treat `rtx4090` as unreliable for multi-hour sweeps and
+prefer `rtx5060ti` or the Mac. There is also a standing note that this host has
+never been memtested.
+
+### Pin `torch` to one thread
+
+The networks are 1024 -> 64 -> 7 with batch 16, so multithreaded BLAS is pure
+overhead. Measured on a two-seed sweep: **42.09s at six threads, 31.09s at one
+thread, 1.35x faster, with bit-identical results.**
+
+`BABY_MODEL_TORCH_THREADS` sets it, and the resolved `torch_num_threads` is
+recorded in the artifact's `framework` block. Unset by default so nothing
+historical changes.
+
+## Research Lanes
+
+- Core stdlib lane: v0, v0.2, and v0.3 toy-environment sweeps.
+- Optional MiniGrid/BabyAI lane: dependency-isolated probes and curriculum
+  experiments.
+- Optional PyTorch/GPU lane: CPU-safe and CUDA/MPS-capable smoke tests with
+  fleet evidence kept in local docs outside this repository.
+
+## GPU Lane Environment
+
+The CUDA venv is not committed and is not durable; rebuild it from the scripted
+path rather than assuming a previous one survives:
+
+```sh
+MINIGRID_VENV_DIR=.venv-minigrid-cuda \
+MINIGRID_PYTHON=3.12 \
+MINIGRID_ENV_BACKEND=uv \
+MINIGRID_TORCH_INSTALLER=uv \
+MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128 \
+MINIGRID_TORCH_DEVICE=cuda \
+MINIGRID_TORCH_CONFIG=configs/experiments/minigrid-torch-unlock-smoke.json \
+./scripts/setup_minigrid_env.sh
+```
+
+The v2.43-v2.45 `rtx4090` venv was found in 2026-08 as a broken symlink into a
+sibling clone that had been removed, so that environment was not reproducible
+as recorded. Two CUDA workers are now provisioned this way.
+
 ### Put the working copy on ext4, not on `/mnt/c`
 
 On `rtx4090`, `$HOME/work` is a root-owned symlink to `/mnt/c/Users/ogosh/work`,
