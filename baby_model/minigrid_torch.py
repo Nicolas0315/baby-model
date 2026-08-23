@@ -79,12 +79,6 @@ class TorchAgentConfig:
     # 79% of the effect to it). Default false to keep every historical config
     # bit-identical.
     separate_representation_optimizer: bool = False
-    # Adam normalises by its own second moment, so a constant factor on the loss
-    # cancels: scaling the loss by beta scales m by beta and v by beta**2, and
-    # m/sqrt(v) is unchanged. Measured across a 100x beta range the encoder step
-    # is flat to three digits. `representation_beta` is therefore an on/off
-    # switch, not a dial -- this is the dial.
-    representation_learning_rate: float | None = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +91,20 @@ class MiniGridTorchConfig:
     stages: tuple[TorchCurriculumStage, ...] = ()
     active_stages_by_condition: tuple[tuple[str, tuple[str, ...]], ...] = ()
     holdout_episodes: int = 0
+    # Conditions default to seed + index, so every condition gets a different
+    # agent seed AND a different set of environment episodes: a "paired"
+    # comparison is then paired only by the base seed. Common random numbers give
+    # all conditions the same seed, which is the variance reduction the paired
+    # test is supposed to exploit. Off by default -- turning it on changes every
+    # historical result.
+    common_random_numbers: bool = False
+    # Conditions default to seed + index, which gives every condition a different
+    # agent seed AND a different set of environment episodes, so a "paired"
+    # comparison is paired only by the base seed. Common random numbers give all
+    # conditions the same seed, which is the textbook variance reduction the
+    # paired test is supposed to exploit. Off by default: turning it on changes
+    # every historical result.
+    common_random_numbers: bool = False
 
 
 @dataclass(frozen=True)
@@ -121,6 +129,7 @@ class TorchDQNAgent:
         representation_beta: float = 0.0,
         representation_state_beta: float = 0.0,
         representation_target_visibility_beta: float = 0.0,
+        representation_learning_rate: float | None = None,
     ) -> None:
         self.torch = torch
         self.actions = actions
@@ -195,9 +204,7 @@ class TorchDQNAgent:
                 parameter for parameter in parameters if parameter not in set(self.model.parameters())
             )
             representation_lr = (
-                config.learning_rate
-                if config.representation_learning_rate is None
-                else config.representation_learning_rate
+                config.learning_rate if representation_learning_rate is None else representation_learning_rate
             )
             self.representation_optimizer = torch.optim.Adam(
                 representation_parameters, lr=representation_lr
@@ -517,6 +524,12 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
             quiet_env_output=parsed.quiet_env_output,
         )
         random_floor["env_id"] = floor_env_id
+        # The floor is measured on the episode seeds derived from `seed`, which is
+        # condition index 0's seed. Without common random numbers the other
+        # conditions see different episodes, so their "vs floor" gap carries the
+        # floor's own seed noise (measured sd 0.037 across eight seeds).
+        random_floor["aligned_with_condition_seed"] = seed
+        random_floor["aligned_for_all_conditions"] = parsed.common_random_numbers
 
     report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -632,6 +645,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         raise ValueError("environment.max_steps must be positive")
     quiet_env_output = bool(env_cfg.get("quiet_env_output", True))
     holdout_episodes = int(config.get("holdout_episodes", 0))
+    common_random_numbers = bool(config.get("common_random_numbers", False))
     if holdout_episodes < 0:
         raise ValueError("holdout_episodes must not be negative")
 
@@ -648,17 +662,6 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
     target_sync_updates = int(agent_cfg.get("target_sync_updates", 25))
     device = str(agent_cfg.get("device", "auto"))
     separate_representation_optimizer = bool(agent_cfg.get("separate_representation_optimizer", False))
-    representation_learning_rate_cfg = agent_cfg.get("representation_learning_rate")
-    representation_learning_rate = (
-        None if representation_learning_rate_cfg is None else float(representation_learning_rate_cfg)
-    )
-    if representation_learning_rate is not None:
-        if representation_learning_rate <= 0.0:
-            raise ValueError("agent.representation_learning_rate must be positive")
-        if not separate_representation_optimizer:
-            raise ValueError(
-                "agent.representation_learning_rate requires separate_representation_optimizer"
-            )
     if feature_dim < 16:
         raise ValueError("agent.feature_dim must be at least 16")
     if hidden_dim < 2 or hidden_dim > 2048:
@@ -741,6 +744,17 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         freeze_encoder_after_delay = bool(item.get("freeze_encoder_after_delay", False))
         stop_representation_after_delay = bool(item.get("stop_representation_after_delay", False))
         representation_null_control = bool(item.get("representation_null_control", False))
+        representation_learning_rate_cfg = item.get("representation_learning_rate")
+        representation_learning_rate = (
+            None if representation_learning_rate_cfg is None else float(representation_learning_rate_cfg)
+        )
+        if representation_learning_rate is not None:
+            if representation_learning_rate <= 0.0:
+                raise ValueError(f"representation_learning_rate must be positive for {name}")
+            if not separate_representation_optimizer:
+                raise ValueError(
+                    f"representation_learning_rate requires agent.separate_representation_optimizer for {name}"
+                )
         active_stages = tuple(str(stage_name) for stage_name in item.get("active_stages", all_stage_names))
         if stages:
             if not active_stages:
@@ -811,7 +825,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 decoder_delay_episodes=delay,
                 intrinsic_beta=beta,
                 intrinsic_mode=intrinsic_mode,
-                seed=seed + i,
+                seed=seed if common_random_numbers else seed + i,
                 intrinsic_target=intrinsic_target,
                 representation_objective=representation_objective,
                 representation_beta=representation_beta,
@@ -825,6 +839,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 freeze_encoder_after_delay=freeze_encoder_after_delay,
                 stop_representation_after_delay=stop_representation_after_delay,
                 representation_null_control=representation_null_control,
+                representation_learning_rate=representation_learning_rate,
             )
         )
         active_stages_by_condition.append((name, active_stages))
@@ -843,12 +858,12 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             target_sync_updates=target_sync_updates,
             device=device,
             separate_representation_optimizer=separate_representation_optimizer,
-            representation_learning_rate=representation_learning_rate,
         ),
         conditions=tuple(conditions),
         stages=stages,
         active_stages_by_condition=tuple(active_stages_by_condition),
         holdout_episodes=holdout_episodes,
+        common_random_numbers=common_random_numbers,
     )
 
 
@@ -909,6 +924,7 @@ def run_minigrid_torch_condition(
             representation_beta=condition.representation_beta,
             representation_state_beta=condition.representation_state_beta,
             representation_target_visibility_beta=condition.representation_target_visibility_beta,
+            representation_learning_rate=condition.representation_learning_rate,
         )
         auxiliary_agent = TorchDQNAgent(
             torch=torch,
@@ -1356,7 +1372,6 @@ def representation_optimizer_self_check() -> None:
             target_sync_updates=50,
             device="cpu",
             separate_representation_optimizer=True,
-            representation_learning_rate=learning_rate,
         )
         torch.manual_seed(0)
         agent = TorchDQNAgent(
@@ -1367,6 +1382,7 @@ def representation_optimizer_self_check() -> None:
             seed=0,
             representation_objective="state_plus_mission_target",
             representation_beta=beta,
+            representation_learning_rate=learning_rate,
         )
         dim = _representation_target_dim("state_plus_mission_target", 64)
         rng = Random(0)
@@ -1569,6 +1585,7 @@ def _run_minigrid_torch_stage(
                 representation_beta=condition.representation_beta,
                 representation_state_beta=condition.representation_state_beta,
                 representation_target_visibility_beta=condition.representation_target_visibility_beta,
+                representation_learning_rate=condition.representation_learning_rate,
             )
         if auxiliary_agent is None:
             auxiliary_agent = TorchDQNAgent(

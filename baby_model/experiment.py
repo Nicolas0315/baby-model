@@ -42,6 +42,11 @@ class Condition:
     # no configurable control that separates the objective from its optimizer
     # schedule, because beta > 0 is otherwise required.
     representation_null_control: bool = False
+    # The dial for representation pressure. `representation_beta` is cancelled by
+    # Adam, so it cannot serve as one. Condition-level rather than agent-level so
+    # a single sweep can compare several rates on identical seeds -- cross-run
+    # comparison of absolute levels is not safe at the long horizon.
+    representation_learning_rate: float | None = None
 
 
 def default_conditions(seed: int = 7) -> list[Condition]:

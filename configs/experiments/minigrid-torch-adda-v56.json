@@ -1,5 +1,5 @@
 {
-  "hypothesis": "Baby-AD/DA PyTorch DQN v2.51: representation_beta is cancelled by Adam, so v2.50 swept a no-op. Sweep the representation optimizer's learning rate, which measurably controls the encoder step, at 1/100 and 1/10 of the Q rate.",
+  "hypothesis": "Baby-AD/DA PyTorch DQN v2.51: representation pressure swept on the dial that actually works (the representation optimizer's learning rate), all arms on identical seeds in one run.",
   "environment": {
     "id": "BabyAI-GoToObj-v0",
     "max_steps": 80,
@@ -35,8 +35,7 @@
     "replay_capacity": 1024,
     "target_sync_updates": 50,
     "device": "cpu",
-    "separate_representation_optimizer": true,
-    "representation_learning_rate": 0.0001
+    "separate_representation_optimizer": true
   },
   "conditions": [
     {
@@ -52,7 +51,7 @@
       "intrinsic_mode": "none"
     },
     {
-      "name": "ZE_lr_mid_sep",
+      "name": "ZE_lr1e5",
       "encoder_mode": "raw",
       "active_stages": [
         "empty_warmup",
@@ -63,7 +62,38 @@
       "intrinsic_beta": 0.0,
       "intrinsic_mode": "none",
       "representation_objective": "state_plus_mission_target",
-      "representation_beta": 0.05
+      "representation_beta": 0.05,
+      "representation_learning_rate": 1e-05
+    },
+    {
+      "name": "ZE_lr1e4",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_red_ball_warmup",
+        "goto_obj_eval"
+      ],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.05,
+      "representation_learning_rate": 0.0001
+    },
+    {
+      "name": "ZE_lr1e3",
+      "encoder_mode": "raw",
+      "active_stages": [
+        "empty_warmup",
+        "goto_red_ball_warmup",
+        "goto_obj_eval"
+      ],
+      "decoder_delay_episodes": 8,
+      "intrinsic_beta": 0.0,
+      "intrinsic_mode": "none",
+      "representation_objective": "state_plus_mission_target",
+      "representation_beta": 0.05,
+      "representation_learning_rate": 0.001
     }
   ],
   "baseline_condition": "ZK_torch_gotoobj_curriculum_no_repr_delay_long",

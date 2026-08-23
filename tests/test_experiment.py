@@ -2628,6 +2628,7 @@ class ExperimentTest(unittest.TestCase):
                 representation_beta: float = 0.0,
                 representation_state_beta: float = 0.0,
                 representation_target_visibility_beta: float = 0.0,
+                representation_learning_rate: float | None = None,
             ) -> None:
                 self.actions = actions
                 self.updates = 0
@@ -2803,6 +2804,7 @@ class ExperimentTest(unittest.TestCase):
                 representation_beta: float = 0.0,
                 representation_state_beta: float = 0.0,
                 representation_target_visibility_beta: float = 0.0,
+                representation_learning_rate: float | None = None,
             ) -> None:
                 self.actions = actions
                 self.updates = 0
@@ -3341,6 +3343,24 @@ class ExperimentTest(unittest.TestCase):
         self.assertFalse(parse_minigrid_torch_config(base).agent.separate_representation_optimizer)
         opted = {**base, "agent": {"separate_representation_optimizer": True}}
         self.assertTrue(parse_minigrid_torch_config(opted).agent.separate_representation_optimizer)
+
+    def test_common_random_numbers_actually_pairs_the_conditions(self) -> None:
+        config = {
+            "environment": {"id": "BabyAI-GoToObj-v0", "max_steps": 64},
+            "conditions": [
+                {"name": "a", "episodes": 2},
+                {"name": "b", "episodes": 2},
+                {"name": "c", "episodes": 2},
+            ],
+        }
+        # Default: seed + index, so no two conditions share an agent seed and
+        # therefore none share their environment episodes either.
+        default_seeds = [c.seed for c in parse_minigrid_torch_config(config, seed=601).conditions]
+        self.assertEqual(default_seeds, [601, 602, 603])
+        paired = parse_minigrid_torch_config({**config, "common_random_numbers": True}, seed=601)
+        self.assertEqual([c.seed for c in paired.conditions], [601, 601, 601])
+        self.assertTrue(paired.common_random_numbers)
+        self.assertFalse(parse_minigrid_torch_config(config).common_random_numbers)
 
     def test_gpu_compat_policy_is_dependency_free(self) -> None:
         self.assertLess(DriverVersion.parse("576.88"), DriverVersion.parse("580.0"))
