@@ -98,6 +98,11 @@ class MiniGridTorchConfig:
     # test is supposed to exploit. Off by default -- turning it on changes every
     # historical result.
     common_random_numbers: bool = False
+    # Run the greedy holdout three times on the same trained policy and the same
+    # episode seeds: real mission, a mission shuffled in from a disjoint seed
+    # band, and a blank mission. Solving a level is not evidence the policy read
+    # the mission.
+    mission_counterfactual: bool = False
     # Conditions default to seed + index, which gives every condition a different
     # agent seed AND a different set of environment episodes, so a "paired"
     # comparison is paired only by the base seed. Common random numbers give all
@@ -486,6 +491,7 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
                 device=device,
                 quiet_env_output=parsed.quiet_env_output,
                 holdout_episodes=parsed.holdout_episodes,
+                mission_counterfactual=parsed.mission_counterfactual,
             )
             for condition in parsed.conditions
         ]
@@ -646,6 +652,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
     quiet_env_output = bool(env_cfg.get("quiet_env_output", True))
     holdout_episodes = int(config.get("holdout_episodes", 0))
     common_random_numbers = bool(config.get("common_random_numbers", False))
+    mission_counterfactual = bool(config.get("mission_counterfactual", False))
     if holdout_episodes < 0:
         raise ValueError("holdout_episodes must not be negative")
 
@@ -864,6 +871,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         active_stages_by_condition=tuple(active_stages_by_condition),
         holdout_episodes=holdout_episodes,
         common_random_numbers=common_random_numbers,
+        mission_counterfactual=mission_counterfactual,
     )
 
 
@@ -1148,6 +1156,7 @@ def run_minigrid_torch_curriculum_condition(
     device: Any,
     quiet_env_output: bool = True,
     holdout_episodes: int = 0,
+    mission_counterfactual: bool = False,
 ) -> dict[str, Any]:
     active_stage_names = set(active_stages)
     agent: TorchDQNAgent | None = None
@@ -1191,6 +1200,21 @@ def run_minigrid_torch_curriculum_condition(
             episodes=holdout_episodes,
             quiet_env_output=quiet_env_output,
         )
+        if mission_counterfactual:
+            for mode in ("shuffled", "blank"):
+                variant = run_greedy_holdout(
+                    gym=gym,
+                    agent=agent,
+                    condition=condition,
+                    agent_config=agent_config,
+                    env_id=final_stage_spec.env_id,
+                    max_steps=final_stage_spec.max_steps,
+                    episodes=holdout_episodes,
+                    quiet_env_output=quiet_env_output,
+                    mission_mode=mode,
+                )
+                holdout[f"holdout_success_rate_{mode}_mission"] = variant["holdout_success_rate"]
+                holdout[f"holdout_mean_return_{mode}_mission"] = variant["holdout_mean_return"]
     return {
         "name": condition.name,
         "env_id": final_stage["env_id"],
@@ -1487,6 +1511,50 @@ def runtime_provenance(torch: Any, device: Any) -> dict[str, Any]:
     return provenance
 
 
+def _apply_mission_mode(
+    observation: Any, mission_mode: str, index: int, missions: list[str]
+) -> Any:
+    """Real, shuffled-from-another-episode, or blank mission.
+
+    Solving a level is not evidence that the policy read the mission. This is the
+    counterfactual: only the real mission should hold the success rate up. On a
+    level with a single object the mission is logically redundant, so no drop is
+    expected and none should be claimed as grounding.
+    """
+    if mission_mode == "real":
+        return observation
+    if not isinstance(observation, dict):
+        return observation
+    swapped = dict(observation)
+    if mission_mode == "blank":
+        swapped["mission"] = ""
+    else:
+        own = str(observation.get("mission", ""))
+        others = [m for m in missions if m != own]
+        swapped["mission"] = others[index % len(others)] if others else own
+    return swapped
+
+
+def _holdout_mission_pool(
+    gym: Any, env_id: str, condition: Condition, episodes: int, quiet_env_output: bool
+) -> list[str]:
+    """Missions from a disjoint seed band, so a shuffle cannot reuse this episode's."""
+    env = gym.make(env_id)
+    try:
+        pool: list[str] = []
+        for index in range(min(episodes, 64)):
+            observation, _info = _env_call(
+                env.reset,
+                quiet=quiet_env_output,
+                seed=condition.seed * 100_000 + 98_000 + index,
+            )
+            if isinstance(observation, dict):
+                pool.append(str(observation.get("mission", "")))
+        return sorted(set(pool))
+    finally:
+        env.close()
+
+
 def run_greedy_holdout(
     gym: Any,
     agent: TorchDQNAgent,
@@ -1496,6 +1564,7 @@ def run_greedy_holdout(
     max_steps: int,
     episodes: int,
     quiet_env_output: bool = True,
+    mission_mode: str = "real",
 ) -> dict[str, Any]:
     """Greedy, no-learning evaluation on held-out episode seeds.
 
@@ -1507,6 +1576,8 @@ def run_greedy_holdout(
     """
     if episodes < 1:
         raise ValueError("episodes must be positive")
+    if mission_mode not in {"real", "shuffled", "blank"}:
+        raise ValueError(f"unknown mission_mode: {mission_mode}")
     env = gym.make(env_id)
     saved_epsilon = agent.epsilon
     agent.epsilon = 0.0
@@ -1514,6 +1585,7 @@ def run_greedy_holdout(
         successes = 0
         returns: list[float] = []
         step_counts: list[int] = []
+        missions = _holdout_mission_pool(gym, env_id, condition, episodes, quiet_env_output) if mission_mode == "shuffled" else []
         for index in range(episodes):
             observation, _info = _env_call(
                 env.reset,
@@ -1521,6 +1593,7 @@ def run_greedy_holdout(
                 # Disjoint from training seeds, which stay under the 100_000 stride.
                 seed=condition.seed * 100_000 + 99_000 + index,
             )
+            observation = _apply_mission_mode(observation, mission_mode, index, missions)
             features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
             external_return = 0.0
             success = False
@@ -1532,6 +1605,7 @@ def run_greedy_holdout(
                     action,
                     quiet=quiet_env_output,
                 )
+                observation = _apply_mission_mode(observation, mission_mode, index, missions)
                 features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
                 external_return += float(reward)
                 steps += 1
@@ -1543,6 +1617,7 @@ def run_greedy_holdout(
             returns.append(external_return)
             step_counts.append(steps)
         return {
+            "holdout_mission_mode": mission_mode,
             "holdout_env_id": env_id,
             "holdout_episodes": episodes,
             "holdout_success_rate": successes / episodes,

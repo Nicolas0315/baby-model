@@ -25,6 +25,8 @@ def main() -> int:
         config = json.loads(args.config.read_text(encoding="utf-8"))
         if args.device is not None:
             config.setdefault("agent", {})["device"] = args.device
+        global _PROGRESS_PATH
+        _PROGRESS_PATH = args.output_dir / "progress.jsonl"
         report = run_minigrid_torch_sweep(config, seeds=parse_seeds(args.seeds))
     except ImportError as exc:
         print(f"missing optional dependency: {exc}")
@@ -37,10 +39,45 @@ def main() -> int:
     return 0
 
 
+_PROGRESS_PATH: Path | None = None
+
+
+def args_output_dir_hint() -> Path | None:
+    return _PROGRESS_PATH
+
+
+def _append_progress(path: Path | None, done: int, total: int, seed: int) -> None:
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "at": datetime.now(timezone.utc).isoformat(),
+                        "seeds_done": done,
+                        "seeds_total": total,
+                        "last_seed": seed,
+                    }
+                )
+                + "\n"
+            )
+    except OSError:
+        # Progress reporting must never take a sweep down.
+        pass
+
+
 def run_minigrid_torch_sweep(config: dict[str, Any], seeds: list[int]) -> dict[str, Any]:
     if not seeds:
         raise ValueError("seeds must be non-empty")
-    runs = [run_minigrid_torch_suite(config, seed=seed) for seed in seeds]
+    # Progress must be observable while the sweep runs. The output directory is
+    # only created at the end, which an external audit read as "never started".
+    progress_path = args_output_dir_hint()
+    runs = []
+    for index, seed in enumerate(seeds):
+        runs.append(run_minigrid_torch_suite(config, seed=seed))
+        _append_progress(progress_path, index + 1, len(seeds), seed)
     aggregate = aggregate_torch_reports(runs=runs, seeds=seeds)
     report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
