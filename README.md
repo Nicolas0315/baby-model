@@ -84,3 +84,11 @@ host.
 - MiniGrid PyTorch DQN lane: `docs/experiments/minigrid-torch-lane.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`
+
+- [Documentation](docs/)
+
+- [Issue intake](.github/ISSUE_TEMPLATE/)
+
+- [Automation](.github/workflows/)
+
+- [Repository hygiene](.gitignore)
