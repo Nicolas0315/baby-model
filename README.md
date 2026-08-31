@@ -134,3 +134,11 @@ host.
   `docs/architecture/verification-of-verification.md`
 - Progress: `docs/progress/STATUS.md`
 - Runs: `runs/<timestamp>/`
+
+- [Documentation](docs/)
+
+- [Issue intake](.github/ISSUE_TEMPLATE/)
+
+- [Automation](.github/workflows/)
+
+- [Repository hygiene](.gitignore)

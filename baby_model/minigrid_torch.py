@@ -28,9 +28,21 @@ CONTROLLABILITY_DIM = 1
 AFFORDANCE_PROGRESS_DIM = 16
 TRANSITION_GROUP_DIM = 16
 SUBGOAL_PROGRESS_DIM = 10
-TARGET_VISIBILITY_RELATIONS = ("absent", "left_near", "left_far", "center_near", "center_far", "right_near", "right_far")
-TARGET_VISIBILITY_TRANSITION_DIM = len(TARGET_VISIBILITY_RELATIONS) * len(TARGET_VISIBILITY_RELATIONS)
-STATE_PLUS_DELTA_DIM = AFFORDANCE_PROGRESS_DIM + AFFORDANCE_PROGRESS_DIM + TRANSITION_GROUP_DIM + SUBGOAL_PROGRESS_DIM
+TARGET_VISIBILITY_RELATIONS = (
+    "absent",
+    "left_near",
+    "left_far",
+    "center_near",
+    "center_far",
+    "right_near",
+    "right_far",
+)
+TARGET_VISIBILITY_TRANSITION_DIM = len(TARGET_VISIBILITY_RELATIONS) * len(
+    TARGET_VISIBILITY_RELATIONS
+)
+STATE_PLUS_DELTA_DIM = (
+    AFFORDANCE_PROGRESS_DIM + AFFORDANCE_PROGRESS_DIM + TRANSITION_GROUP_DIM + SUBGOAL_PROGRESS_DIM
+)
 STATE_PLUS_TARGET_VISIBILITY_DIM = STATE_PLUS_DELTA_DIM + TARGET_VISIBILITY_TRANSITION_DIM
 STATE_PLUS_MISSION_TARGET_DIM = STATE_PLUS_DELTA_DIM + TARGET_VISIBILITY_TRANSITION_DIM
 TWO_HEAD_STATE_TARGET_OBJECTIVE = "state_delta_and_target_visibility"
@@ -47,8 +59,22 @@ OBJECT_BOX = 7
 OBJECT_GOAL = 8
 OBJECT_WORDS = ("ball", "box", "key", "door", "goal")
 COLOR_WORDS = ("red", "green", "blue", "purple", "yellow", "grey", "gray")
-MINIGRID_OBJECT_TO_IDX = {"door": OBJECT_DOOR, "key": OBJECT_KEY, "ball": OBJECT_BALL, "box": OBJECT_BOX, "goal": OBJECT_GOAL}
-MINIGRID_COLOR_TO_IDX = {"red": 0, "green": 1, "blue": 2, "purple": 3, "yellow": 4, "grey": 5, "gray": 5}
+MINIGRID_OBJECT_TO_IDX = {
+    "door": OBJECT_DOOR,
+    "key": OBJECT_KEY,
+    "ball": OBJECT_BALL,
+    "box": OBJECT_BOX,
+    "goal": OBJECT_GOAL,
+}
+MINIGRID_COLOR_TO_IDX = {
+    "red": 0,
+    "green": 1,
+    "blue": 2,
+    "purple": 3,
+    "yellow": 4,
+    "grey": 5,
+    "gray": 5,
+}
 VIEW_FORWARD_X = 3
 VIEW_FORWARD_Y = 5
 
@@ -146,8 +172,12 @@ class TorchDQNAgent:
         self.representation_state_beta = representation_state_beta
         self.representation_target_visibility_beta = representation_target_visibility_beta
         self.rng = Random(seed)
-        self.model = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(device)
-        self.target = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(device)
+        self.model = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(
+            device
+        )
+        self.target = build_q_network(torch, config.feature_dim, config.hidden_dim, actions).to(
+            device
+        )
         self.target.load_state_dict(self.model.state_dict())
         self.target.eval()
         self.representation_predictor = None
@@ -206,10 +236,14 @@ class TorchDQNAgent:
             # own Adam state rather than by leftover Q-learning momentum.
             representation_parameters = list(self.model.encoder.parameters())
             representation_parameters.extend(
-                parameter for parameter in parameters if parameter not in set(self.model.parameters())
+                parameter
+                for parameter in parameters
+                if parameter not in set(self.model.parameters())
             )
             representation_lr = (
-                config.learning_rate if representation_learning_rate is None else representation_learning_rate
+                config.learning_rate
+                if representation_learning_rate is None
+                else representation_learning_rate
             )
             self.representation_optimizer = torch.optim.Adam(
                 representation_parameters, lr=representation_lr
@@ -246,28 +280,46 @@ class TorchDQNAgent:
             return self.rng.randrange(self.actions)
         base_values = self._q_values(features)
         values = [
-            base_values[action] + bonus_weight * (0.0 if action_bonus is None else action_bonus.get(action, 0.0))
+            base_values[action]
+            + bonus_weight * (0.0 if action_bonus is None else action_bonus.get(action, 0.0))
             for action in range(self.actions)
         ]
         best_value = max(values)
         best_actions = [action for action, value in enumerate(values) if value == best_value]
         return self.rng.choice(best_actions)
 
-    def update(self, features: SparseFeatures, action: int, reward: float, next_features: SparseFeatures, done: bool) -> None:
+    def update(
+        self,
+        features: SparseFeatures,
+        action: int,
+        reward: float,
+        next_features: SparseFeatures,
+        done: bool,
+    ) -> None:
         # Rows are built once here rather than on every batch that samples them.
         # With capacity 1024 and batch 16 a transition is resampled dozens of
         # times, and rebuilding its dense row each time dominated the profile.
-        state_row, next_state_row = self._scatter([features, next_features], self.config.feature_dim)
+        state_row, next_state_row = self._scatter(
+            [features, next_features], self.config.feature_dim
+        )
         self.replay.append((state_row, action, reward, next_state_row, done))
         if len(self.replay) < self.config.batch_size:
             return
 
         batch = self.rng.sample(list(self.replay), self.config.batch_size)
         states = self.torch.stack([item[0] for item in batch])
-        actions = self.torch.tensor([item[1] for item in batch], dtype=self.torch.long, device=self.device)
-        rewards = self.torch.tensor([item[2] for item in batch], dtype=self.torch.float32, device=self.device)
+        actions = self.torch.tensor(
+            [item[1] for item in batch], dtype=self.torch.long, device=self.device
+        )
+        rewards = self.torch.tensor(
+            [item[2] for item in batch], dtype=self.torch.float32, device=self.device
+        )
         next_states = self.torch.stack([item[3] for item in batch])
-        dones = self.torch.tensor([1.0 if item[4] else 0.0 for item in batch], dtype=self.torch.float32, device=self.device)
+        dones = self.torch.tensor(
+            [1.0 if item[4] else 0.0 for item in batch],
+            dtype=self.torch.float32,
+            device=self.device,
+        )
 
         q_values = self.model(states).gather(1, actions.unsqueeze(1)).squeeze(1)
         with self.torch.no_grad():
@@ -315,7 +367,9 @@ class TorchDQNAgent:
             "state_plus_mission_target",
             TWO_HEAD_STATE_TARGET_OBJECTIVE,
         }:
-            raise ValueError(f"unsupported representation objective: {self.representation_objective}")
+            raise ValueError(
+                f"unsupported representation objective: {self.representation_objective}"
+            )
 
         state = self._feature_tensor(features).unsqueeze(0)
         hidden = self.model.encode(state)
@@ -326,16 +380,28 @@ class TorchDQNAgent:
                 raise ValueError("two-head representation target must be an object")
             state_target_vector = target_vector.get("state_plus_delta")
             visibility_target_vector = target_vector.get("target_visibility_transition")
-            if not isinstance(state_target_vector, list) or not isinstance(visibility_target_vector, list):
+            if not isinstance(state_target_vector, list) or not isinstance(
+                visibility_target_vector, list
+            ):
                 raise ValueError("two-head representation target vectors must be lists")
-            action_one_hot = self.torch.zeros((1, self.actions), dtype=self.torch.float32, device=self.device)
+            action_one_hot = self.torch.zeros(
+                (1, self.actions), dtype=self.torch.float32, device=self.device
+            )
             action_one_hot[0, action] = 1.0
             predictor_input = self.torch.cat([hidden, action_one_hot], dim=1)
-            state_target = self.torch.tensor([state_target_vector], dtype=self.torch.float32, device=self.device)
-            visibility_target = self.torch.tensor([visibility_target_vector], dtype=self.torch.float32, device=self.device)
+            state_target = self.torch.tensor(
+                [state_target_vector], dtype=self.torch.float32, device=self.device
+            )
+            visibility_target = self.torch.tensor(
+                [visibility_target_vector], dtype=self.torch.float32, device=self.device
+            )
             state_prediction = self.state_delta_predictor(predictor_input)
             visibility_prediction = self.target_visibility_predictor(predictor_input)
-            state_beta = self.representation_state_beta if representation_state_beta is None else representation_state_beta
+            state_beta = (
+                self.representation_state_beta
+                if representation_state_beta is None
+                else representation_state_beta
+            )
             visibility_beta = (
                 self.representation_target_visibility_beta
                 if representation_target_visibility_beta is None
@@ -366,10 +432,16 @@ class TorchDQNAgent:
         else:
             if self.representation_predictor is None:
                 raise ValueError("representation predictor is not initialized")
-            target = self.torch.tensor([target_vector], dtype=self.torch.float32, device=self.device)
-            action_one_hot = self.torch.zeros((1, self.actions), dtype=self.torch.float32, device=self.device)
+            target = self.torch.tensor(
+                [target_vector], dtype=self.torch.float32, device=self.device
+            )
+            action_one_hot = self.torch.zeros(
+                (1, self.actions), dtype=self.torch.float32, device=self.device
+            )
             action_one_hot[0, action] = 1.0
-            prediction = self.representation_predictor(self.torch.cat([hidden, action_one_hot], dim=1))
+            prediction = self.representation_predictor(
+                self.torch.cat([hidden, action_one_hot], dim=1)
+            )
             loss = self.loss_fn(prediction, target) * self.representation_beta
         self.representation_optimizer.zero_grad()
         loss.backward()
@@ -435,7 +507,9 @@ class TorchDQNAgent:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-minigrid-torch")
-    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-torch-unlock-smoke.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("configs/experiments/minigrid-torch-unlock-smoke.json")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid-torch"))
     parser.add_argument("--seed", type=int, default=601)
     parser.add_argument("--device", default=None)
@@ -598,7 +672,9 @@ def _combined_action_bonus(
     return bonus or None
 
 
-def _maybe_freeze_encoder_after_delay(condition: Condition, agent: TorchDQNAgent, force_random: bool) -> None:
+def _maybe_freeze_encoder_after_delay(
+    condition: Condition, agent: TorchDQNAgent, force_random: bool
+) -> None:
     if condition.freeze_encoder_after_delay and not force_random and not agent.encoder_frozen:
         agent.freeze_encoder()
 
@@ -607,7 +683,9 @@ def _should_update_representation(condition: Condition, force_random: bool) -> b
     return not (condition.stop_representation_after_delay and not force_random)
 
 
-def effective_two_head_representation_betas(condition: Condition, episode_index: int) -> tuple[float, float]:
+def effective_two_head_representation_betas(
+    condition: Condition, episode_index: int
+) -> tuple[float, float]:
     if condition.representation_objective != TWO_HEAD_STATE_TARGET_OBJECTIVE:
         return condition.representation_state_beta, condition.representation_target_visibility_beta
     state_end = (
@@ -627,15 +705,21 @@ def effective_two_head_representation_betas(condition: Condition, episode_index:
         if horizon <= 0:
             return state_end, visibility_end
         progress = min(1.0, max(0.0, episode_index / float(horizon)))
-        state_beta = condition.representation_state_beta + (state_end - condition.representation_state_beta) * progress
-        visibility_beta = condition.representation_target_visibility_beta + (
-            visibility_end - condition.representation_target_visibility_beta
-        ) * progress
+        state_beta = (
+            condition.representation_state_beta
+            + (state_end - condition.representation_state_beta) * progress
+        )
+        visibility_beta = (
+            condition.representation_target_visibility_beta
+            + (visibility_end - condition.representation_target_visibility_beta) * progress
+        )
         return state_beta, visibility_beta
     raise ValueError(f"unknown representation_schedule: {condition.representation_schedule}")
 
 
-def _coerce_representation_update_result(result: RepresentationUpdateResult | float) -> RepresentationUpdateResult:
+def _coerce_representation_update_result(
+    result: RepresentationUpdateResult | float,
+) -> RepresentationUpdateResult:
     if isinstance(result, RepresentationUpdateResult):
         return result
     return RepresentationUpdateResult(loss=float(result))
@@ -668,7 +752,9 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
     replay_capacity = int(agent_cfg.get("replay_capacity", 512))
     target_sync_updates = int(agent_cfg.get("target_sync_updates", 25))
     device = str(agent_cfg.get("device", "auto"))
-    separate_representation_optimizer = bool(agent_cfg.get("separate_representation_optimizer", False))
+    separate_representation_optimizer = bool(
+        agent_cfg.get("separate_representation_optimizer", False)
+    )
     if feature_dim < 16:
         raise ValueError("agent.feature_dim must be at least 16")
     if hidden_dim < 2 or hidden_dim > 2048:
@@ -685,7 +771,10 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         raise ValueError("agent.replay_capacity must be at least batch_size")
     if target_sync_updates < 1:
         raise ValueError("agent.target_sync_updates must be positive")
-    if not (device in {"auto", "cpu", "cuda", "mps"} or (device.startswith("cuda:") and device[5:].isdigit())):
+    if not (
+        device in {"auto", "cpu", "cuda", "mps"}
+        or (device.startswith("cuda:") and device[5:].isdigit())
+    ):
         raise ValueError("agent.device must be auto, cpu, cuda, cuda:N, or mps")
 
     stages = parse_torch_curriculum_stages(config)
@@ -736,9 +825,13 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             raise ValueError(f"invalid representation_objective for {name}")
         representation_beta = float(item.get("representation_beta", 0.0))
         representation_state_beta = float(item.get("representation_state_beta", 0.0))
-        representation_target_visibility_beta = float(item.get("representation_target_visibility_beta", 0.0))
+        representation_target_visibility_beta = float(
+            item.get("representation_target_visibility_beta", 0.0)
+        )
         representation_state_beta_end = (
-            float(item["representation_state_beta_end"]) if "representation_state_beta_end" in item else None
+            float(item["representation_state_beta_end"])
+            if "representation_state_beta_end" in item
+            else None
         )
         representation_target_visibility_beta_end = (
             float(item["representation_target_visibility_beta_end"])
@@ -753,7 +846,9 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         representation_null_control = bool(item.get("representation_null_control", False))
         representation_learning_rate_cfg = item.get("representation_learning_rate")
         representation_learning_rate = (
-            None if representation_learning_rate_cfg is None else float(representation_learning_rate_cfg)
+            None
+            if representation_learning_rate_cfg is None
+            else float(representation_learning_rate_cfg)
         )
         if representation_learning_rate is not None:
             if representation_learning_rate <= 0.0:
@@ -762,7 +857,9 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 raise ValueError(
                     f"representation_learning_rate requires agent.separate_representation_optimizer for {name}"
                 )
-        active_stages = tuple(str(stage_name) for stage_name in item.get("active_stages", all_stage_names))
+        active_stages = tuple(
+            str(stage_name) for stage_name in item.get("active_stages", all_stage_names)
+        )
         if stages:
             if not active_stages:
                 raise ValueError(f"active_stages must be non-empty for {name}")
@@ -787,35 +884,54 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         if representation_state_beta < 0:
             raise ValueError(f"representation_state_beta must be non-negative for {name}")
         if representation_target_visibility_beta < 0:
-            raise ValueError(f"representation_target_visibility_beta must be non-negative for {name}")
+            raise ValueError(
+                f"representation_target_visibility_beta must be non-negative for {name}"
+            )
         if representation_state_beta_end is not None and representation_state_beta_end < 0:
             raise ValueError(f"representation_state_beta_end must be non-negative for {name}")
-        if representation_target_visibility_beta_end is not None and representation_target_visibility_beta_end < 0:
-            raise ValueError(f"representation_target_visibility_beta_end must be non-negative for {name}")
+        if (
+            representation_target_visibility_beta_end is not None
+            and representation_target_visibility_beta_end < 0
+        ):
+            raise ValueError(
+                f"representation_target_visibility_beta_end must be non-negative for {name}"
+            )
         if representation_anneal_episodes < 0 or representation_anneal_episodes > episodes:
             raise ValueError(f"representation_anneal_episodes out of range for {name}")
         if representation_schedule not in {"constant", "linear_anneal"}:
             raise ValueError(f"invalid representation_schedule for {name}")
         if representation_objective == TWO_HEAD_STATE_TARGET_OBJECTIVE:
             if representation_beta != 0.0:
-                raise ValueError(f"representation_beta must stay zero for two-head objective in {name}")
+                raise ValueError(
+                    f"representation_beta must stay zero for two-head objective in {name}"
+                )
             if representation_state_beta <= 0.0 or representation_target_visibility_beta <= 0.0:
                 raise ValueError(f"two-head representation betas must be positive for {name}")
             if representation_schedule == "linear_anneal" and representation_anneal_episodes <= 0:
-                raise ValueError(f"linear representation anneal requires representation_anneal_episodes for {name}")
-        elif representation_objective != "none" and representation_beta <= 0.0 and not representation_null_control:
+                raise ValueError(
+                    f"linear representation anneal requires representation_anneal_episodes for {name}"
+                )
+        elif (
+            representation_objective != "none"
+            and representation_beta <= 0.0
+            and not representation_null_control
+        ):
             raise ValueError(f"representation_beta must be positive for {name}")
         elif representation_objective != TWO_HEAD_STATE_TARGET_OBJECTIVE and (
             representation_state_beta != 0.0 or representation_target_visibility_beta != 0.0
         ):
-            raise ValueError(f"two-head representation betas require {TWO_HEAD_STATE_TARGET_OBJECTIVE} for {name}")
+            raise ValueError(
+                f"two-head representation betas require {TWO_HEAD_STATE_TARGET_OBJECTIVE} for {name}"
+            )
         if representation_objective != TWO_HEAD_STATE_TARGET_OBJECTIVE and (
             representation_state_beta_end is not None
             or representation_target_visibility_beta_end is not None
             or representation_anneal_episodes != 0
             or representation_schedule != "constant"
         ):
-            raise ValueError(f"representation schedule requires {TWO_HEAD_STATE_TARGET_OBJECTIVE} for {name}")
+            raise ValueError(
+                f"representation schedule requires {TWO_HEAD_STATE_TARGET_OBJECTIVE} for {name}"
+            )
         if action_prior_weight < 0.0:
             raise ValueError(f"action_prior_weight must be non-negative for {name}")
         if action_prior_weight > 0.0 and representation_objective != "action_prior":
@@ -823,7 +939,9 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         if (freeze_encoder_after_delay or stop_representation_after_delay) and delay == 0:
             raise ValueError(f"two-phase controls require decoder_delay_episodes for {name}")
         if stop_representation_after_delay and representation_objective == "none":
-            raise ValueError(f"stop_representation_after_delay requires representation_objective for {name}")
+            raise ValueError(
+                f"stop_representation_after_delay requires representation_objective for {name}"
+            )
         conditions.append(
             Condition(
                 name=name,
@@ -901,7 +1019,9 @@ def parse_torch_curriculum_stages(config: dict[str, Any]) -> tuple[TorchCurricul
             raise ValueError(f"stage.max_steps must be positive for {name}")
         if episodes < 1:
             raise ValueError(f"stage.episodes must be positive for {name}")
-        stages.append(TorchCurriculumStage(name=name, env_id=env_id, max_steps=max_steps, episodes=episodes))
+        stages.append(
+            TorchCurriculumStage(name=name, env_id=env_id, max_steps=max_steps, episodes=episodes)
+        )
     return tuple(stages)
 
 
@@ -961,7 +1081,9 @@ def run_minigrid_torch_condition(
             )
             if first_schema is None:
                 first_schema = observation_schema(observation)
-            features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+            features = linear_features(
+                observation, condition.encoder_mode, agent_config.feature_dim
+            )
             feature_key = feature_signature(features)
             visited = {feature_key}
             external_return = 0.0
@@ -984,18 +1106,28 @@ def run_minigrid_torch_condition(
                     condition=condition,
                     force_random=force_random,
                 )
-                action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
+                action = agent.choose(
+                    features, force_random=force_random, action_bonus=action_bonus
+                )
                 _maybe_freeze_encoder_after_delay(condition, agent, force_random)
                 next_observation, reward, terminated, truncated, _info = _env_call(
                     env.step,
                     action,
                     quiet=quiet_env_output,
                 )
-                next_features = linear_features(next_observation, condition.encoder_mode, agent_config.feature_dim)
+                next_features = linear_features(
+                    next_observation, condition.encoder_mode, agent_config.feature_dim
+                )
                 next_feature_key = feature_signature(next_features)
-                intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature_key, action, next_feature_key)
+                intrinsic_signal = _intrinsic_signal(
+                    condition.intrinsic_mode, transition, feature_key, action, next_feature_key
+                )
                 intrinsic = condition.intrinsic_beta * intrinsic_signal
-                total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
+                total_reward = (
+                    float(reward)
+                    if condition.intrinsic_target == "auxiliary"
+                    else float(reward) + intrinsic
+                )
                 done = bool(terminated or truncated)
 
                 representation_target = representation_target_for_objective(
@@ -1009,7 +1141,9 @@ def run_minigrid_torch_condition(
                 )
                 loss = None
                 if _should_update_representation(condition, force_random):
-                    state_beta, visibility_beta = effective_two_head_representation_betas(condition, episode)
+                    state_beta, visibility_beta = effective_two_head_representation_betas(
+                        condition, episode
+                    )
                     loss = agent.update_representation(
                         features,
                         action,
@@ -1054,11 +1188,15 @@ def run_minigrid_torch_condition(
             )
             mission_probes.append(mission_preservation_probe(observation))
             representation_losses.append(representation_loss / max(1, representation_updates))
-            representation_state_losses.append(representation_state_loss / max(1, representation_updates))
+            representation_state_losses.append(
+                representation_state_loss / max(1, representation_updates)
+            )
             representation_target_visibility_losses.append(
                 representation_target_visibility_loss / max(1, representation_updates)
             )
-            representation_state_betas.append(representation_state_beta / max(1, representation_updates))
+            representation_state_betas.append(
+                representation_state_beta / max(1, representation_updates)
+            )
             representation_target_visibility_betas.append(
                 representation_target_visibility_beta / max(1, representation_updates)
             )
@@ -1067,10 +1205,14 @@ def run_minigrid_torch_condition(
         last_window = episodes[-20:] if len(episodes) >= 20 else episodes
         mission_probe_summary = summarize_mission_preservation_probes(mission_probes)
         representation_last_window = (
-            representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
+            representation_losses[-20:]
+            if len(representation_losses) >= 20
+            else representation_losses
         )
         representation_state_last_window = (
-            representation_state_losses[-20:] if len(representation_state_losses) >= 20 else representation_state_losses
+            representation_state_losses[-20:]
+            if len(representation_state_losses) >= 20
+            else representation_state_losses
         )
         representation_visibility_last_window = (
             representation_target_visibility_losses[-20:]
@@ -1078,7 +1220,9 @@ def run_minigrid_torch_condition(
             else representation_target_visibility_losses
         )
         representation_state_beta_last_window = (
-            representation_state_betas[-20:] if len(representation_state_betas) >= 20 else representation_state_betas
+            representation_state_betas[-20:]
+            if len(representation_state_betas) >= 20
+            else representation_state_betas
         )
         representation_visibility_beta_last_window = (
             representation_target_visibility_betas[-20:]
@@ -1128,14 +1272,22 @@ def run_minigrid_torch_condition(
             "success_rate_last_window": mean(1.0 if item.success else 0.0 for item in last_window),
             "mean_steps_success": mean(successful_steps) if successful_steps else None,
             "mean_return_last_window": mean(item.external_return for item in last_window),
-            "mean_intrinsic_return_last_window": mean(item.intrinsic_return for item in last_window),
+            "mean_intrinsic_return_last_window": mean(
+                item.intrinsic_return for item in last_window
+            ),
             "mean_unique_features_last_window": mean(item.unique_features for item in last_window),
             **mission_probe_summary,
             "mean_representation_loss_last_window": mean(representation_last_window),
             "mean_representation_state_loss_last_window": mean(representation_state_last_window),
-            "mean_representation_target_visibility_loss_last_window": mean(representation_visibility_last_window),
-            "mean_representation_state_beta_last_window": mean(representation_state_beta_last_window),
-            "mean_representation_target_visibility_beta_last_window": mean(representation_visibility_beta_last_window),
+            "mean_representation_target_visibility_loss_last_window": mean(
+                representation_visibility_last_window
+            ),
+            "mean_representation_state_beta_last_window": mean(
+                representation_state_beta_last_window
+            ),
+            "mean_representation_target_visibility_beta_last_window": mean(
+                representation_visibility_beta_last_window
+            ),
             "representation_updates": sum(representation_update_counts),
             "representation_parameter_count": agent.representation_parameter_count(),
             "parameter_count": agent.parameter_count(),
@@ -1251,15 +1403,23 @@ def run_minigrid_torch_curriculum_condition(
         "mean_unique_features_last_window": final_stage["mean_unique_features_last_window"],
         "mission_target_known_rate": final_stage["mission_target_known_rate"],
         "mission_target_visible_rate_all": final_stage["mission_target_visible_rate_all"],
-        "mission_target_visible_rate_last_window": final_stage["mission_target_visible_rate_last_window"],
-        "mission_target_center_rate_last_window": final_stage["mission_target_center_rate_last_window"],
+        "mission_target_visible_rate_last_window": final_stage[
+            "mission_target_visible_rate_last_window"
+        ],
+        "mission_target_center_rate_last_window": final_stage[
+            "mission_target_center_rate_last_window"
+        ],
         "mission_target_near_rate_last_window": final_stage["mission_target_near_rate_last_window"],
         "mean_representation_loss_last_window": final_stage["mean_representation_loss_last_window"],
-        "mean_representation_state_loss_last_window": final_stage["mean_representation_state_loss_last_window"],
+        "mean_representation_state_loss_last_window": final_stage[
+            "mean_representation_state_loss_last_window"
+        ],
         "mean_representation_target_visibility_loss_last_window": final_stage[
             "mean_representation_target_visibility_loss_last_window"
         ],
-        "mean_representation_state_beta_last_window": final_stage["mean_representation_state_beta_last_window"],
+        "mean_representation_state_beta_last_window": final_stage[
+            "mean_representation_state_beta_last_window"
+        ],
         "mean_representation_target_visibility_beta_last_window": final_stage[
             "mean_representation_target_visibility_beta_last_window"
         ],
@@ -1585,7 +1745,11 @@ def run_greedy_holdout(
         successes = 0
         returns: list[float] = []
         step_counts: list[int] = []
-        missions = _holdout_mission_pool(gym, env_id, condition, episodes, quiet_env_output) if mission_mode == "shuffled" else []
+        missions = (
+            _holdout_mission_pool(gym, env_id, condition, episodes, quiet_env_output)
+            if mission_mode == "shuffled"
+            else []
+        )
         for index in range(episodes):
             observation, _info = _env_call(
                 env.reset,
@@ -1594,7 +1758,9 @@ def run_greedy_holdout(
                 seed=condition.seed * 100_000 + 99_000 + index,
             )
             observation = _apply_mission_mode(observation, mission_mode, index, missions)
-            features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+            features = linear_features(
+                observation, condition.encoder_mode, agent_config.feature_dim
+            )
             external_return = 0.0
             success = False
             steps = 0
@@ -1606,7 +1772,9 @@ def run_greedy_holdout(
                     quiet=quiet_env_output,
                 )
                 observation = _apply_mission_mode(observation, mission_mode, index, missions)
-                features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+                features = linear_features(
+                    observation, condition.encoder_mode, agent_config.feature_dim
+                )
                 external_return += float(reward)
                 steps += 1
                 if float(reward) > 0.0:
@@ -1693,7 +1861,9 @@ def _run_minigrid_torch_stage(
             )
             if first_schema is None:
                 first_schema = observation_schema(observation)
-            features = linear_features(observation, condition.encoder_mode, agent_config.feature_dim)
+            features = linear_features(
+                observation, condition.encoder_mode, agent_config.feature_dim
+            )
             feature_key = feature_signature(features)
             visited = {feature_key}
             external_return = 0.0
@@ -1716,18 +1886,28 @@ def _run_minigrid_torch_stage(
                     condition=condition,
                     force_random=force_random,
                 )
-                action = agent.choose(features, force_random=force_random, action_bonus=action_bonus)
+                action = agent.choose(
+                    features, force_random=force_random, action_bonus=action_bonus
+                )
                 _maybe_freeze_encoder_after_delay(condition, agent, force_random)
                 next_observation, reward, terminated, truncated, _info = _env_call(
                     env.step,
                     action,
                     quiet=quiet_env_output,
                 )
-                next_features = linear_features(next_observation, condition.encoder_mode, agent_config.feature_dim)
+                next_features = linear_features(
+                    next_observation, condition.encoder_mode, agent_config.feature_dim
+                )
                 next_feature_key = feature_signature(next_features)
-                intrinsic_signal = _intrinsic_signal(condition.intrinsic_mode, transition, feature_key, action, next_feature_key)
+                intrinsic_signal = _intrinsic_signal(
+                    condition.intrinsic_mode, transition, feature_key, action, next_feature_key
+                )
                 intrinsic = condition.intrinsic_beta * intrinsic_signal
-                total_reward = float(reward) if condition.intrinsic_target == "auxiliary" else float(reward) + intrinsic
+                total_reward = (
+                    float(reward)
+                    if condition.intrinsic_target == "auxiliary"
+                    else float(reward) + intrinsic
+                )
                 done = bool(terminated or truncated)
 
                 representation_target = representation_target_for_objective(
@@ -1741,7 +1921,9 @@ def _run_minigrid_torch_stage(
                 )
                 loss = None
                 if _should_update_representation(condition, force_random):
-                    state_beta, visibility_beta = effective_two_head_representation_betas(condition, global_episode)
+                    state_beta, visibility_beta = effective_two_head_representation_betas(
+                        condition, global_episode
+                    )
                     loss = agent.update_representation(
                         features,
                         action,
@@ -1786,11 +1968,15 @@ def _run_minigrid_torch_stage(
             )
             mission_probes.append(mission_preservation_probe(observation))
             representation_losses.append(representation_loss / max(1, representation_updates))
-            representation_state_losses.append(representation_state_loss / max(1, representation_updates))
+            representation_state_losses.append(
+                representation_state_loss / max(1, representation_updates)
+            )
             representation_target_visibility_losses.append(
                 representation_target_visibility_loss / max(1, representation_updates)
             )
-            representation_state_betas.append(representation_state_beta / max(1, representation_updates))
+            representation_state_betas.append(
+                representation_state_beta / max(1, representation_updates)
+            )
             representation_target_visibility_betas.append(
                 representation_target_visibility_beta / max(1, representation_updates)
             )
@@ -1858,7 +2044,9 @@ def _torch_stage_summary(
         representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
     )
     representation_state_last_window = (
-        representation_state_losses[-20:] if len(representation_state_losses) >= 20 else representation_state_losses
+        representation_state_losses[-20:]
+        if len(representation_state_losses) >= 20
+        else representation_state_losses
     )
     representation_visibility_last_window = (
         representation_target_visibility_losses[-20:]
@@ -1866,7 +2054,9 @@ def _torch_stage_summary(
         else representation_target_visibility_losses
     )
     representation_state_beta_last_window = (
-        representation_state_betas[-20:] if len(representation_state_betas) >= 20 else representation_state_betas
+        representation_state_betas[-20:]
+        if len(representation_state_betas) >= 20
+        else representation_state_betas
     )
     representation_visibility_beta_last_window = (
         representation_target_visibility_betas[-20:]
@@ -1891,9 +2081,13 @@ def _torch_stage_summary(
         **mission_probe_summary,
         "mean_representation_loss_last_window": mean(representation_last_window),
         "mean_representation_state_loss_last_window": mean(representation_state_last_window),
-        "mean_representation_target_visibility_loss_last_window": mean(representation_visibility_last_window),
+        "mean_representation_target_visibility_loss_last_window": mean(
+            representation_visibility_last_window
+        ),
         "mean_representation_state_beta_last_window": mean(representation_state_beta_last_window),
-        "mean_representation_target_visibility_beta_last_window": mean(representation_visibility_beta_last_window),
+        "mean_representation_target_visibility_beta_last_window": mean(
+            representation_visibility_beta_last_window
+        ),
         "representation_updates": sum(representation_update_counts),
         "updates": agent.updates,
     }
@@ -1992,7 +2186,9 @@ def representation_target_for_objective(
     if condition.representation_objective == TWO_HEAD_STATE_TARGET_OBJECTIVE:
         return {
             "state_plus_delta": state_plus_delta_vector(observation, next_observation),
-            "target_visibility_transition": target_visibility_transition_vector(observation, next_observation),
+            "target_visibility_transition": target_visibility_transition_vector(
+                observation, next_observation
+            ),
         }
     if condition.representation_objective == "state_plus_mission_target":
         return state_plus_mission_target_vector(observation, next_observation)
@@ -2049,7 +2245,8 @@ def affordance_progress_vector(observation: Any) -> list[float]:
         1.0 if type_counts.get(OBJECT_DOOR, 0) > 0 else 0.0,
         1.0 if door_state_counts[2] > 0 else 0.0,
         1.0 if type_counts.get(OBJECT_GOAL, 0) > 0 else 0.0,
-        1.0 if (mission_mentions_key and type_counts.get(OBJECT_KEY, 0) == 0)
+        1.0
+        if (mission_mentions_key and type_counts.get(OBJECT_KEY, 0) == 0)
         or (mission_mentions_door and type_counts.get(OBJECT_DOOR, 0) == 0)
         else 0.0,
     ]
@@ -2113,7 +2310,9 @@ def summarize_mission_preservation_probes(probes: list[dict[str, float | str]]) 
     return {
         "mission_target_known_rate": _probe_mean(probes, "mission_target_known"),
         "mission_target_visible_rate_all": _probe_mean(probes, "mission_target_visible"),
-        "mission_target_visible_rate_last_window": _probe_mean(last_window, "mission_target_visible"),
+        "mission_target_visible_rate_last_window": _probe_mean(
+            last_window, "mission_target_visible"
+        ),
         "mission_target_center_rate_last_window": _probe_mean(last_window, "mission_target_center"),
         "mission_target_near_rate_last_window": _probe_mean(last_window, "mission_target_near"),
     }
@@ -2170,7 +2369,9 @@ def _target_from_mission(mission: str) -> dict[str, str]:
     }
 
 
-def _nearest_visible_target_cell(image: Any, target: dict[str, str]) -> tuple[int, int, int, int] | None:
+def _nearest_visible_target_cell(
+    image: Any, target: dict[str, str]
+) -> tuple[int, int, int, int] | None:
     if hasattr(image, "tolist"):
         image = image.tolist()
     if not isinstance(image, list) or not image:
@@ -2226,13 +2427,21 @@ def subgoal_progress_vector(observation: Any, next_observation: Any) -> list[flo
     mission_mentions_door = before["mission_mentions_door"] or after["mission_mentions_door"]
 
     key_disappeared = mission_mentions_key and before["key_count"] > 0 and after["key_count"] == 0
-    key_became_visible = mission_mentions_key and before["key_count"] == 0 and after["key_count"] > 0
+    key_became_visible = (
+        mission_mentions_key and before["key_count"] == 0 and after["key_count"] > 0
+    )
     locked_door_decreased = (
         mission_mentions_door and before["locked_door_count"] > after["locked_door_count"]
     )
-    open_door_increased = mission_mentions_door and before["open_door_count"] < after["open_door_count"]
+    open_door_increased = (
+        mission_mentions_door and before["open_door_count"] < after["open_door_count"]
+    )
     goal_became_visible = before["goal_count"] == 0 and after["goal_count"] > 0
-    front_became_key = mission_mentions_key and before["front_type"] != OBJECT_KEY and after["front_type"] == OBJECT_KEY
+    front_became_key = (
+        mission_mentions_key
+        and before["front_type"] != OBJECT_KEY
+        and after["front_type"] == OBJECT_KEY
+    )
     front_became_locked_door = (
         mission_mentions_door
         and not (before["front_type"] == OBJECT_DOOR and before["front_state"] == 2)
@@ -2246,7 +2455,9 @@ def subgoal_progress_vector(observation: Any, next_observation: Any) -> list[flo
         and after["front_state"] == 0
     )
     front_became_goal = before["front_type"] != OBJECT_GOAL and after["front_type"] == OBJECT_GOAL
-    unlock_chain_progress = key_disappeared or locked_door_decreased or open_door_increased or goal_became_visible
+    unlock_chain_progress = (
+        key_disappeared or locked_door_decreased or open_door_increased or goal_became_visible
+    )
 
     return [
         1.0 if key_disappeared else 0.0,
@@ -2271,14 +2482,18 @@ def state_plus_delta_vector(observation: Any, next_observation: Any) -> list[flo
 
 
 def state_plus_target_visibility_vector(observation: Any, next_observation: Any) -> list[float]:
-    return state_plus_delta_vector(observation, next_observation) + target_visibility_transition_vector(
+    return state_plus_delta_vector(
+        observation, next_observation
+    ) + target_visibility_transition_vector(
         observation,
         next_observation,
     )
 
 
 def state_plus_mission_target_vector(observation: Any, next_observation: Any) -> list[float]:
-    return state_plus_delta_vector(observation, next_observation) + mission_target_transition_vector(
+    return state_plus_delta_vector(
+        observation, next_observation
+    ) + mission_target_transition_vector(
         observation,
         next_observation,
     )
@@ -2484,11 +2699,15 @@ def select_torch_device(torch: Any, preference: str = "auto") -> Any:
         return torch.device("cpu")
     if preference in {"cuda"} or preference.startswith("cuda:"):
         if not torch.cuda.is_available():
-            raise TorchDeviceUnavailable(f"{preference} requested but torch.cuda.is_available() is false")
+            raise TorchDeviceUnavailable(
+                f"{preference} requested but torch.cuda.is_available() is false"
+            )
         return torch.device(preference)
     if preference == "mps":
         if not torch_mps_available(torch):
-            raise TorchDeviceUnavailable("mps requested but torch.backends.mps.is_available() is false")
+            raise TorchDeviceUnavailable(
+                "mps requested but torch.backends.mps.is_available() is false"
+            )
         return torch.device("mps")
     if preference == "cpu":
         return torch.device("cpu")
@@ -2506,7 +2725,9 @@ def write_minigrid_torch_run(report: dict[str, Any], output_dir: Path) -> Path:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (run_dir / "summary.md").write_text(torch_summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():
@@ -2530,7 +2751,9 @@ def torch_summary_markdown(report: dict[str, Any]) -> str:
         "",
     ]
     if is_curriculum:
-        stage_text = ",".join(f"{stage['name']}:{stage['env_id']}:{stage['episodes']}" for stage in report["stages"])
+        stage_text = ",".join(
+            f"{stage['name']}:{stage['env_id']}:{stage['episodes']}" for stage in report["stages"]
+        )
         lines.extend(
             [
                 f"- stages: `{stage_text}`",

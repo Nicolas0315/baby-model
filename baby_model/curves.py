@@ -40,7 +40,9 @@ def load_episodes(path: Path) -> list[dict[str, Any]]:
         path = candidate
     if not path.exists():
         raise FileNotFoundError(f"no episode log at {path}")
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
 
 
 def binned_curve(rows: list[dict[str, Any]], bins: int, key: str = "success") -> list[float]:
@@ -62,7 +64,10 @@ def binned_curve(rows: list[dict[str, Any]], bins: int, key: str = "success") ->
     for values in by_seed.values():
         edges = [round(index * len(values) / bins) for index in range(bins + 1)]
         per_seed_curves.append(
-            [mean(values[a:b]) if b > a else 0.0 for a, b in zip(edges[:-1], edges[1:], strict=True)]
+            [
+                mean(values[a:b]) if b > a else 0.0
+                for a, b in zip(edges[:-1], edges[1:], strict=True)
+            ]
         )
     return [mean(curve[i] for curve in per_seed_curves) for i in range(bins)]
 
@@ -81,7 +86,9 @@ def classify(curve: list[float], noise_band: float = NOISE_BAND) -> str:
     # comparisons flag any end-of-run wobble as a collapse. This was a real false
     # positive on the first live run.
     size = max(1, len(curve) // 4)
-    quarters = [mean(curve[i : i + size]) for i in range(0, len(curve) - size + 1, size)] or [mean(curve)]
+    quarters = [mean(curve[i : i + size]) for i in range(0, len(curve) - size + 1, size)] or [
+        mean(curve)
+    ]
     first_quarter, last_quarter = quarters[0], quarters[-1]
     peak_quarter = max(quarters)
     if peak_quarter - last_quarter > noise_band and peak_quarter > first_quarter + noise_band:
@@ -103,7 +110,9 @@ def first_crossing(curve: list[float], threshold: float) -> int | None:
     return None
 
 
-def analyze(rows: list[dict[str, Any]], bins: int = 12, floor: float | None = None) -> dict[str, Any]:
+def analyze(
+    rows: list[dict[str, Any]], bins: int = 12, floor: float | None = None
+) -> dict[str, Any]:
     by_condition: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         by_condition[str(row["condition"])].append(row)
@@ -129,7 +138,9 @@ def analyze(rows: list[dict[str, Any]], bins: int = 12, floor: float | None = No
             "final_bin": curve[-1] if curve else 0.0,
             "mean_steps": mean(float(row["steps"]) for row in (eval_rows or condition_rows)),
             "per_stage": {
-                stage: mean(float(row["success"]) for row in condition_rows if row["stage"] == stage)
+                stage: mean(
+                    float(row["success"]) for row in condition_rows if row["stage"] == stage
+                )
                 for stage in stages
                 if any(row["stage"] == stage for row in condition_rows)
             },
@@ -145,7 +156,10 @@ def sparkline(curve: list[float], width: int = 24) -> str:
     blocks = " ▁▂▃▄▅▆▇█"
     if not curve:
         return ""
-    return "".join(blocks[min(len(blocks) - 1, int(round(value * (len(blocks) - 1))))] for value in curve[:width])
+    return "".join(
+        blocks[min(len(blocks) - 1, int(round(value * (len(blocks) - 1))))]
+        for value in curve[:width]
+    )
 
 
 def curves_markdown(analysis: dict[str, Any]) -> str:
@@ -160,7 +174,11 @@ def curves_markdown(analysis: dict[str, Any]) -> str:
     header += "bins>floor | first>floor | " if floor is not None else ""
     header += "eval eps | mean steps |"
     lines.append(header)
-    divider = "| --- | --- | --- | ---: | ---: | " + ("---: | ---: | " if floor is not None else "") + "---: | ---: |"
+    divider = (
+        "| --- | --- | --- | ---: | ---: | "
+        + ("---: | ---: | " if floor is not None else "")
+        + "---: | ---: |"
+    )
     lines.append(divider)
     for name, entry in analysis["conditions"].items():
         row = (
@@ -178,7 +196,9 @@ def curves_markdown(analysis: dict[str, Any]) -> str:
     lines.append("| condition | " + " | ".join(f"`{s}`" for s in analysis["stages"]) + " |")
     lines.append("| --- |" + " ---: |" * len(analysis["stages"]))
     for name, entry in analysis["conditions"].items():
-        cells = " | ".join(f"{entry['per_stage'].get(s, float('nan')):.3f}" for s in analysis["stages"])
+        cells = " | ".join(
+            f"{entry['per_stage'].get(s, float('nan')):.3f}" for s in analysis["stages"]
+        )
         lines.append(f"| `{name}` | {cells} |")
     lines.append("")
     return "\n".join(lines)
@@ -192,19 +212,19 @@ def curves_svg(analysis: dict[str, Any], width: int = 720, height: int = 260) ->
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">',
         f'<rect width="{width}" height="{height}" fill="#ffffff"/>',
-        f'<line x1="{pad}" y1="{pad}" x2="{pad}" y2="{pad+plot_h}" stroke="#333"/>',
-        f'<line x1="{pad}" y1="{pad+plot_h}" x2="{pad+plot_w}" y2="{pad+plot_h}" stroke="#333"/>',
-        f'<text x="4" y="{pad+6}" font-size="11" fill="#333">1.0</text>',
-        f'<text x="4" y="{pad+plot_h}" font-size="11" fill="#333">0.0</text>',
-        f'<text x="{pad}" y="{height-8}" font-size="11" fill="#333">episode bin (evaluation stage)</text>',
+        f'<line x1="{pad}" y1="{pad}" x2="{pad}" y2="{pad + plot_h}" stroke="#333"/>',
+        f'<line x1="{pad}" y1="{pad + plot_h}" x2="{pad + plot_w}" y2="{pad + plot_h}" stroke="#333"/>',
+        f'<text x="4" y="{pad + 6}" font-size="11" fill="#333">1.0</text>',
+        f'<text x="4" y="{pad + plot_h}" font-size="11" fill="#333">0.0</text>',
+        f'<text x="{pad}" y="{height - 8}" font-size="11" fill="#333">episode bin (evaluation stage)</text>',
     ]
     floor = analysis.get("floor")
     if floor is not None:
         y = pad + plot_h * (1.0 - floor)
         parts.append(
-            f'<line x1="{pad}" y1="{y:.1f}" x2="{pad+plot_w}" y2="{y:.1f}" '
+            f'<line x1="{pad}" y1="{y:.1f}" x2="{pad + plot_w}" y2="{y:.1f}" '
             f'stroke="#999" stroke-dasharray="5,4"/>'
-            f'<text x="{pad+plot_w-96}" y="{y-5:.1f}" font-size="11" fill="#666">random {floor:.3f}</text>'
+            f'<text x="{pad + plot_w - 96}" y="{y - 5:.1f}" font-size="11" fill="#666">random {floor:.3f}</text>'
         )
     for index, (name, entry) in enumerate(analysis["conditions"].items()):
         curve = entry["curve"]
@@ -213,11 +233,13 @@ def curves_svg(analysis: dict[str, Any], width: int = 720, height: int = 260) ->
         colour = palette[index % len(palette)]
         step = plot_w / (len(curve) - 1)
         points = " ".join(
-            f"{pad + i*step:.1f},{pad + plot_h*(1.0-v):.1f}" for i, v in enumerate(curve)
+            f"{pad + i * step:.1f},{pad + plot_h * (1.0 - v):.1f}" for i, v in enumerate(curve)
         )
-        parts.append(f'<polyline points="{points}" fill="none" stroke="{colour}" stroke-width="2"/>')
         parts.append(
-            f'<text x="{pad+8}" y="{pad+14+index*15}" font-size="12" fill="{colour}">{name}</text>'
+            f'<polyline points="{points}" fill="none" stroke="{colour}" stroke-width="2"/>'
+        )
+        parts.append(
+            f'<text x="{pad + 8}" y="{pad + 14 + index * 15}" font-size="12" fill="{colour}">{name}</text>'
         )
     parts.append("</svg>")
     return "\n".join(parts)
@@ -245,12 +267,15 @@ def main() -> int:
     if args.svg:
         args.svg.write_text(curves_svg(analysis), encoding="utf-8")
         print(f"svg={args.svg}")
-    print(json.dumps(analysis, indent=2, sort_keys=True) if args.json else curves_markdown(analysis))
+    print(
+        json.dumps(analysis, indent=2, sort_keys=True) if args.json else curves_markdown(analysis)
+    )
     return 0
 
 
 def demo() -> None:
     """Self-check: the three verdicts are told apart, and a collapse is not read as flat."""
+
     def rows(values: list[float]) -> list[dict[str, Any]]:
         return [
             {"seed": 1, "episode": i, "success": v, "steps": 10, "stage": "eval", "condition": "c"}
@@ -274,10 +299,14 @@ def demo() -> None:
 
     # Two seeds with opposite trends average to flat. Binning the concatenation
     # would instead read as one long ramp followed by one long fall.
-    seed_a = [{"seed": 1, "episode": i, "success": v, "steps": 10, "stage": "eval", "condition": "c"}
-              for i, v in enumerate([0.0] * 20 + [1.0] * 20)]
-    seed_b = [{"seed": 2, "episode": i, "success": v, "steps": 10, "stage": "eval", "condition": "c"}
-              for i, v in enumerate([1.0] * 20 + [0.0] * 20)]
+    seed_a = [
+        {"seed": 1, "episode": i, "success": v, "steps": 10, "stage": "eval", "condition": "c"}
+        for i, v in enumerate([0.0] * 20 + [1.0] * 20)
+    ]
+    seed_b = [
+        {"seed": 2, "episode": i, "success": v, "steps": 10, "stage": "eval", "condition": "c"}
+        for i, v in enumerate([1.0] * 20 + [0.0] * 20)
+    ]
     averaged = binned_curve(seed_a + seed_b, 4)
     assert all(abs(v - 0.5) < 1e-9 for v in averaged), averaged
     assert classify(averaged) == FLAT, averaged

@@ -14,7 +14,9 @@ from baby_model.sweep import parse_seeds
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-minigrid-linear-sweep")
-    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-linear-unlock.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("configs/experiments/minigrid-linear-unlock.json")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid-linear-sweeps"))
     parser.add_argument("--seeds", default="401,402,403")
     args = parser.parse_args()
@@ -42,7 +44,9 @@ def run_minigrid_linear_sweep(config: dict[str, Any], seeds: list[int]) -> dict[
     aggregate = aggregate_linear_reports(runs=runs, seeds=seeds)
     return {
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "hypothesis": str(config.get("hypothesis", "Baby-AD/DA MiniGrid linear function approximation sweep")),
+        "hypothesis": str(
+            config.get("hypothesis", "Baby-AD/DA MiniGrid linear function approximation sweep")
+        ),
         "seeds": seeds,
         "runs": runs,
         "aggregate": aggregate,
@@ -90,7 +94,9 @@ def write_minigrid_linear_sweep(report: dict[str, Any], output_dir: Path) -> Pat
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (run_dir / "summary.md").write_text(linear_sweep_summary_markdown(report), encoding="utf-8")
     latest_path = output_dir / "latest"
     if latest_path.exists() or latest_path.is_symlink():

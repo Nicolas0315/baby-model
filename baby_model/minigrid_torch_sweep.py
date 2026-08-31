@@ -15,7 +15,9 @@ from baby_model.sweep import parse_seeds
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-minigrid-torch-sweep")
-    parser.add_argument("--config", type=Path, default=Path("configs/experiments/minigrid-torch-unlock-smoke.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("configs/experiments/minigrid-torch-unlock-smoke.json")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("runs/minigrid-torch-sweeps"))
     parser.add_argument("--seeds", default="601,602,603")
     parser.add_argument("--device", default=None)
@@ -130,12 +132,18 @@ def aggregate_torch_reports(runs: list[dict[str, Any]], seeds: list[int]) -> lis
         success_last = [float(row["success_rate_last_window"]) for row in rows]
         success_all = [float(row["success_rate_all"]) for row in rows]
         returns = [float(row["mean_return_last_window"]) for row in rows]
-        target_visible = [float(row.get("mission_target_visible_rate_last_window", 0.0)) for row in rows]
-        target_center = [float(row.get("mission_target_center_rate_last_window", 0.0)) for row in rows]
+        target_visible = [
+            float(row.get("mission_target_visible_rate_last_window", 0.0)) for row in rows
+        ]
+        target_center = [
+            float(row.get("mission_target_center_rate_last_window", 0.0)) for row in rows
+        ]
         target_near = [float(row.get("mission_target_near_rate_last_window", 0.0)) for row in rows]
         updates = [int(row["updates"]) for row in rows]
         parameters = [int(row["parameter_count"]) for row in rows]
-        holdout_success = [float(row["holdout_success_rate"]) for row in rows if "holdout_success_rate" in row]
+        holdout_success = [
+            float(row["holdout_success_rate"]) for row in rows if "holdout_success_rate" in row
+        ]
         extra = {"mean_holdout_success_rate": mean(holdout_success)} if holdout_success else {}
         aggregate.append(
             {
@@ -164,7 +172,9 @@ def write_minigrid_torch_sweep(report: dict[str, Any], output_dir: Path) -> Path
     run_dir = output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     episode_count = write_episode_log(report, run_dir / "episodes.jsonl")
-    (run_dir / "metrics.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (run_dir / "metrics.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     if episode_count:
         print(f"episode_rows={episode_count}")
     (run_dir / "summary.md").write_text(torch_sweep_summary_markdown(report), encoding="utf-8")
@@ -209,8 +219,12 @@ def write_episode_log(report: dict[str, Any], path: Path) -> int:
 
 
 def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:
-    devices = sorted({str(framework.get("device", "unknown")) for framework in report["frameworks"]})
-    versions = sorted({str(framework.get("version", "unknown")) for framework in report["frameworks"]})
+    devices = sorted(
+        {str(framework.get("device", "unknown")) for framework in report["frameworks"]}
+    )
+    versions = sorted(
+        {str(framework.get("version", "unknown")) for framework in report["frameworks"]}
+    )
     lines = [
         "# baby-model MiniGrid PyTorch sweep summary",
         "",
@@ -222,7 +236,9 @@ def torch_sweep_summary_markdown(report: dict[str, Any]) -> str:
         f"- winner_by_mean_success_last_window: `{report['winner_by_mean_success_last_window']}`",
     ]
     if "winner_by_mean_holdout_success" in report:
-        lines.append(f"- winner_by_mean_holdout_success: `{report['winner_by_mean_holdout_success']}`")
+        lines.append(
+            f"- winner_by_mean_holdout_success: `{report['winner_by_mean_holdout_success']}`"
+        )
     lines += [
         "",
         "| condition | wins | mean_success_all | mean_success_last | median_success_last | mean_return_last | median_return_last | target_visible_last | target_center_last | target_near_last | mean_updates | parameters |",

@@ -174,7 +174,9 @@ def statistics_markdown(analysis: dict[str, Any]) -> str:
     for metric, rows in analysis["metrics"].items():
         lines.append(f"### `{metric}`")
         lines.append("")
-        lines.append("| condition | n | mean | sd | 95% CI | Δ vs baseline | Δ 95% CI | p | W/L/T |")
+        lines.append(
+            "| condition | n | mean | sd | 95% CI | Δ vs baseline | Δ 95% CI | p | W/L/T |"
+        )
         lines.append("| --- | ---: | ---: | ---: | :---: | ---: | :---: | ---: | :---: |")
         for name, row in rows.items():
             s = row["summary"]
@@ -317,7 +319,10 @@ def profile_ci(
         sample = rng.choices(values, k=n)
         for index, tau in enumerate(thresholds):
             columns[index].append(sum(1 for value in sample if value > tau) / n)
-    return [(_percentile(sorted(column), 0.025), _percentile(sorted(column), 0.975)) for column in columns]
+    return [
+        (_percentile(sorted(column), 0.025), _percentile(sorted(column), 0.975))
+        for column in columns
+    ]
 
 
 def profile_markdown(
@@ -330,7 +335,9 @@ def profile_markdown(
     lines.append("Fraction of seeds scoring above each threshold. A row above another at")
     lines.append("every threshold dominates it stochastically.")
     lines.append("")
-    lines.append("| condition | IQM | mean | " + " | ".join(f"&gt;{tau:.1f}" for tau in taus) + " |")
+    lines.append(
+        "| condition | IQM | mean | " + " | ".join(f"&gt;{tau:.1f}" for tau in taus) + " |"
+    )
     lines.append("| --- | ---: | ---: |" + " ---: |" * len(taus))
     profiles = {name: performance_profile(values, taus) for name, values in series.items()}
     for name, values in series.items():
@@ -368,7 +375,9 @@ def _percentile(sorted_values: list[float], q: float) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser(prog="baby-model-stats")
     parser.add_argument("metrics", type=Path, help="path to a sweep metrics.json artifact")
-    parser.add_argument("--baseline", default=None, help="baseline condition name (default: first declared)")
+    parser.add_argument(
+        "--baseline", default=None, help="baseline condition name (default: first declared)"
+    )
     parser.add_argument(
         "--metrics-keys",
         default="success_rate_last_window,mean_return_last_window",
