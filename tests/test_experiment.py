@@ -77,6 +77,7 @@ from baby_model.minigrid_torch import (
     mission_preservation_probe,
     mission_target_transition_vector,
     parse_minigrid_torch_config,
+    run_greedy_holdout,
     run_minigrid_torch_curriculum_condition,
     select_torch_device,
     state_plus_delta_vector,
@@ -91,6 +92,14 @@ from baby_model.minigrid_torch import (
     transition_group_vector,
 )
 from baby_model.minigrid_torch_sweep import aggregate_torch_reports, torch_sweep_summary_markdown
+from baby_model.stats import (
+    analyze_report,
+    bootstrap_ci,
+    describe,
+    paired_comparison,
+    per_seed_metric,
+    statistics_markdown,
+)
 from baby_model.sweep import parse_seeds, run_sweep
 
 
@@ -2958,6 +2967,7 @@ class ExperimentTest(unittest.TestCase):
                 representation_beta: float = 0.0,
                 representation_state_beta: float = 0.0,
                 representation_target_visibility_beta: float = 0.0,
+                representation_learning_rate: float | None = None,
             ) -> None:
                 self.actions = actions
                 self.updates = 0
@@ -3135,6 +3145,7 @@ class ExperimentTest(unittest.TestCase):
                 representation_beta: float = 0.0,
                 representation_state_beta: float = 0.0,
                 representation_target_visibility_beta: float = 0.0,
+                representation_learning_rate: float | None = None,
             ) -> None:
                 self.actions = actions
                 self.updates = 0
@@ -3372,6 +3383,365 @@ class ExperimentTest(unittest.TestCase):
             summary,
         )
         self.assertIn("Per-Seed Winners", summary)
+
+    def test_seed_statistics_separate_real_effects_from_noise(self) -> None:
+        baseline = [0.30, 0.35, 0.25, 0.30, 0.35]
+        strong = [0.55, 0.60, 0.50, 0.55, 0.60]
+        noisy = [0.35, 0.25, 0.30, 0.40, 0.20]
+
+        real = paired_comparison(strong, baseline)
+        self.assertGreater(real["mean_diff"], 0.2)
+        self.assertGreater(real["ci95_low"], 0.0)
+        self.assertLessEqual(real["p_two_sided"], 0.0625)
+        self.assertEqual(real["wins"], 5)
+
+        noise = paired_comparison(noisy, baseline)
+        self.assertGreater(noise["p_two_sided"], 0.3)
+        self.assertLess(noise["ci95_low"], 0.0)
+        self.assertGreater(noise["ci95_high"], 0.0)
+
+        same = paired_comparison(baseline, baseline)
+        self.assertEqual(same["mean_diff"], 0.0)
+        self.assertEqual(same["p_two_sided"], 1.0)
+
+        described = describe(baseline)
+        self.assertEqual(described["n"], 5)
+        self.assertLessEqual(described["ci95_low"], described["mean"])
+        self.assertLessEqual(described["mean"], described["ci95_high"])
+
+        # Deterministic: the same input must always give the same interval.
+        self.assertEqual(bootstrap_ci(baseline), bootstrap_ci(baseline))
+
+    def test_seed_statistics_are_paired_and_rendered_in_sweep_summary(self) -> None:
+        def run(seed: int, base: float, treat: float, winner: str) -> dict:
+            return {
+                "winner_last_window": winner,
+                "framework": {"version": "2.x", "device": "cuda"},
+                "results": [
+                    {
+                        "name": "CONTROL",
+                        "seed": seed,
+                        "success_rate_all": base,
+                        "success_rate_last_window": base,
+                        "mean_return_last_window": base,
+                        "updates": 10,
+                        "parameter_count": 20,
+                    },
+                    {
+                        "name": "TREATMENT",
+                        "seed": seed,
+                        "success_rate_all": treat,
+                        "success_rate_last_window": treat,
+                        "mean_return_last_window": treat,
+                        "updates": 10,
+                        "parameter_count": 20,
+                    },
+                ],
+            }
+
+        report = {
+            "created_at": "2026-08-23T00:00:00+00:00",
+            "hypothesis": "paired stats",
+            "seeds": [1, 2, 3],
+            "runs": [
+                run(1, 0.2, 0.5, "TREATMENT"),
+                run(2, 0.3, 0.6, "TREATMENT"),
+                run(3, 0.25, 0.55, "TREATMENT"),
+            ],
+        }
+        analysis = analyze_report(report)
+        # Baseline defaults to the first declared condition, i.e. the control.
+        self.assertEqual(analysis["baseline"], "CONTROL")
+        rows = analysis["metrics"]["success_rate_last_window"]
+        self.assertIsNone(rows["CONTROL"]["vs_baseline"])
+        self.assertAlmostEqual(rows["TREATMENT"]["vs_baseline"]["mean_diff"], 0.3)
+        self.assertEqual(
+            rows["TREATMENT"]["vs_baseline"]["p_two_sided"], 0.25
+        )  # exact floor at n=3
+        self.assertEqual(rows["TREATMENT"]["per_seed"], [0.5, 0.6, 0.55])
+
+        markdown = statistics_markdown(analysis)
+        self.assertIn("Seed-Level Statistics", markdown)
+        self.assertIn("sign-flip", markdown)
+        self.assertIn("`CONTROL`", markdown)
+
+        summary = torch_sweep_summary_markdown(
+            {
+                **report,
+                "winner_by_mean_success_last_window": "TREATMENT",
+                "frameworks": [r["framework"] for r in report["runs"]],
+                "aggregate": aggregate_torch_reports(report["runs"], seeds=[1, 2, 3]),
+                "statistics": analysis,
+            }
+        )
+        self.assertIn("Seed-Level Statistics", summary)
+        self.assertIn("Per-Seed Winners", summary)
+
+    def test_seed_statistics_reject_unaligned_or_missing_series(self) -> None:
+        run = {
+            "winner_last_window": "A",
+            "framework": {"version": "2.x", "device": "cpu"},
+            "results": [{"name": "A", "seed": 1, "success_rate_last_window": 0.1}],
+        }
+        other = {
+            "winner_last_window": "B",
+            "framework": {"version": "2.x", "device": "cpu"},
+            "results": [
+                {"name": "A", "seed": 2, "success_rate_last_window": 0.2},
+                {"name": "B", "seed": 2, "success_rate_last_window": 0.3},
+            ],
+        }
+        with self.assertRaises(ValueError):
+            per_seed_metric({"runs": [run, other]}, "success_rate_last_window")
+        with self.assertRaises(KeyError):
+            per_seed_metric({"runs": [run]}, "holdout_success_rate")
+        with self.assertRaises(ValueError):
+            paired_comparison([0.1, 0.2], [0.1])
+
+    def test_holdout_episodes_config_is_parsed_and_validated(self) -> None:
+        config = {
+            "environment": {"id": "BabyAI-GoToObj-v0", "max_steps": 40},
+            "holdout_episodes": 24,
+            "conditions": [{"name": "A", "episodes": 4}],
+        }
+        parsed = parse_minigrid_torch_config(config, seed=601)
+        self.assertEqual(parsed.holdout_episodes, 24)
+
+        self.assertEqual(
+            parse_minigrid_torch_config({**config, "holdout_episodes": 0}).holdout_episodes, 0
+        )
+        self.assertEqual(
+            parse_minigrid_torch_config(
+                {k: v for k, v in config.items() if k != "holdout_episodes"}
+            ).holdout_episodes,
+            0,
+        )
+        with self.assertRaises(ValueError):
+            parse_minigrid_torch_config({**config, "holdout_episodes": -1})
+
+    def test_greedy_holdout_is_deterministic_and_learning_free(self) -> None:
+        class FakeImage:
+            def tolist(self) -> list[list[list[int]]]:
+                return [[[0, 0, 0]]]
+
+        def observation() -> dict:
+            return {"image": FakeImage(), "direction": 0, "mission": "go to the red ball"}
+
+        class FakeEnv:
+            def __init__(self) -> None:
+                self.reset_seeds: list[int] = []
+                self.step_count = 0
+
+            def reset(self, seed: int | None = None):
+                self.reset_seeds.append(int(seed))
+                self.step_count = 0
+                return observation(), {}
+
+            def step(self, action: int):
+                self.step_count += 1
+                # Reward only on the third step so success is unambiguous.
+                reward = 1.0 if self.step_count == 3 else 0.0
+                terminated = self.step_count == 3
+                return (
+                    observation(),
+                    reward,
+                    terminated,
+                    False,
+                    {},
+                )
+
+            def close(self) -> None:
+                return None
+
+        class FakeAgent:
+            def __init__(self) -> None:
+                self.epsilon = 0.2
+                self.chosen: list[bool] = []
+                self.updates_called = 0
+
+            def choose(self, features, force_random: bool = False, action_bonus=None) -> int:
+                # A greedy holdout must never explore.
+                self.chosen.append(self.epsilon == 0.0)
+                return 1
+
+            def update(self, *args, **kwargs) -> None:
+                self.updates_called += 1
+
+        env = FakeEnv()
+        agent = FakeAgent()
+        result = run_greedy_holdout(
+            gym=types.SimpleNamespace(make=lambda env_id: env),
+            agent=agent,
+            condition=Condition(
+                name="A",
+                encoder_mode="raw",
+                episodes=4,
+                decoder_delay_episodes=0,
+                intrinsic_beta=0.0,
+                intrinsic_mode="none",
+                seed=7,
+            ),
+            agent_config=TorchAgentConfig(
+                feature_dim=64,
+                hidden_dim=8,
+                learning_rate=0.001,
+                gamma=0.9,
+                epsilon=0.2,
+                batch_size=4,
+                replay_capacity=16,
+                target_sync_updates=5,
+                device="cpu",
+            ),
+            env_id="BabyAI-GoToObj-v0",
+            max_steps=10,
+            episodes=3,
+        )
+        self.assertEqual(result["holdout_episodes"], 3)
+        self.assertEqual(result["holdout_success_rate"], 1.0)
+        self.assertAlmostEqual(result["holdout_mean_return"], 1.0)
+        self.assertAlmostEqual(result["holdout_mean_steps"], 3.0)
+        self.assertEqual(agent.updates_called, 0)
+        self.assertTrue(all(agent.chosen))
+        self.assertEqual(agent.epsilon, 0.2)  # restored
+        # Holdout seeds must be disjoint from the training range for this seed.
+        self.assertEqual(env.reset_seeds, [799_000, 799_001, 799_002])
+        with self.assertRaises(ValueError):
+            run_greedy_holdout(
+                gym=types.SimpleNamespace(make=lambda env_id: FakeEnv()),
+                agent=FakeAgent(),
+                condition=Condition(
+                    name="A",
+                    encoder_mode="raw",
+                    episodes=4,
+                    decoder_delay_episodes=0,
+                    intrinsic_beta=0.0,
+                    intrinsic_mode="none",
+                    seed=7,
+                ),
+                agent_config=TorchAgentConfig(
+                    feature_dim=64,
+                    hidden_dim=8,
+                    learning_rate=0.001,
+                    gamma=0.9,
+                    epsilon=0.2,
+                    batch_size=4,
+                    replay_capacity=16,
+                    target_sync_updates=5,
+                    device="cpu",
+                ),
+                env_id="BabyAI-GoToObj-v0",
+                max_steps=10,
+                episodes=0,
+            )
+
+    def test_representation_null_control_is_opt_in(self) -> None:
+        base = {
+            "environment": {"id": "BabyAI-GoToObj-v0", "max_steps": 64},
+            "conditions": [
+                {
+                    "name": "N",
+                    "episodes": 4,
+                    "representation_objective": "state_plus_mission_target",
+                    "representation_beta": 0.0,
+                }
+            ],
+        }
+        # beta = 0 stays rejected by default so a typo cannot silently disable the objective.
+        with self.assertRaises(ValueError):
+            parse_minigrid_torch_config(base)
+
+        opted = {
+            **base,
+            "conditions": [{**base["conditions"][0], "representation_null_control": True}],
+        }
+        condition = parse_minigrid_torch_config(opted).conditions[0]
+        self.assertTrue(condition.representation_null_control)
+        self.assertEqual(condition.representation_beta, 0.0)
+        self.assertEqual(condition.representation_objective, "state_plus_mission_target")
+
+    def test_sweep_summary_names_conditions_below_the_random_floor(self) -> None:
+        aggregate = [
+            {
+                "name": "BELOW",
+                "win_count": 1,
+                "mean_success_rate_all": 0.4,
+                "mean_success_rate_last_window": 0.45,
+                "median_success_rate_last_window": 0.45,
+                "mean_return_last_window": 0.3,
+                "median_return_last_window": 0.3,
+                "mean_updates": 10.0,
+                "mean_parameter_count": 20,
+                "mean_holdout_success_rate": 0.20,
+            },
+            {
+                "name": "ABOVE",
+                "win_count": 0,
+                "mean_success_rate_all": 0.4,
+                "mean_success_rate_last_window": 0.40,
+                "median_success_rate_last_window": 0.40,
+                "mean_return_last_window": 0.3,
+                "median_return_last_window": 0.3,
+                "mean_updates": 10.0,
+                "mean_parameter_count": 20,
+                "mean_holdout_success_rate": 0.40,
+            },
+        ]
+        summary = torch_sweep_summary_markdown(
+            {
+                "created_at": "2026-08-23T00:00:00+00:00",
+                "hypothesis": "floor",
+                "seeds": [1],
+                "winner_by_mean_success_last_window": "BELOW",
+                "frameworks": [{"version": "2.x", "device": "cuda"}],
+                "aggregate": aggregate,
+                "runs": [
+                    {
+                        "winner_last_window": "BELOW",
+                        "framework": {"version": "2.x", "device": "cuda"},
+                    }
+                ],
+                "random_policy_floor": {
+                    "env_id": "BabyAI-GoToObj-v0",
+                    "episodes": 60,
+                    "per_seed_success": [0.283],
+                    "mean_success": 0.283,
+                },
+            }
+        )
+        self.assertIn("Random-Policy Floor", summary)
+        self.assertIn("0.283", summary)
+        # The winner by training-window success is the one that loses to random.
+        self.assertIn("at or below the floor", summary)
+        self.assertIn("`BELOW`", summary)
+        self.assertNotIn("  - `ABOVE`", summary)
+
+    def test_separate_representation_optimizer_is_opt_in(self) -> None:
+        base = {
+            "environment": {"id": "BabyAI-GoToObj-v0", "max_steps": 64},
+            "conditions": [{"name": "A", "episodes": 4}],
+        }
+        # Default must stay off so every historical config keeps its behaviour.
+        self.assertFalse(parse_minigrid_torch_config(base).agent.separate_representation_optimizer)
+        opted = {**base, "agent": {"separate_representation_optimizer": True}}
+        self.assertTrue(parse_minigrid_torch_config(opted).agent.separate_representation_optimizer)
+
+    def test_common_random_numbers_actually_pairs_the_conditions(self) -> None:
+        config = {
+            "environment": {"id": "BabyAI-GoToObj-v0", "max_steps": 64},
+            "conditions": [
+                {"name": "a", "episodes": 2},
+                {"name": "b", "episodes": 2},
+                {"name": "c", "episodes": 2},
+            ],
+        }
+        # Default: seed + index, so no two conditions share an agent seed and
+        # therefore none share their environment episodes either.
+        default_seeds = [c.seed for c in parse_minigrid_torch_config(config, seed=601).conditions]
+        self.assertEqual(default_seeds, [601, 602, 603])
+        paired = parse_minigrid_torch_config({**config, "common_random_numbers": True}, seed=601)
+        self.assertEqual([c.seed for c in paired.conditions], [601, 601, 601])
+        self.assertTrue(paired.common_random_numbers)
+        self.assertFalse(parse_minigrid_torch_config(config).common_random_numbers)
 
     def test_gpu_compat_policy_is_dependency_free(self) -> None:
         self.assertLess(DriverVersion.parse("576.88"), DriverVersion.parse("580.0"))

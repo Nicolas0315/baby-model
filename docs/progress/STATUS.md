@@ -1,6 +1,6 @@
 # baby-model Status
 
-Updated: 2026-06-30 JST
+Updated: 2026-08-23 JST
 
 ## Proven
 
@@ -1028,16 +1028,218 @@ Updated: 2026-06-30 JST
   - Treat `ZI` as the current strongest long-horizon representation-driven
     baseline.
 
+- Verification machinery for seed-level uncertainty landed:
+  `docs/experiments/seed-statistics-and-holdout.md`
+  - `baby_model/stats.py`: paired sign-flip randomization test (exact for
+    n <= 20) and percentile-bootstrap intervals, standard library only and
+    deterministic. Wired into every PyTorch sweep report and `summary.md`, and
+    usable offline on an existing artifact via
+    `python3 -m baby_model.stats <metrics.json>`.
+  - `run_greedy_holdout` in `baby_model/minigrid_torch.py`, enabled by
+    `holdout_episodes`: greedy (epsilon = 0), no-learning evaluation on episode
+    seeds disjoint from training, reported as `holdout_success_rate` and
+    `winner_by_mean_holdout_success`.
+  - `configs/experiments/minigrid-torch-adda-v49.json` is v48 plus
+    `holdout_episodes: 60` and an explicit `baseline_condition`.
+  - `./scripts/verify.sh` passes with the new gates; 97 unit tests. A real
+    `minigrid` 3.1.0 / `torch` 2.12.1 CPU sweep produced a `summary.md`
+    carrying the statistics and holdout sections.
+- Re-analysis of the untouched v2.44 and v2.45 CUDA artifacts:
+  - `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` beat the
+    no-representation control on every seed in both sweeps. At five seeds:
+    success `+0.230`, CI `[+0.140, +0.340]`, p `0.062`, 5/0/0; return `+0.210`,
+    CI `[+0.153, +0.285]`. Its seed sd (`0.057`) is half the control's
+    (`0.112`), so it is the only condition that is also stable.
+  - `ZE`, `ZG`, and `ZH` are statistically indistinguishable from the control
+    (p `0.5`-`1.0`, intervals straddling zero). The earlier ranking among them,
+    including v2.39/v2.40 treating `ZE` as the strongest
+    representation-driven candidate, was reading protocol noise.
+  - The exact p-value floor of the paired test is `2 / 2**n`, so no three-seed
+    or five-seed gate in this repository can reach p < 0.05 at any effect size.
+- CUDA environments rebuilt from the scripted setup path
+  (`MINIGRID_TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128`,
+  `MINIGRID_VENV_DIR=.venv-minigrid-cuda`, uv backend, Python 3.12):
+  - `rtx5060ti` / WSL Ubuntu: `torch 2.11.0+cu128`, `cuda_available=True`,
+    `NVIDIA GeForce RTX 5060 Ti`. This is the second CUDA axis for issue #70.
+  - The previous `rtx4090` CUDA venv used for v2.43-v2.45 was a symlink into a
+    sibling clone that no longer exists, so the v2.45 environment was not
+    reproducible as found. It is being rebuilt at source commit `56f0c3d`.
+
+- Verification audit at 2026-08-23:
+  `docs/experiments/verification-audit-20260823.md`, plus the pipeline sequence
+  and artifact-model diagrams in `docs/architecture/experiment-pipeline.md`
+  (both Mermaid diagrams rendered with `mmdc` 11.16.0).
+  - No random-policy floor had ever been measured. It is `0.283` on the holdout
+    episode seeds and `0.269` on the training-window seeds, and **every**
+    condition in the v2.46 eight-seed run is at or below it on greedy holdout
+    (`ZK` 0.254, `ZI` 0.192, `ZH` 0.158, `ZG` 0.125, `ZE` 0.079).
+  - CPU and both CUDA workers produce bit-identical behaviour, aggregates, and
+    statistics for the same seeds. Initialization is CPU-side under
+    `torch.manual_seed` and no CUDA RNG is drawn, so the device is not an
+    experimental axis. An RTX 4090 is 1.15x the same host's CPU on this loop.
+  - `max_steps` above the environment's own truncation is inert. 27 configs
+    request `80` on a 64-step env, so the step-horizon axis has never been
+    varied on the evaluation task.
+  - The AD-only phase is 8 of 84 episodes and lies entirely inside
+    `MiniGrid-Empty-5x5-v0`, which has no mission target, while the objective
+    is `state_plus_mission_target`. `ZI` performs 235 representation updates
+    against `ZE`'s 4228, all of them in that stage.
+  - Feature hashing loses 6.6% of tokens per observation at `feature_dim` 1024.
+  - The shared Adam advances the encoder's step count twice as fast in any
+    representation condition, so `beta -> 0` does not recover the control and
+    there is no continuous path from `ZE` to `ZK`. That control was not
+    expressible: `beta <= 0` was rejected whenever an objective was set. Added
+    `representation_null_control` and
+    `configs/experiments/minigrid-torch-adda-v50.json` as v2.47 `ZN`.
+  - Tested and refuted: representation updates do not leak a momentum update
+    into the Q head. `zero_grad()` sets `grad = None` and Adam skips those
+    parameters.
+
+- Issue #70 v2.46 is complete and **reverses the v2.45 decision**:
+  `docs/experiments/minigrid-torch-adda-v57.md`.
+  - `ZI` is not separable from the control on a new eight-seed set: Δ success
+    `+0.050`, CI `[-0.044, +0.125]`, p `0.375`. Re-running the original seeds
+    `4301-4305` on the rebuilt environment reproduced v2.45 exactly, so the
+    difference is the seed set alone. The control `ZK` moved `+0.131` between
+    seed sets while `ZI` moved `-0.049`; the v2.45 effect was the control
+    drawing a weak seed set.
+  - The preferred gate in #70 cannot produce evidence: `rtx4090`, `rtx5060ti`,
+    and CPU are all bit-identical for the same seeds.
+  - `ZI` is not the long-horizon baseline. On greedy holdout it is below both
+    the control and a random policy.
+- v2.47 null control is complete: `docs/experiments/minigrid-torch-adda-v58.md`.
+  - `ZN` runs the same objective with `beta = 0`, so the optimizer takes the
+    same steps with a zero-information gradient. `ZN` holdout `0.119` is
+    indistinguishable from `ZE`'s `0.083` (p `0.594`) and far from the control's
+    `0.254`.
+  - Decomposition of the `ZK`-to-`ZE` gap of `0.171`: optimizer schedule alone
+    `0.135` (**79%**), objective content `0.035` (21%).
+  - Mechanism measured directly: at `beta = 0` the encoder gradient is an exact
+    zero tensor rather than `None`, so Adam still applies leftover Q-learning
+    momentum. Encoder drift is `7.282e-02` at `beta = 0` and `7.284e-02` at
+    `beta = 0.05`.
+  - The representation family has therefore never tested the hypothesis. The
+    beta-neighbourhood rankings in v2.24, v2.29, v2.37, and v2.45 were noise on
+    top of a roughly constant optimizer artifact.
+
+- The episode budget was the binding constraint, measured as a ladder
+  (audit section H). Varying only the eval stage's episode count, the control's
+  greedy holdout goes `0.244` (48 episodes, floor `0.239`, so `+0.006`) ->
+  `0.344` -> `0.417` -> `0.700` (3200 episodes, `+0.461`). **At the historic
+  protocol the control was indistinguishable from a random policy**, so every
+  prior condition comparison happened before learning began. BabyAI's own
+  baselines need 15,900-17,400 RL episodes on the same difficulty tier; see
+  `docs/research/prior-art-and-learning-order.md`.
+- v2.48 repeated the decisive comparison at 3200 eval episodes with 8 seeds and
+  a 120-episode holdout: `docs/experiments/minigrid-torch-adda-v59.md`.
+  - `ZK` (no representation) reaches `0.668` against a floor of `0.279`,
+    `+0.389`, CI `[0.519, 0.787]`. **The harness works.**
+  - `ZE` - `ZK` is `-0.470`, CI `[-0.680, -0.246]`, p `0.0156`, 1/7/0. This is
+    the **first result in this repository at p < 0.05**, and its sign is against
+    the hypothesis. `ZE` sits below the random floor (`-0.081`).
+  - The schedule/objective split is a point estimate only (63% / 37%): both
+    `ZN` - `ZK` (p `0.109`) and `ZE` - `ZN` (p `0.273`) are non-significant at
+    n = 8.
+
+- v2.49 gave the representation head its own optimizer and re-ran the v2.48
+  condition set: `docs/experiments/minigrid-torch-adda-v60.md`. Both halves on
+  torch `2.11.0+cu128`, so the v2.48 build-split caveat does not apply.
+  - **The fix is validated by its own control.** `ZN` cost `-0.298` against
+    `ZK` under the shared optimizer and `+0.017` (p `0.875`) under the separate
+    one. That entire penalty was the shared-Adam artifact.
+  - `ZE` - `ZK` is `-0.582`, CI `[-0.698, -0.446]`, p `0.0078`, **0/8 seeds**.
+    `ZE` holdout is `0.032` against a floor of `0.279`.
+  - A prediction was refuted and it narrows the claim: the separate optimizer
+    makes a representation step about **8x smaller**, not larger (2.68e-06 vs
+    2.19e-05 after 200 interleaved updates), because the shared step was carried
+    by stale Q momentum. `beta = 0.05` was hand-picked under the broken
+    mechanism, so the result condemns **this setting**, not the objective class.
+  - The representation-update count is endogenous: `ZE` runs 170,089 updates to
+    `ZN`'s 72,200 because failing episodes run to truncation.
+- Scoping correction: the v2.46 bit-identity finding holds at 84 episodes, not
+  at 3200. Comparing `ZK` across v2.48 and v2.49 on the same seeds, three of
+  eight values differ. `torch.get_num_threads()` differs per host (12 / 8 / 6).
+  Conclusions are unaffected because every comparison is paired within a host.
+
+- v2.50-v2.52 are complete and reported together in
+  `docs/experiments/minigrid-torch-adda-v61.md`.
+  - **`representation_beta` is a no-op.** Adam normalises by its own second
+    moment, so a constant factor on the loss cancels. Measured: `beta` over a
+    100x range moves the encoder step by **1.00x**, the representation learning
+    rate over a 1000x range moves it by **249x**. Every beta-neighbourhood sweep
+    before this (v2.24, v2.29, v2.37, `ZG`/`ZH`/`ZE` in v2.45) was turning a
+    switch as if it were a dial, which is why the v2.45 re-analysis found those
+    conditions indistinguishable. Designing v2.50 around `beta` was my mistake.
+  - **The v2.49 catastrophe is specific to lr = the Q learning rate.** At 1e-3
+    it reproduces (0.011, 0/8 seeds, p `0.0078`); two orders lower it does not.
+    The claim narrows from "the representation objective prevents learning" to
+    "learning the representation as fast as the policy prevents learning".
+  - **lr 1e-4 is the best evidence the hypothesis has ever had, and it is still
+    not significant**: Δ `+0.130`, p `0.1328`, 5 wins of 8. It also clears its
+    own seed's floor on 8/8 with a worst seed of `0.683` and sd `0.089`, against
+    `ZK`'s 7/8, worst `0.208`, sd `0.208` — `ZK` has a catastrophic seed and
+    lr 1e-4 has none.
+  - Averaged learning curve: lr 1e-4 rises fastest, settles highest (`0.978`
+    peak against `ZK`'s `0.864`), and reaches the goal in 15.9 steps against
+    22.3.
+
+- **Correction (2026-08-24)**: the v2.53 write-up claimed "stochastic
+  dominance" from nine hand-picked thresholds. Re-checked at all 31 unique
+  observed values, lr 1e-4 does dominate `ZK` empirically with zero crossings,
+  but that is a statement about the sample, not the population, and the
+  abbreviated table could not reproduce its own "cross" verdict for lr 1e-5
+  (the crossing is at 0.267). Profile CIs were also missing; they separate at
+  only two of five thresholds. All corrected in
+  `docs/experiments/minigrid-torch-adda-v62.md`.
+- **v2.53: the hypothesis passes at 22 seeds.**
+  `docs/experiments/minigrid-torch-adda-v62.md`. Floor `0.259`.
+  - `ZE` lr 1e-4 - `ZK`: Δ **`+0.232`**, CI `[+0.089, +0.384]`, **p `0.0065`**,
+    14/8/0. Also 13.6 steps faster to goal, same p.
+  - `ZE` lr 1e-3 - `ZK`: Δ `-0.472`, p `0.0002`, 2/19/1. Rate-critical: the same
+    objective at the policy's learning rate is catastrophic.
+  - `ZE` lr 1e-5: null (p `0.61`).
+  - **The shape of the result is failure removal, not ceiling raising.** `ZK` is
+    bimodal — on 7 of 22 seeds its greedy policy ends at or below random,
+    several at exactly `0.000`. `ZE` lr 1e-4 does this on **0 of 22**, worst
+    seed `0.483`, sd `0.118` against `ZK`'s `0.315`.
+  - The effect grew from n=8 to n=22 (Δ `+0.130` -> `+0.232`) because `ZK`'s mean
+    fell from `0.657` to `0.503` as its collapses were sampled; the treatment
+    barely moved (`0.787` -> `0.735`).
+  - **Multiplicity disclosed**: four looks (n=4, 8, 15, 22). The n=22 target was
+    fixed in advance by the n=8 power calculation; p `0.0065` clears a
+    Bonferroni alpha of `0.0125`. A future gate should fix n before the first
+    look.
+
 ## Next
 
-- Validate `ZI_torch_gotoobj_state_plus_mission_target_b005_long_ad_stop` on a
-  new axis, preferably another CUDA-capable worker or a longer horizon, before
-  calling the long-horizon branch stable beyond this worker/protocol.
+- Measure the ceiling with a standard baseline on `GoToObj` so `0.735` has a
+  scale. The floor is measured; the ceiling is not.
+- Move to a harder level. `ZE` lr 1e-4 already trains to `0.980` on `GoToObj`,
+  BabyAI's easiest tier, so there is little headroom left here, and a result
+  about removing collapses should show more on a harder task.
+- Anneal `epsilon`: the winner's train-to-holdout gap is still `0.980` to
+  `0.735`.
+- Anneal `epsilon` so the greedy policy is exercised during training.
+- Get a ceiling from a standard MiniGrid/BabyAI baseline. `0.668` has a floor to
+  beat but no upper reference.
 
 ## Not Yet Proven
 
+- ~~That any condition beats a uniform-random policy on held-out greedy
+  evaluation.~~ **Proven in v2.48**: the no-representation control reaches
+  `0.668` against a floor of `0.279` at 3200 eval episodes. It required only
+  the episode budget, not a change of method.
+- ~~That the AD/DA hypothesis helps at all.~~ **Passed in v2.53**: with the
+  representation head on its own optimizer at lr 1e-4, Δ `+0.232` over the
+  no-representation control, p `0.0065`, 22 seeds. Bounded by three things: it
+  is rate-critical, `GoToObj` is near its ceiling for the winner, and there is
+  still no external upper reference.
+- That the effect survives on a harder level, or against a standard baseline.
+- That the AD-first / DA-delayed hypothesis has been tested at all, given the
+  v2.47 finding that 79% of the representation effect is an optimizer artifact.
 - Strict CUDA smoke on `gpu-worker-b`; it remains blocked by driver/wheel
-  compatibility and needs an explicit external state change before rerun.
+  compatibility and needs an explicit external state change before rerun. Note
+  that per v2.46 this gate would carry no evidence even if it ran.
 - A broader stability claim beyond the bounded three-seed CUDA sweep.
 - A redesigned objective that beats the no-representation curriculum and the
   current best representation baselines under the mission-preservation probe.
@@ -1067,5 +1269,10 @@ Updated: 2026-06-30 JST
   AD-only phase. v2.43 replicated that direction on CUDA seed `4301`, v2.44
   passed a bounded three-seed CUDA gate for `ZI`, and v2.45 preserved the edge
   in a five-seed CUDA extension. The remaining gap is cross-axis validation
-  beyond the same worker and long-horizon protocol.
+  beyond the same worker and long-horizon protocol. As of the 2026-08-23
+  re-analysis, only the `ZI` result in that chain is separable from the
+  no-representation control; the `ZE`/`ZG`/`ZH` rankings above are recorded
+  history, not evidence.
+- Any result at p < 0.05. Every gate so far used three or five seeds, whose
+  exact paired-test p-floors are `0.250` and `0.062`.
 - Full objective completion.

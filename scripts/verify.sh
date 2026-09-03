@@ -14,6 +14,8 @@ fi
 
 "$py" -m compileall -q baby_model tests
 "$py" -m unittest discover -s tests -p 'test_*.py'
+"$py" -c "from baby_model.stats import demo; demo()"
+"$py" -c "from baby_model.curves import demo; demo()"
 "$py" -m baby_model.cli verify-config configs/experiments/v0-smoke.json
 "$py" -m baby_model.cli verify-config configs/experiments/v02-sweep.json
 "$py" -m baby_model.cli verify-config configs/experiments/v03-sweep.json
@@ -24,6 +26,16 @@ fi
 "$py" -m json.tool configs/experiments/minigrid-torch-adda-v14.json >/dev/null
 "$py" -m json.tool configs/experiments/minigrid-torch-adda-v15.json >/dev/null
 "$py" -m json.tool configs/experiments/minigrid-torch-adda-v16.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v48.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v49.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v50.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v51.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v52.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v53.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v56.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v57.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v58.json >/dev/null
+"$py" -m json.tool configs/experiments/minigrid-torch-adda-v59.json >/dev/null
 "$py" -m json.tool configs/fleet/gpu-wheel-policy.json >/dev/null
 "$py" -m baby_model.gpu_compat --config configs/fleet/gpu-wheel-policy.json >/dev/null
 bash -n scripts/*.sh

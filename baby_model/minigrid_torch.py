@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import platform
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -96,6 +98,13 @@ class TorchAgentConfig:
     replay_capacity: int
     target_sync_updates: int
     device: str
+    # When true the representation loss steps its own Adam instance. With one
+    # shared optimizer, a representation step advances the encoder using the
+    # Adam state accumulated from Q-learning gradients, so the objective's
+    # effect could not be separated from that displacement (v2.47 attributed
+    # 79% of the effect to it). Default false to keep every historical config
+    # bit-identical.
+    separate_representation_optimizer: bool = False
 
 
 @dataclass(frozen=True)
@@ -107,6 +116,26 @@ class MiniGridTorchConfig:
     conditions: tuple[Condition, ...]
     stages: tuple[TorchCurriculumStage, ...] = ()
     active_stages_by_condition: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    holdout_episodes: int = 0
+    # Conditions default to seed + index, so every condition gets a different
+    # agent seed AND a different set of environment episodes: a "paired"
+    # comparison is then paired only by the base seed. Common random numbers give
+    # all conditions the same seed, which is the variance reduction the paired
+    # test is supposed to exploit. Off by default -- turning it on changes every
+    # historical result.
+    common_random_numbers: bool = False
+    # Run the greedy holdout three times on the same trained policy and the same
+    # episode seeds: real mission, a mission shuffled in from a disjoint seed
+    # band, and a blank mission. Solving a level is not evidence the policy read
+    # the mission.
+    mission_counterfactual: bool = False
+    # Conditions default to seed + index, which gives every condition a different
+    # agent seed AND a different set of environment episodes, so a "paired"
+    # comparison is paired only by the base seed. Common random numbers give all
+    # conditions the same seed, which is the textbook variance reduction the
+    # paired test is supposed to exploit. Off by default: turning it on changes
+    # every historical result.
+    common_random_numbers: bool = False
 
 
 @dataclass(frozen=True)
@@ -131,6 +160,7 @@ class TorchDQNAgent:
         representation_beta: float = 0.0,
         representation_state_beta: float = 0.0,
         representation_target_visibility_beta: float = 0.0,
+        representation_learning_rate: float | None = None,
     ) -> None:
         self.torch = torch
         self.actions = actions
@@ -199,11 +229,30 @@ class TorchDQNAgent:
             ).to(device)
             parameters.extend(self.representation_predictor.parameters())
         self.optimizer = torch.optim.Adam(parameters, lr=config.learning_rate)
+        if config.separate_representation_optimizer:
+            # The encoder stays in both: the representation objective is supposed
+            # to shape perception, and removing it would delete the mechanism
+            # under test. What changes is that it is shaped by the objective's
+            # own Adam state rather than by leftover Q-learning momentum.
+            representation_parameters = list(self.model.encoder.parameters())
+            representation_parameters.extend(
+                parameter
+                for parameter in parameters
+                if parameter not in set(self.model.parameters())
+            )
+            representation_lr = (
+                config.learning_rate
+                if representation_learning_rate is None
+                else representation_learning_rate
+            )
+            self.representation_optimizer = torch.optim.Adam(
+                representation_parameters, lr=representation_lr
+            )
+        else:
+            self.representation_optimizer = self.optimizer
         self.loss_fn = torch.nn.MSELoss()
         self.classification_loss_fn = torch.nn.CrossEntropyLoss()
-        self.replay: deque[tuple[SparseFeatures, int, float, SparseFeatures, bool]] = deque(
-            maxlen=config.replay_capacity
-        )
+        self.replay: deque[tuple[Any, int, float, Any, bool]] = deque(maxlen=config.replay_capacity)
         self.updates = 0
 
     def action_values(self, features: SparseFeatures) -> dict[int, float]:
@@ -247,19 +296,25 @@ class TorchDQNAgent:
         next_features: SparseFeatures,
         done: bool,
     ) -> None:
-        self.replay.append((features, action, reward, next_features, done))
+        # Rows are built once here rather than on every batch that samples them.
+        # With capacity 1024 and batch 16 a transition is resampled dozens of
+        # times, and rebuilding its dense row each time dominated the profile.
+        state_row, next_state_row = self._scatter(
+            [features, next_features], self.config.feature_dim
+        )
+        self.replay.append((state_row, action, reward, next_state_row, done))
         if len(self.replay) < self.config.batch_size:
             return
 
         batch = self.rng.sample(list(self.replay), self.config.batch_size)
-        states = self._batch_tensor([item[0] for item in batch])
+        states = self.torch.stack([item[0] for item in batch])
         actions = self.torch.tensor(
             [item[1] for item in batch], dtype=self.torch.long, device=self.device
         )
         rewards = self.torch.tensor(
             [item[2] for item in batch], dtype=self.torch.float32, device=self.device
         )
-        next_states = self._batch_tensor([item[3] for item in batch])
+        next_states = self.torch.stack([item[3] for item in batch])
         dones = self.torch.tensor(
             [1.0 if item[4] else 0.0 for item in batch],
             dtype=self.torch.float32,
@@ -355,9 +410,9 @@ class TorchDQNAgent:
             state_loss = self.loss_fn(state_prediction, state_target)
             visibility_loss = self.loss_fn(visibility_prediction, visibility_target)
             loss = state_loss * state_beta + visibility_loss * visibility_beta
-            self.optimizer.zero_grad()
+            self.representation_optimizer.zero_grad()
             loss.backward()
-            self.optimizer.step()
+            self.representation_optimizer.step()
             return RepresentationUpdateResult(
                 loss=float(loss.detach().cpu().item()),
                 state_loss=float(state_loss.detach().cpu().item()),
@@ -388,9 +443,9 @@ class TorchDQNAgent:
                 self.torch.cat([hidden, action_one_hot], dim=1)
             )
             loss = self.loss_fn(prediction, target) * self.representation_beta
-        self.optimizer.zero_grad()
+        self.representation_optimizer.zero_grad()
         loss.backward()
-        self.optimizer.step()
+        self.representation_optimizer.step()
         return RepresentationUpdateResult(loss=float(loss.detach().cpu().item()))
 
     def parameter_count(self) -> int:
@@ -419,21 +474,35 @@ class TorchDQNAgent:
             return list(self.model(tensor).detach().cpu().tolist()[0])
 
     def _feature_tensor(self, features: SparseFeatures) -> Any:
-        return self.torch.tensor(
-            dense_feature_vector(features, self.config.feature_dim),
-            dtype=self.torch.float32,
-            device=self.device,
-        )
+        return self._scatter([features], self.config.feature_dim)[0]
 
     def _batch_tensor(self, batch_features: list[SparseFeatures]) -> Any:
-        return self.torch.tensor(
-            [
-                dense_feature_vector(features, self.config.feature_dim)
-                for features in batch_features
-            ],
-            dtype=self.torch.float32,
-            device=self.device,
+        return self._scatter(batch_features, self.config.feature_dim)
+
+    def _scatter(self, rows: list[SparseFeatures], feature_dim: int) -> Any:
+        """Dense (len(rows), feature_dim) float32 tensor from sparse feature dicts.
+
+        Equivalent to torch.tensor([dense_feature_vector(r, dim) for r in rows]),
+        but without materializing a dense Python list per row. Profiling put 40%
+        of a seed's runtime in that construction. Feature keys are unique within
+        a row, so the index assignment has no duplicate targets and the result is
+        bit-identical to the dense path.
+        """
+        for features in rows:
+            if features and (min(features) < 0 or max(features) >= feature_dim):
+                raise ValueError(f"feature index out of range: {max(features)}")
+        flat_indices = [
+            row * feature_dim + index for row, features in enumerate(rows) for index in features
+        ]
+        values = [value for features in rows for value in features.values()]
+        tensor = self.torch.zeros(
+            len(rows) * feature_dim, dtype=self.torch.float32, device=self.device
         )
+        if values:
+            tensor[self.torch.tensor(flat_indices, dtype=self.torch.long, device=self.device)] = (
+                self.torch.tensor(values, dtype=self.torch.float32, device=self.device)
+            )
+        return tensor.view(len(rows), feature_dim)
 
 
 def main() -> int:
@@ -475,6 +544,12 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
     except ImportError as exc:
         raise ImportError("gymnasium/minigrid/torch") from exc
 
+    # Tiny tensors (1024 -> 64 -> 7, batch 16) make multithreaded BLAS pure
+    # overhead: measured 1.35x faster at one thread with bit-identical results.
+    # Off by default so nothing historical changes; set to pin it.
+    requested_threads = os.environ.get("BABY_MODEL_TORCH_THREADS")
+    if requested_threads:
+        torch.set_num_threads(int(requested_threads))
     torch.manual_seed(seed)
     device = select_torch_device(torch, parsed.agent.device)
     active_stages_by_condition = dict(parsed.active_stages_by_condition)
@@ -489,6 +564,8 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
                 agent_config=parsed.agent,
                 device=device,
                 quiet_env_output=parsed.quiet_env_output,
+                holdout_episodes=parsed.holdout_episodes,
+                mission_counterfactual=parsed.mission_counterfactual,
             )
             for condition in parsed.conditions
         ]
@@ -503,9 +580,37 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
                 agent_config=parsed.agent,
                 device=device,
                 quiet_env_output=parsed.quiet_env_output,
+                holdout_episodes=parsed.holdout_episodes,
             )
             for condition in parsed.conditions
         ]
+    random_floor: dict[str, Any] | None = None
+    if parsed.holdout_episodes > 0:
+        if parsed.stages:
+            final_stage = next(
+                stage
+                for stage in reversed(parsed.stages)
+                if stage.name in set(active_stages_by_condition[parsed.conditions[0].name])
+            )
+            floor_env_id, floor_max_steps = final_stage.env_id, final_stage.max_steps
+        else:
+            floor_env_id, floor_max_steps = parsed.env_id, parsed.max_steps
+        random_floor = random_policy_floor(
+            gym=gym,
+            env_id=floor_env_id,
+            max_steps=floor_max_steps,
+            episodes=parsed.holdout_episodes,
+            seed=seed,
+            quiet_env_output=parsed.quiet_env_output,
+        )
+        random_floor["env_id"] = floor_env_id
+        # The floor is measured on the episode seeds derived from `seed`, which is
+        # condition index 0's seed. Without common random numbers the other
+        # conditions see different episodes, so their "vs floor" gap carries the
+        # floor's own seed noise (measured sd 0.037 across eight seeds).
+        random_floor["aligned_with_condition_seed"] = seed
+        random_floor["aligned_for_all_conditions"] = parsed.common_random_numbers
+
     report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "hypothesis": str(config.get("hypothesis", "Baby-AD/DA MiniGrid PyTorch DQN")),
@@ -517,6 +622,7 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
             "device": str(device),
             "cuda_available": bool(torch.cuda.is_available()),
             "mps_available": torch_mps_available(torch),
+            **runtime_provenance(torch, device),
         },
         "agent": {
             "type": "torch_dqn",
@@ -530,6 +636,8 @@ def run_minigrid_torch_suite(config: dict[str, Any], seed: int = 601) -> dict[st
             "target_sync_updates": parsed.agent.target_sync_updates,
         },
         "results": results,
+        "holdout_episodes": parsed.holdout_episodes,
+        "random_policy_floor": random_floor,
         "winner_last_window": max(results, key=lambda row: row["success_rate_last_window"])["name"],
     }
     if parsed.stages:
@@ -626,6 +734,11 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
     if max_steps < 1:
         raise ValueError("environment.max_steps must be positive")
     quiet_env_output = bool(env_cfg.get("quiet_env_output", True))
+    holdout_episodes = int(config.get("holdout_episodes", 0))
+    common_random_numbers = bool(config.get("common_random_numbers", False))
+    mission_counterfactual = bool(config.get("mission_counterfactual", False))
+    if holdout_episodes < 0:
+        raise ValueError("holdout_episodes must not be negative")
 
     agent_cfg = config.get("agent", {})
     if not isinstance(agent_cfg, dict):
@@ -639,6 +752,9 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
     replay_capacity = int(agent_cfg.get("replay_capacity", 512))
     target_sync_updates = int(agent_cfg.get("target_sync_updates", 25))
     device = str(agent_cfg.get("device", "auto"))
+    separate_representation_optimizer = bool(
+        agent_cfg.get("separate_representation_optimizer", False)
+    )
     if feature_dim < 16:
         raise ValueError("agent.feature_dim must be at least 16")
     if hidden_dim < 2 or hidden_dim > 2048:
@@ -727,6 +843,20 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
         action_prior_weight = float(item.get("action_prior_weight", 0.0))
         freeze_encoder_after_delay = bool(item.get("freeze_encoder_after_delay", False))
         stop_representation_after_delay = bool(item.get("stop_representation_after_delay", False))
+        representation_null_control = bool(item.get("representation_null_control", False))
+        representation_learning_rate_cfg = item.get("representation_learning_rate")
+        representation_learning_rate = (
+            None
+            if representation_learning_rate_cfg is None
+            else float(representation_learning_rate_cfg)
+        )
+        if representation_learning_rate is not None:
+            if representation_learning_rate <= 0.0:
+                raise ValueError(f"representation_learning_rate must be positive for {name}")
+            if not separate_representation_optimizer:
+                raise ValueError(
+                    f"representation_learning_rate requires agent.separate_representation_optimizer for {name}"
+                )
         active_stages = tuple(
             str(stage_name) for stage_name in item.get("active_stages", all_stage_names)
         )
@@ -781,7 +911,11 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 raise ValueError(
                     f"linear representation anneal requires representation_anneal_episodes for {name}"
                 )
-        elif representation_objective != "none" and representation_beta <= 0.0:
+        elif (
+            representation_objective != "none"
+            and representation_beta <= 0.0
+            and not representation_null_control
+        ):
             raise ValueError(f"representation_beta must be positive for {name}")
         elif representation_objective != TWO_HEAD_STATE_TARGET_OBJECTIVE and (
             representation_state_beta != 0.0 or representation_target_visibility_beta != 0.0
@@ -816,7 +950,7 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 decoder_delay_episodes=delay,
                 intrinsic_beta=beta,
                 intrinsic_mode=intrinsic_mode,
-                seed=seed + i,
+                seed=seed if common_random_numbers else seed + i,
                 intrinsic_target=intrinsic_target,
                 representation_objective=representation_objective,
                 representation_beta=representation_beta,
@@ -829,6 +963,8 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
                 action_prior_weight=action_prior_weight,
                 freeze_encoder_after_delay=freeze_encoder_after_delay,
                 stop_representation_after_delay=stop_representation_after_delay,
+                representation_null_control=representation_null_control,
+                representation_learning_rate=representation_learning_rate,
             )
         )
         active_stages_by_condition.append((name, active_stages))
@@ -846,10 +982,14 @@ def parse_minigrid_torch_config(config: dict[str, Any], seed: int = 601) -> Mini
             replay_capacity=replay_capacity,
             target_sync_updates=target_sync_updates,
             device=device,
+            separate_representation_optimizer=separate_representation_optimizer,
         ),
         conditions=tuple(conditions),
         stages=stages,
         active_stages_by_condition=tuple(active_stages_by_condition),
+        holdout_episodes=holdout_episodes,
+        common_random_numbers=common_random_numbers,
+        mission_counterfactual=mission_counterfactual,
     )
 
 
@@ -894,6 +1034,7 @@ def run_minigrid_torch_condition(
     agent_config: TorchAgentConfig,
     device: Any,
     quiet_env_output: bool = True,
+    holdout_episodes: int = 0,
 ) -> dict[str, Any]:
     env = gym.make(env_id)
     try:
@@ -911,6 +1052,7 @@ def run_minigrid_torch_condition(
             representation_beta=condition.representation_beta,
             representation_state_beta=condition.representation_state_beta,
             representation_target_visibility_beta=condition.representation_target_visibility_beta,
+            representation_learning_rate=condition.representation_learning_rate,
         )
         auxiliary_agent = TorchDQNAgent(
             torch=torch,
@@ -1088,6 +1230,18 @@ def run_minigrid_torch_condition(
             else representation_target_visibility_betas
         )
         successful_steps = [item.steps for item in episodes if item.success]
+        holdout: dict[str, Any] = {}
+        if holdout_episodes > 0:
+            holdout = run_greedy_holdout(
+                gym=gym,
+                agent=agent,
+                condition=condition,
+                agent_config=agent_config,
+                env_id=env_id,
+                max_steps=max_steps,
+                episodes=holdout_episodes,
+                quiet_env_output=quiet_env_output,
+            )
         return {
             "name": condition.name,
             "env_id": env_id,
@@ -1138,6 +1292,7 @@ def run_minigrid_torch_condition(
             "representation_parameter_count": agent.representation_parameter_count(),
             "parameter_count": agent.parameter_count(),
             "updates": agent.updates,
+            **holdout,
         }
     finally:
         env.close()
@@ -1152,6 +1307,8 @@ def run_minigrid_torch_curriculum_condition(
     agent_config: TorchAgentConfig,
     device: Any,
     quiet_env_output: bool = True,
+    holdout_episodes: int = 0,
+    mission_counterfactual: bool = False,
 ) -> dict[str, Any]:
     active_stage_names = set(active_stages)
     agent: TorchDQNAgent | None = None
@@ -1182,6 +1339,34 @@ def run_minigrid_torch_curriculum_condition(
     if not stage_results or agent is None:
         raise ValueError(f"no active curriculum stages for {condition.name}")
     final_stage = stage_results[-1]
+    holdout: dict[str, Any] = {}
+    if holdout_episodes > 0:
+        final_stage_spec = next(stage for stage in stages if stage.name == final_stage["stage"])
+        holdout = run_greedy_holdout(
+            gym=gym,
+            agent=agent,
+            condition=condition,
+            agent_config=agent_config,
+            env_id=final_stage_spec.env_id,
+            max_steps=final_stage_spec.max_steps,
+            episodes=holdout_episodes,
+            quiet_env_output=quiet_env_output,
+        )
+        if mission_counterfactual:
+            for mode in ("shuffled", "blank"):
+                variant = run_greedy_holdout(
+                    gym=gym,
+                    agent=agent,
+                    condition=condition,
+                    agent_config=agent_config,
+                    env_id=final_stage_spec.env_id,
+                    max_steps=final_stage_spec.max_steps,
+                    episodes=holdout_episodes,
+                    quiet_env_output=quiet_env_output,
+                    mission_mode=mode,
+                )
+                holdout[f"holdout_success_rate_{mode}_mission"] = variant["holdout_success_rate"]
+                holdout[f"holdout_mean_return_{mode}_mission"] = variant["holdout_mean_return"]
     return {
         "name": condition.name,
         "env_id": final_stage["env_id"],
@@ -1242,7 +1427,374 @@ def run_minigrid_torch_curriculum_condition(
         "representation_parameter_count": agent.representation_parameter_count(),
         "parameter_count": agent.parameter_count(),
         "updates": agent.updates,
+        **holdout,
     }
+
+
+def scatter_self_check() -> None:
+    """Assert the sparse tensor builder still equals the dense path it replaced.
+
+    ``_scatter`` exists purely for speed; if it ever diverges from
+    ``dense_feature_vector`` the whole experiment history becomes
+    incomparable, so this runs in the torch lane of the verifier.
+    """
+    import torch
+
+    device = torch.device("cpu")
+    config = TorchAgentConfig(
+        feature_dim=64,
+        hidden_dim=8,
+        learning_rate=0.001,
+        gamma=0.9,
+        epsilon=0.2,
+        batch_size=2,
+        replay_capacity=8,
+        target_sync_updates=5,
+        device="cpu",
+    )
+    agent = TorchDQNAgent(torch=torch, actions=3, config=config, device=device, seed=0)
+    rows: list[SparseFeatures] = [
+        {0: 1.0, 63: 2.0, 7: 0.5},
+        {},
+        {31: -1.25},
+    ]
+    expected = torch.tensor(
+        [dense_feature_vector(row, 64) for row in rows], dtype=torch.float32, device=device
+    )
+    actual = agent._scatter(rows, 64)
+    assert actual.shape == expected.shape, (actual.shape, expected.shape)
+    assert actual.dtype == expected.dtype
+    assert torch.equal(actual, expected), (actual - expected).abs().max().item()
+
+    single = agent._feature_tensor(rows[0])
+    assert torch.equal(single, expected[0])
+
+    for bad in ({64: 1.0}, {-1: 1.0}):
+        try:
+            agent._scatter([bad], 64)
+        except ValueError:
+            pass
+        else:  # pragma: no cover - the guard must stay
+            raise AssertionError(f"out-of-range index accepted: {bad}")
+
+    print("scatter_self_check ok")
+
+
+def representation_optimizer_self_check() -> None:
+    """Assert the separate representation optimizer removes stale-momentum drift.
+
+    With one shared Adam, a representation step moves the encoder by roughly the
+    same amount at beta = 0 as at beta = 0.05, because the displacement comes
+    from Q-learning momentum rather than from the objective. With a separate
+    optimizer, beta = 0 must move the encoder by exactly zero, which is what
+    makes the null control an actual control.
+    """
+    import torch
+
+    def drift(separate: bool, beta: float) -> float:
+        config = TorchAgentConfig(
+            feature_dim=64,
+            hidden_dim=8,
+            learning_rate=0.01,
+            gamma=0.9,
+            epsilon=0.2,
+            batch_size=2,
+            replay_capacity=32,
+            target_sync_updates=50,
+            device="cpu",
+            separate_representation_optimizer=separate,
+        )
+        torch.manual_seed(0)
+        agent = TorchDQNAgent(
+            torch=torch,
+            actions=3,
+            config=config,
+            device=torch.device("cpu"),
+            seed=0,
+            representation_objective="state_plus_mission_target",
+            representation_beta=beta,
+        )
+        target = [0.0] * _representation_target_dim("state_plus_mission_target", 64)
+        for _ in range(6):
+            agent.update({1: 1.0, 5: 1.0}, 0, 1.0, {2: 1.0, 7: 1.0}, False)
+        before = agent.model.encoder[0].weight.detach().clone()
+        head_before = agent.model.head.weight.detach().clone()
+        for _ in range(20):
+            agent.update_representation({1: 1.0, 5: 1.0}, 0, target)
+        head_drift = (agent.model.head.weight.detach() - head_before).abs().max().item()
+        assert head_drift == 0.0, f"representation loss reached the Q head: {head_drift}"
+        return (agent.model.encoder[0].weight.detach() - before).abs().max().item()
+
+    shared_null = drift(separate=False, beta=0.0)
+    shared_real = drift(separate=False, beta=0.05)
+    separate_null = drift(separate=True, beta=0.0)
+    separate_real = drift(separate=True, beta=0.05)
+
+    assert shared_null > 0.0, "the shared-optimizer artifact should still be reproducible"
+    assert abs(shared_null - shared_real) / shared_real < 0.05, (
+        f"shared drift should be dominated by momentum, not beta: {shared_null} vs {shared_real}"
+    )
+    assert separate_null == 0.0, f"separate optimizer still drifts at beta=0: {separate_null}"
+    assert separate_real > 0.0, "separate optimizer must still shape the encoder at beta>0"
+
+    # beta is an on/off switch, not a dial: Adam normalises by its own second
+    # moment, so a constant factor on the loss cancels. The dial is the
+    # representation optimizer's learning rate. Guard both, because every
+    # beta-neighbourhood sweep before v2.50 was tuning the switch as if it were
+    # the dial.
+    def live_step(learning_rate: float | None, beta: float) -> float:
+        from random import Random
+
+        config = TorchAgentConfig(
+            feature_dim=64,
+            hidden_dim=8,
+            learning_rate=0.01,
+            gamma=0.9,
+            epsilon=0.2,
+            batch_size=4,
+            replay_capacity=64,
+            target_sync_updates=50,
+            device="cpu",
+            separate_representation_optimizer=True,
+        )
+        torch.manual_seed(0)
+        agent = TorchDQNAgent(
+            torch=torch,
+            actions=3,
+            config=config,
+            device=torch.device("cpu"),
+            seed=0,
+            representation_objective="state_plus_mission_target",
+            representation_beta=beta,
+            representation_learning_rate=learning_rate,
+        )
+        dim = _representation_target_dim("state_plus_mission_target", 64)
+        rng = Random(0)
+        # Non-stationary target so the predictor cannot converge and the
+        # gradient stays live; a constant target makes higher rates converge and
+        # read as *smaller* steps.
+        for _ in range(200):
+            agent.update({1: 1.0, 5: 1.0}, 0, 1.0, {2: 1.0, 7: 1.0}, False)
+            agent.update_representation({1: 1.0, 5: 1.0}, 0, [rng.random() for _ in range(dim)])
+        before = agent.model.encoder[0].weight.detach().clone()
+        agent.update_representation({1: 1.0, 5: 1.0}, 0, [rng.random() for _ in range(dim)])
+        return (agent.model.encoder[0].weight.detach() - before).abs().max().item()
+
+    beta_low, beta_high = live_step(None, 0.005), live_step(None, 0.5)
+    assert abs(beta_high - beta_low) / beta_low < 0.01, (
+        f"beta is expected to cancel under Adam, but moved the step: {beta_low} -> {beta_high}"
+    )
+    rate_low, rate_high = live_step(0.00001, 0.05), live_step(0.01, 0.05)
+    assert rate_high / rate_low > 50.0, (
+        f"the representation learning rate must actually control the step: {rate_low} -> {rate_high}"
+    )
+
+    print(
+        "representation_optimizer_self_check ok "
+        f"(shared {shared_null:.3e}/{shared_real:.3e}, separate {separate_null:.3e}/{separate_real:.3e})"
+    )
+
+
+def random_policy_floor(
+    gym: Any,
+    env_id: str,
+    max_steps: int,
+    episodes: int,
+    seed: int,
+    quiet_env_output: bool = True,
+) -> dict[str, Any]:
+    """Uniform-random success rate on the same held-out episode seeds.
+
+    A condition ranking is meaningless without this. The v2.46 audit found every
+    condition's greedy policy at or below this floor while its epsilon-greedy
+    behaviour policy sat above it, which is invisible unless the floor is
+    measured on the same episodes.
+    """
+    if episodes < 1:
+        raise ValueError("episodes must be positive")
+    env = gym.make(env_id)
+    try:
+        rng = Random(seed)
+        actions = int(env.action_space.n)
+        successes = 0
+        returns: list[float] = []
+        for index in range(episodes):
+            _env_call(env.reset, quiet=quiet_env_output, seed=seed * 100_000 + 99_000 + index)
+            external_return = 0.0
+            for _ in range(max_steps):
+                _obs, reward, terminated, truncated, _info = _env_call(
+                    env.step,
+                    rng.randrange(actions),
+                    quiet=quiet_env_output,
+                )
+                external_return += float(reward)
+                if float(reward) > 0.0:
+                    successes += 1
+                    break
+                if bool(terminated or truncated):
+                    break
+            returns.append(external_return)
+        return {
+            "episodes": episodes,
+            "success_rate": successes / episodes,
+            "mean_return": mean(returns),
+        }
+    finally:
+        env.close()
+
+
+def runtime_provenance(torch: Any, device: Any) -> dict[str, Any]:
+    """Environment facts a claim about a run can be checked against.
+
+    Only ``torch.__version__`` and the device string used to be recorded, so
+    every worker, GPU, driver, and commit statement in docs/experiments/ was an
+    unverifiable hand transcription. The precision flags are recorded rather
+    than forced: their defaults have moved between torch releases, and a silent
+    change is what makes an unexplained result unexplainable.
+    """
+    provenance: dict[str, Any] = {
+        "host": platform.node(),
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "source_commit": os.environ.get("BABY_MODEL_SOURCE_COMMIT", "unrecorded"),
+        "torch_cuda_build": str(getattr(torch.version, "cuda", None)),
+        "matmul_allow_tf32": bool(getattr(torch.backends.cuda.matmul, "allow_tf32", False)),
+        "cudnn_allow_tf32": bool(getattr(torch.backends.cudnn, "allow_tf32", False)),
+        "deterministic_algorithms": bool(torch.are_deterministic_algorithms_enabled()),
+        "cublas_workspace_config": os.environ.get("CUBLAS_WORKSPACE_CONFIG", "unset"),
+        "torch_num_threads": int(torch.get_num_threads()),
+    }
+    if str(device).startswith("cuda") and torch.cuda.is_available():
+        provenance["gpu_name"] = torch.cuda.get_device_name(0)
+        capability = torch.cuda.get_device_capability(0)
+        provenance["gpu_capability"] = f"{capability[0]}.{capability[1]}"
+    return provenance
+
+
+def _apply_mission_mode(
+    observation: Any, mission_mode: str, index: int, missions: list[str]
+) -> Any:
+    """Real, shuffled-from-another-episode, or blank mission.
+
+    Solving a level is not evidence that the policy read the mission. This is the
+    counterfactual: only the real mission should hold the success rate up. On a
+    level with a single object the mission is logically redundant, so no drop is
+    expected and none should be claimed as grounding.
+    """
+    if mission_mode == "real":
+        return observation
+    if not isinstance(observation, dict):
+        return observation
+    swapped = dict(observation)
+    if mission_mode == "blank":
+        swapped["mission"] = ""
+    else:
+        own = str(observation.get("mission", ""))
+        others = [m for m in missions if m != own]
+        swapped["mission"] = others[index % len(others)] if others else own
+    return swapped
+
+
+def _holdout_mission_pool(
+    gym: Any, env_id: str, condition: Condition, episodes: int, quiet_env_output: bool
+) -> list[str]:
+    """Missions from a disjoint seed band, so a shuffle cannot reuse this episode's."""
+    env = gym.make(env_id)
+    try:
+        pool: list[str] = []
+        for index in range(min(episodes, 64)):
+            observation, _info = _env_call(
+                env.reset,
+                quiet=quiet_env_output,
+                seed=condition.seed * 100_000 + 98_000 + index,
+            )
+            if isinstance(observation, dict):
+                pool.append(str(observation.get("mission", "")))
+        return sorted(set(pool))
+    finally:
+        env.close()
+
+
+def run_greedy_holdout(
+    gym: Any,
+    agent: TorchDQNAgent,
+    condition: Condition,
+    agent_config: TorchAgentConfig,
+    env_id: str,
+    max_steps: int,
+    episodes: int,
+    quiet_env_output: bool = True,
+    mission_mode: str = "real",
+) -> dict[str, Any]:
+    """Greedy, no-learning evaluation on held-out episode seeds.
+
+    Training metrics are collected with epsilon-greedy exploration on the same
+    episodes the agent learned from, so they mix policy quality with
+    exploration noise. This runs the frozen policy at epsilon = 0 on episode
+    seeds disjoint from the training range, which is what a condition
+    comparison should actually be decided on.
+    """
+    if episodes < 1:
+        raise ValueError("episodes must be positive")
+    if mission_mode not in {"real", "shuffled", "blank"}:
+        raise ValueError(f"unknown mission_mode: {mission_mode}")
+    env = gym.make(env_id)
+    saved_epsilon = agent.epsilon
+    agent.epsilon = 0.0
+    try:
+        successes = 0
+        returns: list[float] = []
+        step_counts: list[int] = []
+        missions = (
+            _holdout_mission_pool(gym, env_id, condition, episodes, quiet_env_output)
+            if mission_mode == "shuffled"
+            else []
+        )
+        for index in range(episodes):
+            observation, _info = _env_call(
+                env.reset,
+                quiet=quiet_env_output,
+                # Disjoint from training seeds, which stay under the 100_000 stride.
+                seed=condition.seed * 100_000 + 99_000 + index,
+            )
+            observation = _apply_mission_mode(observation, mission_mode, index, missions)
+            features = linear_features(
+                observation, condition.encoder_mode, agent_config.feature_dim
+            )
+            external_return = 0.0
+            success = False
+            steps = 0
+            for _ in range(max_steps):
+                action = agent.choose(features, force_random=False)
+                observation, reward, terminated, truncated, _info = _env_call(
+                    env.step,
+                    action,
+                    quiet=quiet_env_output,
+                )
+                observation = _apply_mission_mode(observation, mission_mode, index, missions)
+                features = linear_features(
+                    observation, condition.encoder_mode, agent_config.feature_dim
+                )
+                external_return += float(reward)
+                steps += 1
+                if float(reward) > 0.0:
+                    success = True
+                if bool(terminated or truncated):
+                    break
+            successes += 1 if success else 0
+            returns.append(external_return)
+            step_counts.append(steps)
+        return {
+            "holdout_mission_mode": mission_mode,
+            "holdout_env_id": env_id,
+            "holdout_episodes": episodes,
+            "holdout_success_rate": successes / episodes,
+            "holdout_mean_return": mean(returns),
+            "holdout_mean_steps": mean(step_counts),
+        }
+    finally:
+        agent.epsilon = saved_epsilon
+        env.close()
 
 
 def _run_minigrid_torch_stage(
@@ -1276,6 +1828,7 @@ def _run_minigrid_torch_stage(
                 representation_beta=condition.representation_beta,
                 representation_state_beta=condition.representation_state_beta,
                 representation_target_visibility_beta=condition.representation_target_visibility_beta,
+                representation_learning_rate=condition.representation_learning_rate,
             )
         if auxiliary_agent is None:
             auxiliary_agent = TorchDQNAgent(
@@ -1467,6 +2020,25 @@ def _torch_stage_summary(
     agent: TorchDQNAgent,
 ) -> dict[str, Any]:
     last_window = episodes[-20:] if len(episodes) >= 20 else episodes
+    # Per-episode rows used to be discarded here, which made "did it converge?"
+    # unanswerable from any artifact -- the only trend information was
+    # success_rate_all versus success_rate_last_window, two points per stage.
+    # They are carried out under a private key and written to episodes.jsonl by
+    # the sweep writer, so metrics.json stays lean.
+    episode_rows = [
+        {
+            "episode": index,
+            "success": bool(item.success),
+            "steps": int(item.steps),
+            "external_return": float(item.external_return),
+            "intrinsic_return": float(item.intrinsic_return),
+            "unique_features": int(item.unique_features),
+            "representation_updates": int(representation_update_counts[index])
+            if index < len(representation_update_counts)
+            else 0,
+        }
+        for index, item in enumerate(episodes)
+    ]
     mission_probe_summary = summarize_mission_preservation_probes(mission_probes)
     representation_last_window = (
         representation_losses[-20:] if len(representation_losses) >= 20 else representation_losses
@@ -1493,6 +2065,7 @@ def _torch_stage_summary(
     )
     successful_steps = [item.steps for item in episodes if item.success]
     return {
+        "episode_rows": episode_rows,
         "stage": stage.name,
         "env_id": stage.env_id,
         "max_steps": stage.max_steps,

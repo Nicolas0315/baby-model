@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from functools import lru_cache
 import json
 from collections import defaultdict
 from dataclasses import dataclass
@@ -444,6 +445,9 @@ def _mission_tokens(mission: str) -> list[str]:
     return tokens[:12]
 
 
+# Pure function of its arguments, called about 4.6M times per seed on the v50
+# config against a few thousand distinct tokens, so memoizing it is free.
+@lru_cache(maxsize=1 << 16)
 def _feature_index(token: str, feature_dim: int) -> int:
     digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big") % feature_dim

@@ -36,6 +36,17 @@ class Condition:
     action_prior_weight: float = 0.0
     freeze_encoder_after_delay: bool = False
     stop_representation_after_delay: bool = False
+    # Null control: run the representation objective with beta = 0 so the shared
+    # optimizer takes the same number of steps as a real representation
+    # condition while the gradient carries no information. Without this there is
+    # no configurable control that separates the objective from its optimizer
+    # schedule, because beta > 0 is otherwise required.
+    representation_null_control: bool = False
+    # The dial for representation pressure. `representation_beta` is cancelled by
+    # Adam, so it cannot serve as one. Condition-level rather than agent-level so
+    # a single sweep can compare several rates on identical seeds -- cross-run
+    # comparison of absolute levels is not safe at the long horizon.
+    representation_learning_rate: float | None = None
 
 
 def default_conditions(seed: int = 7) -> list[Condition]:
